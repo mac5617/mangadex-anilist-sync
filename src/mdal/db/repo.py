@@ -213,5 +213,11 @@ class Repo:
         with self.conn:
             _upsert(self.conn, "sync_item", row, ["run_id", "md_id"])
 
+    def replace_items(self, run_id: int, rows: list[dict[str, Any]]) -> None:
+        with self.conn:
+            self.conn.execute("DELETE FROM sync_item WHERE run_id=?", (run_id,))
+            for row in rows:
+                _upsert(self.conn, "sync_item", row, ["run_id", "md_id"])
+
     def items(self, run_id: int) -> list[sqlite3.Row]:
         return self.conn.execute("SELECT * FROM sync_item WHERE run_id=? ORDER BY md_id", (run_id,)).fetchall()

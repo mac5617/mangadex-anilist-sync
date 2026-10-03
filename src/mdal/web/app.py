@@ -20,6 +20,7 @@ def get_services(request: Request) -> Services:
 def create_app(services: Services) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        services.orchestrator.recover_interrupted()
         yield
         await services.aclose()
 

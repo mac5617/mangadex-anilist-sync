@@ -16,16 +16,25 @@ This wires 07, 08, 11 and 12 into one run. It ends at `diffed` and has no path t
   - `discard(run_id)` for a `diffed` run → `cancelled`.
 
 ## Acceptance criteria
-- [ ] With all APIs mocked, a run reaches `diffed` and creates one `sync_item` per library series (write/skip/flag), with reasons.
-- [ ] A second `start_run()` while one is active raises `SyncAlreadyRunning`.
-- [ ] `MangaDexBlocked` during fetching → state `halted`, the message mentions a temporary IP ban, and **no AniList request** is made after it.
-- [ ] **Arithmetic test:** a generated 500-series library per the §11 assumptions → AniList dry-run requests ≤ 24 and MangaDex ≤ 312. A second unchanged run → AniList exactly 1 request and MangaDex ≤ 13 (no `/chapter`).
-- [ ] `sync_run.req_anilist`/`req_mangadex` equal the respx call counts.
-- [ ] A restart with a run in `resolving` marks it `failed`.
-- [ ] No code path from this module can reach a mutation (the guard test still passes).
+- [x] With all APIs mocked, a run reaches `diffed` and creates one `sync_item` per library series (write/skip/flag), with reasons.
+- [x] A second `start_run()` while one is active raises `SyncAlreadyRunning`.
+- [x] `MangaDexBlocked` during fetching → state `halted`, the message mentions a temporary IP ban, and **no AniList request** is made after it.
+- [x] **Arithmetic test:** a generated 500-series library per the §11 assumptions → AniList dry-run requests ≤ 24 and MangaDex ≤ 312. A second unchanged run → AniList exactly 1 request and MangaDex ≤ 13 (no `/chapter`).
+- [x] `sync_run.req_anilist`/`req_mangadex` equal the respx call counts.
+- [x] A restart with a run in `resolving` marks it `failed`.
+- [x] No code path from this module can reach a mutation (the guard test still passes).
 
 ## Tests
 `test_orchestrator.py`, `test_request_budget.py` (500-series generator in `tests/factories.py`).
 
 ## Dev notes
-_(fill in after implementation)_
+- Done 2026-10-03; 267 tests pass in total (13 new).
+- Budget test (500 series, §11 assumptions): first run AniList 13 (Viewer 1, list 1, id_in 1, search 10) and MangaDex 312; second run AniList 1, MangaDex 11 (token still valid, no `/chapter`).
+- The client singletons stay in `Services` (one per process since story 06); the orchestrator is `services.orchestrator` and borrows them. It wires each client's `request_counter` to the run's `req_*` columns for the duration of a run, then unsets it.
+- Series with an auto/confirmed match that are **not on the AniList list** get a `skip` row with reason "not on your AniList list" (so every library series has exactly one row); story 17 lists them from `mapping` + `al_entry`.
+- Mapping states without a usable match produce `skip` rows: review → "awaiting match review", unmatched → "no match", not_on_anilist → "marked not on AniList".
+- `status_approved` defaults to 1 whenever `set_status` is proposed (the "mark completed" checkbox is checked by default).
+- `est_requests`/`est_seconds` are computed over `action='write'` items.
+- `AniListAuthError` → `failed` with "reconnect AniList"; `MangaDexAuthError` → `failed` with "check credentials".
+- The app's lifespan calls `recover_interrupted()` on startup.
+- New repo helper: `replace_items(run_id, rows)` (one transaction).

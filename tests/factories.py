@@ -189,3 +189,36 @@ class FakeAniList:
     @property
     def call_count(self) -> int:
         return self.route.call_count if self.route else 0
+
+
+# ---- generated library (architecture §11 assumptions; story 13) ------------
+
+def generate_library(n: int = 500, reads_per_series: int = 60) -> tuple[FakeMangaDex, FakeAniList]:
+    """85% links.al, 5% only links.mal, 10% neither; 450 of the matched series on the AniList list.
+
+    Every series has `reads_per_series` read chapters numbered 1..N. List entries are at N, except
+    every 8th, which is 10 behind (≈ 60 updates for 500 series).
+    """
+    md, al = FakeMangaDex(), FakeAniList()
+    n_al, n_mal = n * 85 // 100, n * 5 // 100
+    on_list = n * 90 // 100
+    entries: list[tuple[int, int, str, int]] = []
+    for i in range(n):
+        title = f"Generated Series {i:03d}"
+        media_id, mal_id = 10000 + i, 20000 + i
+        if i < n_al:
+            links = {"al": str(media_id)}
+        elif i < n_al + n_mal:
+            links = {"mal": str(mal_id)}
+        else:
+            links = {}
+        al.add_media(al_media(media_id, title, id_mal=mal_id, year=2020, staff=["Author A"]))
+        chapter_ids = [f"ch-{i:03d}-{c:03d}" for c in range(1, reads_per_series + 1)]
+        md.add(FakeSeries(f"md-{i:03d}", title, links=links, reads=chapter_ids),
+               {ch: str(c) for c, ch in enumerate(chapter_ids, start=1)})
+        # The first 25 links.al series are not on the list (they need one id_in request).
+        listed = (i >= 25 and i < n_al + n_mal) or (n_al + n_mal <= i < n_al + n_mal + (on_list - (n_al - 25) - n_mal))
+        if listed:
+            entries.append((50000 + i, media_id, "CURRENT", reads_per_series - (10 if i % 8 == 0 else 0)))
+    al.add_list("Reading", entries)
+    return md, al

@@ -17,6 +17,7 @@ from mdal.clients.ratelimit import PacedQueue
 from mdal.config import ENV_FILE, Settings
 from mdal.db.connection import connect
 from mdal.db.repo import Repo
+from mdal.sync.orchestrator import SyncOrchestrator
 
 
 class Services:
@@ -29,6 +30,7 @@ class Services:
         self.anilist = AniListClient(self.anilist_token, self.anilist_queue)
         self.mangadex = MangaDexClient(self.mangadex_credentials, self.mangadex_queue)
         self.oauth = AniListOAuth(lambda: self.settings, self.anilist_queue)
+        self.orchestrator = SyncOrchestrator(self)
 
     @classmethod
     def from_env(cls) -> Services:
