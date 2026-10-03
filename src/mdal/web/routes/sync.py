@@ -5,6 +5,7 @@ Rendering never calls an API: everything comes from the DB.
 
 from __future__ import annotations
 
+import time
 from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
@@ -15,7 +16,14 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from mdal.db.repo import Repo
 from mdal.services import Services
 from mdal.sync.estimate import estimate
-from mdal.sync.orchestrator import ACTIVE_STATES, DISMISSED_PREFIX, ApprovalError, SyncAlreadyRunning, SyncStateError
+from mdal.sync.orchestrator import (
+    ACTIVE_STATES,
+    DISMISSED_PREFIX,
+    ApprovalError,
+    SyncAlreadyRunning,
+    SyncCoolingDown,
+    SyncStateError,
+)
 from mdal.sync.rules import AlMediaInfo, MdInfo, completion_info, completion_label
 from mdal.web.app import get_services, md_cover_url, render, templates
 
@@ -25,9 +33,21 @@ MANGADEX_TITLE_URL = "https://mangadex.org/title/{}"
 FILTERS = ("write", "add", "flag", "skip", "all")
 
 
+def cooldown_info(svc: Services) -> dict[str, Any] | None:
+    active = svc.mangadex_guard.cooldown()
+    if not active:
+        return None
+    until, reason = active
+    left = until - time.time()
+    if left <= 0:
+        return None
+    return {"until": time.strftime("%H:%M", time.localtime(until)), "minutes": max(1, round(left / 60)), "reason": reason}
+
+
 def status_context(svc: Services, message: str | None = None) -> dict[str, Any]:
     run = svc.repo.latest_run()
     return {
+        "cooldown": cooldown_info(svc),
         "run": run,
         "active": bool(run and run["state"] in ACTIVE_STATES),
         "status_message": message,
@@ -47,6 +67,8 @@ async def start_sync(request: Request) -> HTMLResponse:
         await get_services(request).orchestrator.start_run()
     except SyncAlreadyRunning:
         return _status_fragment(request, "A sync is already running.", status_code=409)
+    except SyncCoolingDown as exc:
+        return _status_fragment(request, str(exc), status_code=409)
     return _status_fragment(request)
 
 

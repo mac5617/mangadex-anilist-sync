@@ -23,6 +23,11 @@ SETTING_DEFAULTS: dict[str, Any] = {
     "match_margin": 0.05,
     "jump_limit": 200,
     "first_write_done": False,
+    # MangaDex safety (not user-editable): cooldown after a block/429 limit/dropped connection,
+    # and the saved login so restarts do not log in again. The session holds tokens: never render it.
+    "mangadex_cooldown_until": None,
+    "mangadex_cooldown_reason": None,
+    "mangadex_session": None,
     # Cached from AniList `Viewer` when connecting (story 06); not user-editable.
     "anilist_user_id": None,
     "anilist_user_name": None,

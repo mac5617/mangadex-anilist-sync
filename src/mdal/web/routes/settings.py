@@ -10,6 +10,7 @@ from fastapi.responses import HTMLResponse
 
 from mdal.services import Services
 from mdal.web.app import get_services, render
+from mdal.web.routes.sync import cooldown_info
 
 router = APIRouter()
 
@@ -105,6 +106,7 @@ def render_settings(
         },
         "tunables": [(t, (form_values or {}).get(t.key, stored[t.key])) for t in TUNABLES],
         "db_path": str(s.db_path),
+        "cooldown": cooldown_info(svc),
         "env_status": _env_status(svc),
     }
     return render(request, "settings.html", context, status_code=status_code)
@@ -127,6 +129,12 @@ async def save_settings(request: Request) -> HTMLResponse:
         svc.repo.set_setting(key, value)
     apply_rates(svc)
     return render_settings(request, message="Settings saved.")
+
+
+@router.post("/settings/clear-cooldown", response_class=HTMLResponse)
+def clear_cooldown(request: Request) -> HTMLResponse:
+    get_services(request).mangadex_guard.clear_cooldown()
+    return render_settings(request, message="MangaDex cooldown cleared. Only do this if you're sure MangaDex is reachable again.")
 
 
 @router.post("/settings/reset-batch", response_class=HTMLResponse)

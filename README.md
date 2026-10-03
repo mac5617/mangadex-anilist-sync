@@ -160,8 +160,9 @@ Rate changes apply immediately, even to a sync in progress; the others apply fro
 
 | Symptom | What it means / what to do |
 |---|---|
-| Sync **halted**: "MangaDex returned 403 … temporary IP ban" | MangaDex has temporarily blocked your IP. **Stop and wait** (an hour or more) before syncing again. Retrying straight away prolongs the ban. |
-| Sync halted: "MangaDex kept answering 429" | MangaDex rate-limited 4 times in a row. Wait a few minutes. Consider lowering MangaDex requests per second. |
+| Sync **halted**: "MangaDex returned 403 … temporary IP ban" | MangaDex has temporarily blocked your IP. The app pauses all MangaDex requests for an hour (dashboard countdown). Wait it out: retrying straight away prolongs the ban. |
+| Sync halted: "MangaDex dropped the connection" | MangaDex closed the connection without answering. This is how a block looked on 2026-10-03, so the app does not retry and pauses MangaDex requests for an hour. If you are sure MangaDex is fine again, Settings → MangaDex → **Clear cooldown**. |
+| Sync halted: "MangaDex kept answering 429" or "request budget nearly used up" | MangaDex rate-limited the app, or reported its budget almost spent with a long reset. One-hour pause as above. Consider lowering MangaDex requests per second. |
 | AniList 429 | Handled automatically: all AniList requests pause for the time AniList asks (or 60 s), then continue. After 3 retries on one request the sync halts; try again later. |
 | "AniList rejected the token: reconnect AniList" | The token expired (they last a year) or was revoked. Settings → Disconnect → Connect AniList. |
 | "Client authentication failed" when connecting | `ANILIST_CLIENT_ID` / `ANILIST_CLIENT_SECRET` don't match. Copy them again from AniList → Settings → Developer. |

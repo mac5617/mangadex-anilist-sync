@@ -174,3 +174,16 @@ async def test_dismissed_flag_stays_dismissed_until_progress_changes(fast, world
     md.chapters["f2"] = {"chapter": "41", "volume": None, "manga": "f"}
     third = await run(fast)
     assert {i["md_id"]: i for i in fast.repo.items(third)}["f"]["action"] == "flag"  # new reads: flagged again
+
+
+async def test_dropped_connection_halts_and_starts_cooldown(fast, world, mock):
+    import httpx as _httpx
+
+    md, al = world
+    mock.get(f"{API_URL}/manga/status").mock(side_effect=_httpx.RemoteProtocolError("Server disconnected"))
+    run_id = await run(fast)
+    r = fast.repo.get_run(run_id)
+    assert r["state"] == "halted" and "dropped the connection" in r["error"]
+    assert r["req_mangadex"] == 2  # token + one attempt, no retries
+    assert fast.mangadex_guard.cooldown() is not None
+    assert al.call_count == 0

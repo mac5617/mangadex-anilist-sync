@@ -8,6 +8,10 @@
   {% else %}
     <p>No sync yet.</p>
   {% endif %}
+  {% if cooldown and not active %}
+    <p class="notice warn">MangaDex cooldown: syncing is paused until {{ cooldown.until }} (about {{ cooldown.minutes }} min){% if cooldown.reason %}
+      because {{ cooldown.reason }}{% endif %}. Nothing is sent to MangaDex until then.</p>
+  {% endif %}
   {% if resumable and not active %}
     <p class="notice warn">Sync #{{ resumable }} was interrupted while writing. Only items not yet written are sent.</p>
   {% endif %}
@@ -16,7 +20,7 @@
     {% if resumable and not active %}
       <button hx-post="/sync/{{ resumable }}/resume" hx-target="#sync-status" hx-swap="outerHTML">Resume</button>
     {% endif %}
-    {% if not active %}
+    {% if not active and not cooldown %}
       <button class="{{ 'secondary' if run and run.state == 'diffed' else '' }}" hx-post="/sync" hx-target="#sync-status" hx-swap="outerHTML">Start sync</button>
     {% endif %}
   </div>

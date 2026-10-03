@@ -13,7 +13,13 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from mdal.clients.anilist import AniListAuthError, AniListRateLimited, AniListUnavailable
-from mdal.clients.mangadex import MangaDexAuthError, MangaDexBlocked, MangaDexRateLimited
+from mdal.clients.mangadex import (
+    MangaDexAuthError,
+    MangaDexBlocked,
+    MangaDexCoolingDown,
+    MangaDexRateLimited,
+    MangaDexUnreachable,
+)
 from mdal.db.repo import Repo, now_iso
 from mdal.fetch.anilist_list import fetch_list, viewer
 from mdal.fetch.mangadex_library import fetch_library
@@ -29,7 +35,8 @@ log = logging.getLogger(__name__)
 
 ACTIVE_STATES = ("fetching", "resolving", "diffing", "writing", "verifying")
 INTERRUPTIBLE = ("fetching", "resolving", "diffing")  # cheap to redo: a restart marks them failed
-HALTING = (MangaDexBlocked, MangaDexRateLimited, AniListUnavailable, AniListRateLimited)
+HALTING = (MangaDexBlocked, MangaDexRateLimited, MangaDexUnreachable, MangaDexCoolingDown,
+           AniListUnavailable, AniListRateLimited)
 
 MAPPING_SKIPS = {
     None: "awaiting match review",
@@ -48,6 +55,10 @@ class SyncAlreadyRunning(Exception):
 
 class SyncStateError(Exception):
     pass
+
+
+class SyncCoolingDown(Exception):
+    """MangaDex cooldown active: a new sync would only knock again."""
 
 
 class ApprovalError(Exception):
@@ -99,7 +110,9 @@ def halt_message(exc: Exception) -> str:
     if isinstance(exc, MangaDexBlocked):
         return f"Halted: {exc} (temporary IP ban)."
     if isinstance(exc, MangaDexRateLimited):
-        return f"Halted: {exc}. Wait a few minutes before syncing again."
+        return f"Halted: {exc}. MangaDex requests are paused for an hour."
+    if isinstance(exc, (MangaDexUnreachable, MangaDexCoolingDown)):
+        return f"Halted: {exc}"
     if isinstance(exc, AniListUnavailable):
         return f"Halted: AniList refused the request or is disabled ({exc}). Try again later."
     if isinstance(exc, AniListRateLimited):
@@ -218,6 +231,10 @@ class SyncOrchestrator:
     async def start_run(self) -> int:
         if self.lock.locked() or (self.task and not self.task.done()):
             raise SyncAlreadyRunning("a sync is already running")
+        try:
+            self.services.mangadex.check_cooldown()
+        except MangaDexCoolingDown as exc:
+            raise SyncCoolingDown(str(exc)) from exc
         await self.lock.acquire()
         try:
             run_id = self.repo.create_run("fetching")

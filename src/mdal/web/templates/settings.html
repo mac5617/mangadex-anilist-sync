@@ -40,6 +40,11 @@
   {% if mangadex.configured %}
     <p><span class="badge ok">configured</span> for <strong>{{ mangadex.username }}</strong></p>
     <p class="muted">Check login uses one token request.</p>
+    {% if cooldown %}
+      <p class="notice warn">Cooldown until {{ cooldown.until }} (about {{ cooldown.minutes }} min){% if cooldown.reason %}: {{ cooldown.reason }}{% endif %}.
+        Nothing is sent to MangaDex until then.</p>
+      <form method="post" action="/settings/clear-cooldown"><button class="secondary">Clear cooldown</button></form>
+    {% endif %}
     <form method="post" action="/auth/mangadex/check"><button class="secondary">Check login</button></form>
   {% else %}
     <p>Set <code>MANGADEX_USERNAME</code>, <code>MANGADEX_PASSWORD</code>, <code>MANGADEX_CLIENT_ID</code> and

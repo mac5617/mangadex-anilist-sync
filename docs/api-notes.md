@@ -95,6 +95,21 @@ Takeaways: `includeUnavailable=1` matters (5 of 100 chapters were hidden without
 
 ---
 
+## Incident 2026-10-03: block without a 403
+
+After about 550 MangaDex requests in two hours (peak 3 req/s, no 429 or 403 ever returned), `auth.mangadex.org`
+started closing every connection without a response, and authenticated API calls were dropped the same way
+(`RemoteProtocolError: Server disconnected`), while unauthenticated calls still answered (ping 200, `/manga/status`
+401). It cleared by itself. The old client retried network errors 3 times per request, and each new sync tried again.
+
+Changes in response (`clients/mangadex.py`):
+- a dropped connection or timeout is never retried; it halts the run;
+- a dropped connection, a 403, the 429 limit, or a budget with a reset more than 10 minutes away starts a
+  **60-minute cooldown**, stored in the DB, during which the client sends nothing (syncs, Check login, live check);
+- `X-RateLimit-Remaining` at or below 10% of `X-RateLimit-Limit` pauses the queue until `X-RateLimit-Retry-After`
+  (only ever slows down);
+- the login (access + refresh token) is saved in the DB, so restarting the app reuses it instead of logging in.
+
 ## Risks found
 1. **Read markers in bulk: retrievable.** `/manga/read?grouped=true` takes many manga per call. But it returns chapter *ids*, not numbers, so every read chapter id must be resolved through `/chapter`. A first sync with about 30k read chapters costs about 300 MangaDex requests. Mitigation: cache chapter id→number in SQLite forever (numbers rarely change), so later syncs resolve only new ids.
 2. **Deleted chapters.** If a chapter you read was deleted (not just made unavailable), `/chapter` will not return it and its number is lost. Progress may then come out lower than you actually read. That never lowers AniList, because we never lower, but the series can show as "nothing to do". Report the count of unresolved read ids per series in the diff. **Live 2026-10-03:** 1 of a 100-id sample did not come back even with `includeUnavailable=1` (about 1%), so this is real but small.

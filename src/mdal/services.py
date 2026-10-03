@@ -20,6 +20,34 @@ from mdal.db.repo import Repo
 from mdal.sync.orchestrator import SyncOrchestrator
 
 
+class DbGuard:
+    """MangaDex cooldown and saved login, kept in the settings table."""
+
+    def __init__(self, repo: Repo) -> None:
+        self.repo = repo
+        self.session: dict | None = repo.get_setting("mangadex_session")  # in memory too, for log redaction
+
+    def cooldown(self) -> tuple[float, str | None] | None:
+        until = self.repo.get_setting("mangadex_cooldown_until")
+        return (float(until), self.repo.get_setting("mangadex_cooldown_reason")) if until else None
+
+    def start_cooldown(self, until: float, reason: str) -> None:
+        self.repo.set_setting("mangadex_cooldown_until", until)
+        self.repo.set_setting("mangadex_cooldown_reason", reason)
+
+    def clear_cooldown(self) -> None:
+        self.repo.set_setting("mangadex_cooldown_until", None)
+        self.repo.set_setting("mangadex_cooldown_reason", None)
+
+    def load_session(self) -> dict | None:
+        self.session = self.repo.get_setting("mangadex_session")
+        return self.session
+
+    def save_session(self, session: dict | None) -> None:
+        self.session = session
+        self.repo.set_setting("mangadex_session", session)
+
+
 class Services:
     def __init__(self, env_file: Path, repo: Repo, settings: Settings | None = None) -> None:
         self.env_file = env_file
@@ -28,7 +56,8 @@ class Services:
         self.anilist_queue = PacedQueue(60.0 / repo.get_setting("anilist_rpm"))
         self.mangadex_queue = PacedQueue(1.0 / repo.get_setting("mangadex_rps"))
         self.anilist = AniListClient(self.anilist_token, self.anilist_queue)
-        self.mangadex = MangaDexClient(self.mangadex_credentials, self.mangadex_queue)
+        self.mangadex_guard = DbGuard(repo)
+        self.mangadex = MangaDexClient(self.mangadex_credentials, self.mangadex_queue, guard=self.mangadex_guard)
         self.oauth = AniListOAuth(lambda: self.settings, self.anilist_queue)
         self.orchestrator = SyncOrchestrator(self)
 
@@ -47,7 +76,10 @@ class Services:
         self.settings = Settings(_env_file=self.env_file)
 
     def secret_values(self) -> list[str]:
-        return self.settings.secret_values()
+        # No DB access here: the logging filter calls this for every record.
+        session = self.mangadex_guard.session or {}
+        saved = [session.get("access"), session.get("refresh")]
+        return self.settings.secret_values() + [v for v in saved if v]
 
     def anilist_token(self) -> str:
         return self.settings.anilist_access_token.get_secret_value()
