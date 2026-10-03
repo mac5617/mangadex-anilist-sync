@@ -28,7 +28,7 @@ Results go into `docs/api-notes.md` under "Live check YYYY-MM-DD" (manually, by 
 `test_live_check_static.py` (grep for `mutation`; `--dry` output; missing-env message).
 
 ## Dev notes
-- Script done 2026-10-03; 114 tests pass in total. **Live run pending: the user runs it.** Record the report in `api-notes.md`.
+- Script done 2026-10-03; 114 tests pass in total. **Live run done 2026-10-03 by the user, all 10 checks OK.** Report recorded in `api-notes.md` under "Live check 2026-10-03".
 - Prerequisite: AniList must be connected first (the app's Settings → Connect AniList stores `ANILIST_ACCESS_TOKEN`). Without it, the script exits with code 2 and lists the missing key names. Verified against the real `.env`.
 - It makes 5 AniList and 5 MangaDex requests, at the default budgets (about 15 s on the AniList side). It uses `Services` and the real paced clients, never `httpx` directly.
 - Step 5 uses 10 aliased `Media(id)` read roots as a rough complexity signal. The real write-batch check is still the halve-on-complexity logic in story 16.
