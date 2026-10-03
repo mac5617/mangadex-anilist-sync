@@ -1,0 +1,43 @@
+[project]
+name = "mangadex-anilist-sync"
+version = "0.1.0"
+description = "Local app that syncs MangaDex reading progress to AniList, with a reviewed dry run."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn>=0.32",
+    "jinja2>=3.1",
+    "httpx>=0.28",
+    "rapidfuzz>=3.10",
+    "pydantic-settings>=2.6",
+    "python-dotenv>=1.0",
+    "python-multipart>=0.0.20",
+]
+
+[project.scripts]
+mdal = "mdal.main:run"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mdal"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=6.0",
+    "pytest-socket>=0.7",
+    "respx>=0.22",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+# Outbound connections to anything but localhost are blocked in every test.
+# (--disable-socket is not used: on Windows the asyncio event loop needs a local socketpair.)
+addopts = "--allow-hosts=127.0.0.1,localhost,::1"
