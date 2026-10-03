@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Settings · MangaDex → AniList sync{% endblock %}
+{% block content %}
+<h1>Settings</h1>
+
+<section class="panel" id="anilist">
+  <h2>AniList</h2>
+  {% if not anilist.client_configured %}
+    <p>Set <code>ANILIST_CLIENT_ID</code> and <code>ANILIST_CLIENT_SECRET</code> in <code>.env</code>, then restart.</p>
+  {% elif anilist.connected %}
+    <p>Connected{% if anilist.user_name %} as <strong>{{ anilist.user_name }}</strong>{% endif %}.
+       Tokens last one year; reconnect when AniList starts rejecting it.</p>
+    <form method="post" action="/auth/anilist/disconnect"><button>Disconnect</button></form>
+  {% else %}
+    <p>Not connected.</p>
+    {% if anilist.uses_pin %}
+      <p><a href="{{ anilist.pin_url }}" target="_blank" rel="noopener noreferrer">Open AniList</a>,
+         approve, then paste the token shown there:</p>
+    {% else %}
+      <p><a class="button" href="/auth/anilist/start">Connect AniList</a></p>
+      <p class="muted">If AniList rejects the redirect URL, register
+         <code>https://anilist.co/api/v2/oauth/pin</code> instead, set it as <code>ANILIST_REDIRECT_URI</code>,
+         and paste the token below.</p>
+    {% endif %}
+    <form method="post" action="/auth/anilist/token">
+      <label>Access token <input type="password" name="token" autocomplete="off" required></label>
+      <button>Save token</button>
+    </form>
+  {% endif %}
+</section>
+
+<section class="panel" id="mangadex">
+  <h2>MangaDex</h2>
+  {% if mangadex.configured %}
+    <p>Credentials are set in <code>.env</code> for <strong>{{ mangadex.username }}</strong>.</p>
+    <form method="post" action="/auth/mangadex/check"><button>Check login</button></form>
+    <p class="muted">Uses one token request.</p>
+  {% else %}
+    <p>Set <code>MANGADEX_USERNAME</code>, <code>MANGADEX_PASSWORD</code>, <code>MANGADEX_CLIENT_ID</code> and
+       <code>MANGADEX_CLIENT_SECRET</code> in <code>.env</code>, then restart.</p>
+  {% endif %}
+</section>
+{% endblock %}

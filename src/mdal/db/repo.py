@@ -23,6 +23,9 @@ SETTING_DEFAULTS: dict[str, Any] = {
     "match_margin": 0.05,
     "jump_limit": 200,
     "first_write_done": False,
+    # Cached from AniList `Viewer` when connecting (story 06); not user-editable.
+    "anilist_user_id": None,
+    "anilist_user_name": None,
 }
 
 

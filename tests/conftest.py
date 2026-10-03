@@ -16,6 +16,36 @@ def _clean_env(monkeypatch):
         monkeypatch.delenv(key, raising=False)
 
 
+FAKE_ENV = {
+    "MANGADEX_USERNAME": "reader",
+    "MANGADEX_PASSWORD": "md-password-secret",
+    "MANGADEX_CLIENT_ID": "personal-client-reader",
+    "MANGADEX_CLIENT_SECRET": "md-client-secret-xyz",
+    "ANILIST_CLIENT_ID": "4242",
+    "ANILIST_CLIENT_SECRET": "al-client-secret-qwe",
+    "ANILIST_REDIRECT_URI": "http://127.0.0.1:8765/auth/anilist/callback",
+}
+
+
+@pytest.fixture
+def env_file(tmp_path):
+    path = tmp_path / ".env"
+    path.write_text("".join(f"{k}={v}\n" for k, v in FAKE_ENV.items()), encoding="utf-8")
+    return path
+
+
+@pytest.fixture
+def services(tmp_path, env_file):
+    """Services wired to a temp .env and temp DB; never the real ones."""
+    from mdal.db.connection import connect
+    from mdal.db.repo import Repo
+    from mdal.services import Services
+
+    repo = Repo(connect(tmp_path / "test.db"))
+    yield Services(env_file, repo)
+    repo.conn.close()
+
+
 @pytest.fixture
 def make_settings(tmp_path):
     """Build Settings from a temp .env file instead of the real one."""
