@@ -154,6 +154,31 @@ class Repo:
         with self.conn:
             _upsert(self.conn, "mapping", row, ["md_id"])
 
+    def mappings(self) -> dict[str, sqlite3.Row]:
+        return {r["md_id"]: r for r in self.conn.execute("SELECT * FROM mapping")}
+
+    def save_match(self, row: dict[str, Any], candidates: list[dict[str, Any]]) -> None:
+        """Mapping plus its ranked candidates (replacing earlier ones) in one transaction."""
+        row = {**row, "updated_at": row.get("updated_at") or now_iso()}
+        if not isinstance(row.get("reasons", ""), str):
+            row["reasons"] = json.dumps(row["reasons"], ensure_ascii=False)
+        with self.conn:
+            _upsert(self.conn, "mapping", row, ["md_id"])
+            self.conn.execute("DELETE FROM match_candidate WHERE md_id=?", (row["md_id"],))
+            for rank, c in enumerate(candidates, start=1):
+                reasons = c["reasons"] if isinstance(c["reasons"], str) else json.dumps(c["reasons"], ensure_ascii=False)
+                self.conn.execute(
+                    "INSERT INTO match_candidate(md_id, al_media_id, score, reasons, rank) VALUES (?, ?, ?, ?, ?)",
+                    (row["md_id"], c["al_media_id"], c["score"], reasons, rank),
+                )
+
+    def candidates(self, md_id: str) -> list[sqlite3.Row]:
+        return self.conn.execute("SELECT * FROM match_candidate WHERE md_id=? ORDER BY rank", (md_id,)).fetchall()
+
+    def read_counts(self) -> dict[str, int]:
+        """md_id -> number of read chapter markers."""
+        return {r[0]: r[1] for r in self.conn.execute("SELECT md_id, COUNT(*) FROM md_read GROUP BY md_id")}
+
     def delete_mapping(self, md_id: str) -> None:
         with self.conn:
             self.conn.execute("DELETE FROM match_candidate WHERE md_id=?", (md_id,))

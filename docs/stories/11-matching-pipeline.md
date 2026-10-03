@@ -16,19 +16,28 @@ This connects the fetchers (07, 08) and the scoring (10). It is request-minimisi
   - `parse_anilist_ref(text)`: accepts `123`, `https://anilist.co/manga/123/slug`, or `anilist.co/manga/123`, and rejects `/anime/` URLs.
 
 ## Acceptance criteria
-- [ ] A series with `state='confirmed'` and changed links is not re-matched, and no request is made for it.
-- [ ] A series with `state` in `auto`/`review`/`unmatched` and an unchanged `links_hash` is not re-matched (0 requests). A changed hash triggers re-matching.
-- [ ] `retry_matching(md_id)` deletes the mapping and candidates, so the next sync re-matches it.
-- [ ] `links.al` pointing to an id in the user's list → `auto` with 0 AniList requests.
-- [ ] `links.al` not in the list and absent from the `id_in` response → falls to tier 3/4.
-- [ ] `links.al` resolving to format NOVEL → `review`. `links.al` and `links.mal` resolving to different media → `review`.
-- [ ] `links.al: "abc"` → treated as absent.
-- [ ] Tier 4 auto, review and unmatched outcomes each persist the expected state and candidates.
-- [ ] 50 tier-4 series with batch 5 make ≤ 20 search requests.
-- [ ] `parse_anilist_ref` accepts the 3 forms and rejects anime URLs and garbage.
+- [x] A series with `state='confirmed'` and changed links is not re-matched, and no request is made for it.
+- [x] A series with `state` in `auto`/`review`/`unmatched` and an unchanged `links_hash` is not re-matched (0 requests). A changed hash triggers re-matching.
+- [x] `retry_matching(md_id)` deletes the mapping and candidates, so the next sync re-matches it.
+- [x] `links.al` pointing to an id in the user's list → `auto` with 0 AniList requests.
+- [x] `links.al` not in the list and absent from the `id_in` response → falls to tier 3/4.
+- [x] `links.al` resolving to format NOVEL → `review`. `links.al` and `links.mal` resolving to different media → `review`.
+- [x] `links.al: "abc"` → treated as absent.
+- [x] Tier 4 auto, review and unmatched outcomes each persist the expected state and candidates.
+- [x] 50 tier-4 series with batch 5 make ≤ 20 search requests.
+- [x] `parse_anilist_ref` accepts the 3 forms and rejects anime URLs and garbage.
 
 ## Tests
 `test_pipeline.py` (respx + seeded DB), `test_parse_ref.py`.
 
 ## Dev notes
-_(fill in after implementation)_
+- Done 2026-10-03; 205 tests pass in total (46 new).
+- `resolve_all(repo, al_fetch)`: `al_fetch` is any `AniListLookup` (ids, MAL ids, search). `AniListFetch` is the real one, wrapping `fetch/anilist_list.py` at the configured page size and search batch.
+- FR-16 "links.al and links.mal resolve to different media" is checked **without an extra request**: the media that `links.al` resolves to carries its own `idMal`, and a different `links.mal` means review. When that media has no `idMal`, it is accepted (no MAL lookup just to double-check).
+- Only `auto` and `confirmed` mappings carry `al_media_id`. `review` and `unmatched` leave it NULL and keep their suggestions in `match_candidate`, so later stories can never sync a series nobody approved.
+- Tier 2/3 matches store the linked media as a candidate with score 1.0; `mapping.confidence` is 1.0 for them (not title-scored).
+- Second search: `md_manga.alt_titles` does not keep languages, so "English first, then ja-ro" is approximated as "the first alt title that is ≥ 80% Latin letters and differs from the primary after normalisation", falling back to the first differing alt.
+- `md_chapter_count` for the ONE_SHOT check = max(read markers, numeric `last_chapter`).
+- Candidates from both searches are merged by media id (best score kept) before classifying.
+- Repo additions: `mappings()`, `save_match()` (mapping + candidates in one transaction), `candidates()`, `read_counts()`.
+- `parse_anilist_ref` returns `None` (not an exception) for anything it rejects, including look-alike hosts such as `notanilist.co`.
