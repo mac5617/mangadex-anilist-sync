@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from typing import Literal
 
-Action = Literal["write", "skip", "flag", "not_on_list"]
+Action = Literal["write", "add", "skip", "flag"]
 
 STATUS_LABELS = {
     "CURRENT": "Reading", "PLANNING": "Planning", "COMPLETED": "Completed",
@@ -91,6 +91,20 @@ def _label(status: str | None) -> str:
     return STATUS_LABELS.get(status or "", status or "unknown")
 
 
+def _implausible(numbers: list[Decimal], md: MdInfo, al: int | None, md_progress: int, jump_limit: int) -> list[str]:
+    problems: list[str] = []
+    if md.chapter_numbers_reset:
+        problems.append("MangaDex chapter numbers restart each volume")
+    distinct = sorted(set(numbers), reverse=True)
+    if len(distinct) >= 2:
+        top, second = distinct[0], distinct[1]
+        if top > OUTLIER_FACTOR * second and top - second > OUTLIER_GAP:
+            problems.append(f"highest read chapter {top} is far above the next ({second})")
+    if al is not None and al > 0 and md_progress - al > jump_limit:
+        problems.append(f"jump of {md_progress - al} chapters exceeds the limit of {jump_limit}")
+    return problems
+
+
 def evaluate(
     read_chapters: list[str | None],
     unresolved: int,
@@ -112,18 +126,15 @@ def evaluate(
         return DiffItem("skip", "nothing read", al_progress=entry.progress if entry else None, unresolved=unresolved)
     # 3. Proposed progress
     md_progress = math.floor(max(numbers))
-    # 4. Not on the user's list
-    if entry is None:
-        return DiffItem("not_on_list", "not on your AniList list", md_progress=md_progress, unresolved=unresolved)
 
-    al = entry.progress
+    al = entry.progress if entry else None
     c = completion_info(media, md)
-    complete = c.known_complete and md_progress == c.total and entry.status != "COMPLETED"
+    complete = c.known_complete and md_progress == c.total and (entry is None or entry.status != "COMPLETED")
 
     hints: list[str] = []
     if c.total is not None and md_progress == c.total and not c.known_complete:
         hints.append(f"at last known chapter, but AniList lists the series as {media.status or 'unknown'}; status unchanged")
-    if entry.status == "PLANNING" and not complete:
+    if entry is not None and entry.status == "PLANNING" and not complete:
         hints.append("status is Planning; will remain Planning")
 
     def item(action: Action, reason: str, flag_kind: str | None = None, completing: bool = complete) -> DiffItem:
@@ -134,6 +145,18 @@ def evaluate(
             status_source=c.source if completing else None,
             unresolved=unresolved, total=c.total,
         )
+
+    # 4. Not on the user's list: an "add" row (created only after approval, re-checked before writing)
+    if entry is None:
+        if media.chapters is not None and md_progress > media.chapters:
+            return item("flag", f"MangaDex {md_progress} exceeds AniList's total of {media.chapters} chapters "
+                        "(not on your list; add it by hand from Not on my list)", "exceeds_total", completing=False)
+        if media.chapters is None and c.total is not None and md_progress > c.total:
+            hints.append(f"reads go beyond MangaDex's last chapter {c.total}")
+        problems = _implausible(numbers, md, None, md_progress, jump_limit)
+        if problems:
+            return item("flag", "not on your list; " + "; ".join(problems), "implausible")
+        return item("add", f"not on your AniList list; add as {'Completed' if complete else 'Reading'} at {md_progress}")
 
     # 6. Never lower; status-only completion
     if md_progress <= al:
@@ -149,16 +172,7 @@ def evaluate(
         hints.append(f"reads go beyond MangaDex's last chapter {c.total}")
 
     # 8. Implausible (overridable)
-    problems: list[str] = []
-    if md.chapter_numbers_reset:
-        problems.append("MangaDex chapter numbers restart each volume")
-    distinct = sorted(set(numbers), reverse=True)
-    if len(distinct) >= 2:
-        top, second = distinct[0], distinct[1]
-        if top > OUTLIER_FACTOR * second and top - second > OUTLIER_GAP:
-            problems.append(f"highest read chapter {top} is far above the next ({second})")
-    if al > 0 and md_progress - al > jump_limit:
-        problems.append(f"jump of {md_progress - al} chapters exceeds the limit of {jump_limit}")
+    problems = _implausible(numbers, md, al, md_progress, jump_limit)
     if problems:
         return item("flag", "; ".join(problems), "implausible")
 

@@ -10,7 +10,7 @@ A single-user, local web app (bound to 127.0.0.1). It reads my MangaDex library 
 - One direction, MangaDex → AniList. Nothing is ever written to MangaDex.
 - Chapter progress only. AniList score, dates and notes are not touched. Status is not touched either, with **one exception** (user decision, 2026-10-03): when the series is known to be finished and my progress reaches its final chapter, the diff proposes setting status to **Completed**, whatever the current status is. It is shown in the diff and approved like everything else.
 - Progress is never lowered. AniList at or ahead of MangaDex → skip.
-- Series not on my AniList list are not created automatically. They are listed with a per-item "add to AniList" action.
+- Series not on my AniList list appear in the diff as "add" rows (Reading, or Completed when known finished and fully read), approved like any other write. Before writing, the list is re-read and any series that is already on it is never added (that would overwrite the entry). A per-item "add to AniList" action also remains. *(changed by user decision 2026-10-03; originally: not created automatically)*
 - Confident matches are automatic. Uncertain ones go to a review queue. A wrong match is worse than a missing one.
 - Every sync is a dry run until I approve the diff.
 

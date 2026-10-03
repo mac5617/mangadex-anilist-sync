@@ -19,6 +19,7 @@ def fake(mock):
     f = FakeAniList()
     f.add_media(al_media(1, "Listed"), al_media(2, "Finished Total 50", chapters=50, status="FINISHED"),
                 al_media(3, "Releasing"))
+    f.add_list("Reading", [(10, 1, "CURRENT", 1)])
     return f.install(mock)
 
 
@@ -47,6 +48,10 @@ def repo(services):
     return r
 
 
+async def uid():
+    return 1
+
+
 def test_rows_are_exactly_matched_and_unlisted(repo):
     rows = {r.md_id: r for r in not_listed_rows(repo)}
     assert set(rows) == {"fin", "rel", "over"}
@@ -56,7 +61,8 @@ def test_rows_are_exactly_matched_and_unlisted(repo):
 
 
 async def test_add_sends_one_mutation_with_three_fields(services, repo, fake):
-    entry = await add(repo, services.anilist, "rel", "CURRENT", 7)
+    entry = await add(repo, services.anilist, "rel", "CURRENT", 7, uid)
+    assert fake.call_count == 2  # list re-read + the add
     assert len(fake.mutations) == 1
     q, v = fake.mutations[0]["query"], fake.mutations[0]["variables"]
     args = re.search(r"SaveMediaListEntry\(([^)]*)\)", q).group(1)
@@ -67,9 +73,9 @@ async def test_add_sends_one_mutation_with_three_fields(services, repo, fake):
 
 
 async def test_add_is_recorded_as_one_item_run(services, repo, fake):
-    await add(repo, services.anilist, "fin", "COMPLETED", 50)
+    await add(repo, services.anilist, "fin", "COMPLETED", 50, uid)
     run = repo.latest_run()
-    assert (run["state"], run["req_anilist"]) == ("done", 1)
+    assert (run["state"], run["req_anilist"]) == ("done", 2)
     items = repo.items(run["run_id"])
     assert len(items) == 1
     assert (items[0]["md_id"], items[0]["write_state"], items[0]["set_status"]) == ("fin", "done", "COMPLETED")
@@ -78,7 +84,7 @@ async def test_add_is_recorded_as_one_item_run(services, repo, fake):
 
 async def test_add_counts_as_first_write(services, repo, fake):
     assert repo.get_setting("first_write_done") is False
-    await add(repo, services.anilist, "rel", "CURRENT", 7)
+    await add(repo, services.anilist, "rel", "CURRENT", 7, uid)
     assert repo.get_setting("first_write_done") is True
 
 
@@ -95,17 +101,27 @@ async def test_add_counts_as_first_write(services, repo, fake):
 )
 async def test_refusals_make_no_request(services, repo, fake, md_id, status, progress, message):
     with pytest.raises(AddEntryError, match=re.escape(message)):
-        await add(repo, services.anilist, md_id, status, progress)
+        await add(repo, services.anilist, md_id, status, progress, uid)
     assert fake.call_count == 0
 
 
 async def test_anilist_refusal_fails_run(services, repo, fake):
     del fake.catalogue[3]
     with pytest.raises(AddEntryError, match="refused"):
-        await add(repo, services.anilist, "rel", "CURRENT", 7)
+        await add(repo, services.anilist, "rel", "CURRENT", 7, uid)
     assert repo.latest_run()["state"] == "failed"
     assert repo.get_setting("first_write_done") is False
 
 
 def test_statuses_never_include_repeating():
     assert add_entry.ADD_STATUSES == ("CURRENT", "PLANNING", "PAUSED", "COMPLETED", "DROPPED")
+
+
+async def test_series_added_on_anilist_since_last_sync_is_never_overwritten(services, repo, fake):
+    # The local snapshot says "not on list", but the user has since added it on AniList as Completed at 9.
+    fake.lists[0]["entries"].append({"id": 77, "status": "COMPLETED", "progress": 9, "media": fake._public(fake.catalogue[3])})
+    with pytest.raises(AddEntryError, match=r"Already on your list now \(COMPLETED, progress 9\)"):
+        await add(repo, services.anilist, "rel", "CURRENT", 7, uid)
+    assert fake.mutations == []
+    assert fake.entry(77)["status"] == "COMPLETED" and fake.entry(77)["progress"] == 9
+    assert repo.latest_run()["state"] == "cancelled"

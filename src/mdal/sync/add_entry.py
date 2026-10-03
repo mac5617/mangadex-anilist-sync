@@ -9,8 +9,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from collections.abc import Awaitable, Callable
+
 from mdal.clients.anilist import AniListClient, AniListGraphQLError
 from mdal.db.repo import Repo, now_iso
+from mdal.fetch.anilist_list import fetch_list
 from mdal.sync.rules import STATUS_LABELS, AlMediaInfo, MdInfo, completion_default, evaluate
 
 # Offered statuses, in dropdown order. The value is inserted as an enum literal only after this whitelist check.
@@ -83,8 +86,14 @@ def add_document(status: str) -> str:
     )
 
 
-async def add(repo: Repo, client: AniListClient, md_id: str, status: str, progress: int) -> dict[str, Any]:
-    """Create the entry. Raises AddEntryError for refusals (no request is made for those)."""
+async def add(
+    repo: Repo, client: AniListClient, md_id: str, status: str, progress: int, user_id: Callable[[], Awaitable[int]]
+) -> dict[str, Any]:
+    """Create the entry. Raises AddEntryError for refusals.
+
+    The list is re-read first (1 request): saving by mediaId when the series is already on the list would
+    *update* that entry, and could turn Completed into Reading or lower its progress.
+    """
     mapping = repo.get_mapping(md_id)
     if mapping is None or mapping["state"] not in ("auto", "confirmed") or mapping["al_media_id"] is None:
         raise AddEntryError("This series has no confirmed AniList match.")
@@ -103,10 +112,18 @@ async def add(repo: Repo, client: AniListClient, md_id: str, status: str, progre
     previous = client.request_counter
     client.request_counter = lambda: repo.add_request(run_id, "anilist")
     try:
+        await fetch_list(client, repo, await user_id())
+        existing = repo.al_entries().get(media_id)
+        if existing is not None:
+            message = f"Already on your list now ({existing['status']}, progress {existing['progress']}); nothing was changed."
+            repo.update_run(run_id, state="cancelled", error=message, finished_at=now_iso())
+            raise AddEntryError(message)
         data = await client.graphql(query, {"m": media_id, "p": progress})
     except AniListGraphQLError as exc:
         repo.update_run(run_id, state="failed", error=f"AniList refused the add: {exc}", finished_at=now_iso())
         raise AddEntryError(f"AniList refused the add: {exc}") from exc
+    except AddEntryError:
+        raise
     except Exception as exc:
         repo.update_run(run_id, state="failed", error=f"{exc.__class__.__name__}: {exc}", finished_at=now_iso())
         raise

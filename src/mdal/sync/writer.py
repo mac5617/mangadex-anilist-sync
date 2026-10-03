@@ -2,8 +2,10 @@
 
 This module and `sync/add_entry.py` are the only places that may contain a mutation.
 Safety rules enforced here:
-- every mutation targets an existing list entry by `id` (never `mediaId`, so nothing is created);
-- only `progress` and, for approved completions, the literal status `COMPLETED` are sent;
+- updates target an existing list entry by `id` and send only `progress` and, for approved completions,
+  the literal status `COMPLETED`; a status is never changed to anything else;
+- adds (approved `add` rows) create an entry by `mediaId` with the literal status `CURRENT` or `COMPLETED`,
+  and are dropped if the re-read shows the series is already on the list (that would be an update in disguise);
 - AniList is re-read right before writing, and anything that would lower progress is dropped;
 - each batch's results are committed before the next batch is sent, so a resume never re-sends `done` items.
 SaveMediaListEntry with absolute values is idempotent, so the client's retry of a 5xx/network failure is safe.
@@ -29,9 +31,14 @@ SELECTION = "{ id mediaId progress status }"
 @dataclass(frozen=True)
 class WriteOp:
     md_id: str
-    entry_id: int
+    entry_id: int | None     # None = add a new entry for media_id
     progress: int | None     # None = status-only
     complete: bool           # send status: COMPLETED
+    media_id: int | None = None
+
+
+def is_add(item: Any) -> bool:
+    return item["al_entry_id"] is None and item["al_media_id"] is not None
 
 
 def is_status_only(item: Any) -> bool:
@@ -43,6 +50,8 @@ def sends_completion(item: Any) -> bool:
 
 
 def op_for(item: Any) -> WriteOp:
+    if is_add(item):
+        return WriteOp(item["md_id"], None, item["md_progress"], sends_completion(item), media_id=item["al_media_id"])
     return WriteOp(
         md_id=item["md_id"],
         entry_id=item["al_entry_id"],
@@ -57,6 +66,13 @@ def mutation_document(ops: list[WriteOp]) -> tuple[str, dict[str, Any]]:
     fields: list[str] = []
     variables: dict[str, Any] = {}
     for i, op in enumerate(ops):
+        if op.entry_id is None:
+            # New entry. The status is one of two fixed literals; nothing from data reaches the document.
+            params += [f"$a{i}: Int", f"$p{i}: Int"]
+            variables[f"a{i}"], variables[f"p{i}"] = op.media_id, op.progress
+            status = "COMPLETED" if op.complete else "CURRENT"
+            fields.append(f"m{i}: SaveMediaListEntry(mediaId: $a{i}, status: {status}, progress: $p{i}) {SELECTION}")
+            continue
         args = [f"id: $e{i}"]
         params.append(f"$e{i}: Int")
         variables[f"e{i}"] = op.entry_id
@@ -70,8 +86,8 @@ def mutation_document(ops: list[WriteOp]) -> tuple[str, dict[str, Any]]:
     return f"mutation ({', '.join(params)}) {{ {' '.join(fields)} }}", variables
 
 
-async def send_batch(client: AniListClient, ops: list[WriteOp]) -> dict[str, tuple[str, str | None]]:
-    """Send one batch. Returns md_id -> ('done', None) | ('failed', message).
+async def send_batch(client: AniListClient, ops: list[WriteOp]) -> dict[str, tuple[str, str | None, int | None]]:
+    """Send one batch. Returns md_id -> ('done', None, entry_id) | ('failed', message, None).
 
     Raises AniListComplexityError (nothing was executed) and other client errors unchanged.
     """
@@ -94,15 +110,15 @@ async def send_batch(client: AniListClient, ops: list[WriteOp]) -> dict[str, tup
             by_alias[path[0]] = msg
         else:
             general.append(msg)
-    results: dict[str, tuple[str, str | None]] = {}
+    results: dict[str, tuple[str, str | None, int | None]] = {}
     for i, op in enumerate(ops):
         alias = f"m{i}"
         if alias in by_alias:
-            results[op.md_id] = ("failed", by_alias[alias])
+            results[op.md_id] = ("failed", by_alias[alias], None)
         elif (data or {}).get(alias):
-            results[op.md_id] = ("done", None)
+            results[op.md_id] = ("done", None, data[alias].get("id"))
         else:
-            results[op.md_id] = ("failed", "; ".join(general) or "AniList returned no result for this entry")
+            results[op.md_id] = ("failed", "; ".join(general) or "AniList returned no result for this entry", None)
     return results
 
 
@@ -123,9 +139,17 @@ class Writer:
             return
         self.progress("re-reading your AniList list before writing")
         await fetch_list(self.client, self.repo, await self.user_id())
-        entries = {r["entry_id"]: r for r in self.repo.al_entries().values()}
+        by_media = self.repo.al_entries()
+        entries = {r["entry_id"]: r for r in by_media.values()}
         updates: list[tuple[str, dict[str, Any]]] = []
         for item in pending:
+            if is_add(item):
+                existing = by_media.get(item["al_media_id"])
+                if existing is not None:
+                    # Saving by mediaId would update this entry (and could change its status): never.
+                    updates.append((item["md_id"], {"write_state": "dropped", "verify_note":
+                        f"dropped: already on your AniList list now ({existing['status']}, progress {existing['progress']}); not added"}))
+                continue
             entry = entries.get(item["al_entry_id"])
             if entry is None:
                 updates.append((item["md_id"], {"write_state": "dropped", "verify_note": "dropped: the entry is no longer on your AniList list"}))
@@ -175,10 +199,12 @@ class Writer:
                 self.repo.set_setting("anilist_write_batch", smaller)
                 continue
             written_at = now_iso()
+            adds = {op.md_id for op in batch if op.entry_id is None}
             self.repo.update_items(run_id, [
-                (md_id, {"write_state": state, "written_at": written_at} if state == "done"
-                 else {"write_state": state, "verify_note": f"write failed: {msg}"})
-                for md_id, (state, msg) in results.items()
+                (md_id, ({"write_state": state, "written_at": written_at}
+                         | ({"al_entry_id": entry_id} if md_id in adds and entry_id else {}))
+                 if state == "done" else {"write_state": state, "verify_note": f"write failed: {msg}"})
+                for md_id, (state, msg, entry_id) in results.items()
             ])
             batches_sent += 1
             ops = rest
@@ -203,9 +229,14 @@ class Writer:
                 expected_progress = item["al_progress"] if is_status_only(item) else item["md_progress"]
                 if entry["progress"] != expected_progress:
                     problems.append(f"progress is {entry['progress']}, expected {expected_progress}")
-                expected_status = "COMPLETED" if sends_completion(item) else item["al_status_before"]
-                if expected_status and entry["status"] != expected_status:
-                    problems.append(f"status changed by AniList: {item['al_status_before']}→{entry['status']}")
+                if item["al_status_before"] is None:  # added by this run
+                    expected_status = "COMPLETED" if sends_completion(item) else "CURRENT"
+                    if entry["status"] != expected_status:
+                        problems.append(f"AniList stored status {entry['status']}, expected {expected_status}")
+                else:
+                    expected_status = "COMPLETED" if sends_completion(item) else item["al_status_before"]
+                    if entry["status"] != expected_status:
+                        problems.append(f"status changed by AniList: {item['al_status_before']}→{entry['status']}")
             note = "; ".join(problems) if problems else "verified"
             if problems:
                 notes.append(f"{item['md_id']}: {note}")

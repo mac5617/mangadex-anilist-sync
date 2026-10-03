@@ -5,7 +5,7 @@
 {% if run.phase_detail %}<p class="muted">{{ run.phase_detail }}</p>{% endif %}
 
 <p class="summary">
-  {{ counts.write }} to write · {{ counts.flag }} flagged · {{ counts.skip }} skipped
+  {{ counts.write }} to write · {{ counts.add }} to add · {{ counts.flag }} flagged · {{ counts.skip }} skipped
   {%- set n_complete = rows | selectattr("set_status") | selectattr("selectable") | list | length %}
   {%- if n_complete %} · {{ n_complete }} to mark completed{% endif %}
 </p>
@@ -13,11 +13,12 @@
 <form id="diff-form" class="diff-form" hx-post="/sync/{{ run.run_id }}/estimate" hx-trigger="change" hx-target="#estimate" hx-swap="outerHTML">
   {% include "_estimate.html" %}
 
-  {% for f in ["write", "flag", "skip", "all"] %}
+  {% for f in ["write", "add", "flag", "skip", "all"] %}
     <input type="radio" name="f" id="f-{{ f }}" value="{{ f }}" class="tab-radio"{% if filter == f %} checked{% endif %}>
   {% endfor %}
   <div class="tabs">
     <label for="f-write">To write ({{ counts.write }})</label>
+    <label for="f-add">To add ({{ counts.add }})</label>
     <label for="f-flag">Flagged ({{ counts.flag }})</label>
     <label for="f-skip">Skipped ({{ counts.skip }})</label>
     <label for="f-all">All ({{ counts.all }})</label>
@@ -40,13 +41,14 @@
         <td>{% if r.al_url %}<a href="{{ r.al_url }}" target="_blank" rel="noopener noreferrer">{{ r.al_title or "AniList" }}</a>{% else %}<span class="muted">—</span>{% endif %}</td>
         <td class="num">
           {% if r.status_only %}{{ r.md_progress }} (unchanged)
-          {% elif r.md_progress is not none %}{{ r.al_progress if r.al_progress is not none else "—" }} → {{ r.md_progress }}
+          {% elif r.md_progress is not none %}{{ r.al_progress if r.al_progress is not none else "new" }} → {{ r.md_progress }}
           {% else %}<span class="muted">—</span>{% endif %}
           {% if r.unresolved %}<br><span class="muted" title="read chapters whose number could not be resolved">{{ r.unresolved }} unresolved</span>{% endif %}
         </td>
         <td><span class="badge a-{{ r.action }}{% if r.flag_kind %} k-{{ r.flag_kind }}{% endif %}">{{ r.flag_kind | replace("_", " ") if r.flag_kind else r.action }}</span></td>
         <td>
-          {% if r.status_label %}
+          {% if r.status_label and not r.set_status %}<span class="muted">{{ r.status_label }}</span>
+          {% elif r.status_label %}
             <label><input type="checkbox" name="mc" value="{{ r.md_id }}"
               {%- if r.complete_checked %} checked{% endif %}{% if not r.selectable %} disabled{% endif %}> mark completed</label>
             <br><span class="muted">{{ r.status_label }}</span>

@@ -14,7 +14,7 @@ input[type=password], input[type=text] { font: inherit; padding: .25rem .4rem; m
 nav .count { background: var(--accent); color: #fff; border-radius: 9px; padding: 0 .4rem; font-size: .8em; }
 ul.plain { list-style: none; padding: 0; }
 .badge { display: inline-block; padding: 0 .45rem; border-radius: 4px; font-size: .85em; background: #eee; }
-.badge.ok, .badge.a-write, .badge.state-done, .badge.state-diffed { background: #e7f5ec; color: var(--ok); }
+.badge.ok, .badge.a-write, .badge.a-add, .badge.state-done, .badge.state-diffed { background: #e7f5ec; color: var(--ok); }
 .badge.err, .badge.a-flag, .badge.state-failed, .badge.state-halted { background: #fbeaea; color: var(--err); }
 .badge.k-implausible { background: #fff4de; color: #8a5a00; }
 button.secondary { background: #fff; color: var(--accent); }
@@ -28,10 +28,11 @@ table.diff td.num { white-space: nowrap; }
 .tabs { margin: .75rem 0; }
 .tabs label { display: inline-block; padding: .25rem .7rem; border: 1px solid var(--line); border-radius: 4px; cursor: pointer; margin-right: .25rem; }
 #f-write:checked ~ .tabs label[for=f-write], #f-flag:checked ~ .tabs label[for=f-flag],
-#f-skip:checked ~ .tabs label[for=f-skip], #f-all:checked ~ .tabs label[for=f-all] { background: var(--accent); color: #fff; border-color: var(--accent); }
+#f-skip:checked ~ .tabs label[for=f-skip], #f-all:checked ~ .tabs label[for=f-all], #f-add:checked ~ .tabs label[for=f-add] { background: var(--accent); color: #fff; border-color: var(--accent); }
 #f-write:checked ~ table.diff tbody tr:not(.r-write),
 #f-flag:checked ~ table.diff tbody tr:not(.r-flag),
-#f-skip:checked ~ table.diff tbody tr:not(.r-skip) { display: none; }
+#f-skip:checked ~ table.diff tbody tr:not(.r-skip),
+#f-add:checked ~ table.diff tbody tr:not(.r-add) { display: none; }
 .card { border: 1px solid var(--line); border-radius: 6px; padding: .75rem 1rem; margin: .75rem 0; }
 .card.done { background: #f6f8f6; }
 .card-md, .candidate { display: flex; gap: .75rem; align-items: flex-start; }

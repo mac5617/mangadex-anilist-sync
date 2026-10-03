@@ -34,7 +34,7 @@ def row(html: str, md_id: str) -> str:
 
 def test_diff_page_summary_and_estimate(client, run_id, mock):
     html = client.get(f"/sync/{run_id}").text
-    assert "3 to write · 2 flagged · 1 skipped" in html
+    assert "3 to write · 0 to add · 2 flagged · 1 skipped" in html
     assert "2 to mark completed" in html
     # Default selection: the 3 writes (status-only counts because its completion is checked).
     assert "3 selected, 2 to mark completed" in html
@@ -45,7 +45,7 @@ def test_diff_page_summary_and_estimate(client, run_id, mock):
 def test_filters(client, run_id):
     html = client.get(f"/sync/{run_id}?f=flag").text
     assert re.search(r'id="f-flag" value="flag" class="tab-radio" checked', html)
-    for f in ("write", "flag", "skip", "all"):
+    for f in ("write", "add", "flag", "skip", "all"):
         assert f'for="f-{f}"' in html
     assert 'class="r-write"' in html and 'class="r-flag"' in html and 'class="r-skip"' in html
     # Unknown filters fall back to "write".
@@ -144,3 +144,20 @@ def test_every_page_makes_no_api_calls(client, run_id, mock):
     for url in ("/", f"/sync/{run_id}", "/sync/status", "/settings", "/sync/latest"):
         client.get(url)
     assert len(mock.calls) == 0
+
+
+def test_add_rows(client, services, run_id):
+    repo = services.repo
+    repo.upsert_item({"run_id": run_id, "md_id": "w2", "al_media_id": 2, "al_entry_id": None, "al_progress": None,
+                      "md_progress": 7, "action": "add", "reason": "not on your AniList list; add as Reading at 7"})
+    repo.upsert_item({"run_id": run_id, "md_id": "w3", "al_media_id": 2, "al_entry_id": None, "al_progress": None,
+                      "md_progress": 120, "action": "add", "reason": "add as Completed", "set_status": "COMPLETED",
+                      "status_source": "AniList", "status_approved": 1})
+    html = client.get(f"/sync/{run_id}?f=add").text
+    assert "To add (2)" in html
+    a = row(html, "w2")
+    assert "new → 7" in a and "New entry: Reading" in a
+    assert re.search(r'name="sel" value="w2"[^>]*checked', a)
+    c = row(html, "w3")
+    assert "New entry → Completed (AniList: finished, 120 ch); untick to add as Reading" in c
+    assert re.search(r'name="mc" value="w3"\s*checked', c)

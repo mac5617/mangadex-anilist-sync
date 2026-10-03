@@ -22,7 +22,7 @@ from mdal.web.app import get_services, render, templates
 router = APIRouter()
 
 MANGADEX_TITLE_URL = "https://mangadex.org/title/{}"
-FILTERS = ("write", "flag", "skip", "all")
+FILTERS = ("write", "add", "flag", "skip", "all")
 
 
 def status_context(svc: Services, message: str | None = None) -> dict[str, Any]:
@@ -86,12 +86,17 @@ def diff_rows(repo: Repo, run_id: int) -> list[DiffRow]:
     rows = []
     for r in repo.diff_rows(run_id):
         status_label = None
+        is_new = r["al_entry_id"] is None and r["action"] in ("add", "flag")
         if r["set_status"] == "COMPLETED":
             total = completion_info(
                 AlMediaInfo(r["al_chapters"], r["al_media_status"]), MdInfo(r["pub_status"], r["last_chapter"])
             ).total
             status_label = completion_label(r["al_status"], r["status_source"], total)
-        selectable = r["action"] in ("write", "flag") and r["flag_kind"] != "exceeds_total"
+            if is_new:
+                status_label = "New entry → " + status_label.split(" → ", 1)[1] + "; untick to add as Reading"
+        elif is_new:
+            status_label = "New entry: Reading"
+        selectable = r["action"] in ("write", "add", "flag") and r["flag_kind"] != "exceeds_total"
         rows.append(DiffRow(
             md_id=r["md_id"],
             md_title=r["md_title"] or r["md_id"],
@@ -109,7 +114,7 @@ def diff_rows(repo: Repo, run_id: int) -> list[DiffRow]:
             status_label=status_label,
             status_only=bool(r["set_status"]) and r["md_progress"] is not None and r["md_progress"] == r["al_progress"],
             selectable=selectable,
-            checked=bool(r["approved"]) if r["write_state"] != "none" else (preselect and r["action"] == "write"),
+            checked=bool(r["approved"]) if r["write_state"] != "none" else (preselect and r["action"] in ("write", "add")),
             complete_checked=bool(r["status_approved"]),
         ))
     return rows
@@ -162,7 +167,7 @@ def _diff_page(request: Request, run_id: int, f: str = "write", error: str | Non
     repo = get_services(request).repo
     run = _run_or_404(repo, run_id)
     rows = diff_rows(repo, run_id)
-    counts = {a: sum(r.action == a for r in rows) for a in ("write", "flag", "skip")}
+    counts = {a: sum(r.action == a for r in rows) for a in ("write", "add", "flag", "skip")}
     counts["all"] = len(rows)
     return render(request, "diff.html", {
         "run": run, "rows": rows, "counts": counts, "est": default_estimate(repo, rows),

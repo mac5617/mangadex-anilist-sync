@@ -45,10 +45,12 @@ def seed(services, fake, specs):
     for i, s in enumerate(specs):
         media_id, entry_id = i + 1, 100 + i
         fake.add_media(al_media(media_id, f"Series {i}", chapters=s.get("chapters")))
-        entries.append((entry_id, media_id, s.get("status", "CURRENT"), s.get("now", s.get("al_progress", 0))))
+        is_add = s.get("action") == "add"
+        if not is_add:
+            entries.append((entry_id, media_id, s.get("status", "CURRENT"), s.get("now", s.get("al_progress", 0))))
         items.append({
-            "run_id": run_id, "md_id": f"md{i:02}", "al_media_id": media_id, "al_entry_id": entry_id,
-            "al_progress": s.get("al_progress", 0), "md_progress": s["md_progress"],
+            "run_id": run_id, "md_id": f"md{i:02}", "al_media_id": media_id, "al_entry_id": None if is_add else entry_id,
+            "al_progress": None if is_add else s.get("al_progress", 0), "md_progress": s["md_progress"],
             "action": s.get("action", "write"), "flag_kind": s.get("flag_kind"), "reason": "r",
             "set_status": s.get("set_status"), "status_source": "AniList" if s.get("set_status") else None,
             "status_approved": 1 if s.get("set_status") else 0,
@@ -330,3 +332,70 @@ async def test_only_diffed_runs_can_be_approved(fast, fake):
     fast.repo.update_run(run_id, state="cancelled")
     with pytest.raises(ApprovalError):
         await fast.orchestrator.approve(run_id, ["md00"], [], [])
+
+
+
+# ---- adds (series not on the list) ------------------------------------------------
+
+
+def sent_documents_by_kind(fake):
+    updates, adds = [], []
+    for m in fake.mutations:
+        for alias, args in re.findall(r"(m\d+): SaveMediaListEntry\(([^)]*)\)", m["query"]):
+            (adds if "mediaId:" in args else updates).append(args)
+    return updates, adds
+
+
+async def test_adds_are_written_with_reading_or_completed(fast, fake):
+    run_id = seed(fast, fake, [
+        {"md_progress": 10, "al_progress": 5},                                                        # update
+        {"md_progress": 7, "action": "add"},                                                          # add as Reading
+        {"md_progress": 50, "action": "add", "chapters": 50, "set_status": "COMPLETED"},             # add as Completed
+        {"md_progress": 30, "action": "add", "chapters": 30, "set_status": "COMPLETED"},             # completion unticked
+    ])
+    items = await approve_all(fast, run_id, completing=["md02"])
+    assert all(i["write_state"] == "done" for i in items.values()), [dict(i) for i in items.values()]
+    assert len(fake.mutations) == 1  # adds and updates share batches
+    updates, adds = sent_documents_by_kind(fake)
+    assert all("CURRENT" not in u and "mediaId" not in u for u in updates)  # updates never set Reading
+    assert sorted(adds) == sorted([
+        "mediaId: $a1, status: CURRENT, progress: $p1",
+        "mediaId: $a2, status: COMPLETED, progress: $p2",
+        "mediaId: $a3, status: CURRENT, progress: $p3",
+    ])
+    by_media = {e["media"]["id"]: e for g in fake.lists for e in g["entries"]}
+    assert (by_media[2]["status"], by_media[2]["progress"]) == ("CURRENT", 7)
+    assert (by_media[3]["status"], by_media[3]["progress"]) == ("COMPLETED", 50)
+    assert (by_media[4]["status"], by_media[4]["progress"]) == ("CURRENT", 30)
+    assert items["md01"]["al_entry_id"] == by_media[2]["id"]
+    assert all(items[m]["verify_note"] == "verified" for m in ("md01", "md02", "md03"))
+
+
+async def test_add_dropped_if_series_is_on_the_list_by_write_time(fast, fake):
+    run_id = seed(fast, fake, [{"md_progress": 7, "action": "add"}, {"md_progress": 9, "action": "add"}])
+    # Between the diff and the write, the user added series 1 on AniList as Completed at 12.
+    fake.lists[0]["entries"].append({"id": 555, "status": "COMPLETED", "progress": 12, "media": fake._public(fake.catalogue[1])})
+    items = await approve_all(fast, run_id)
+    assert items["md00"]["write_state"] == "dropped"
+    assert "already on your AniList list now (COMPLETED, progress 12); not added" in items["md00"]["verify_note"]
+    assert fake.entry(555)["status"] == "COMPLETED" and fake.entry(555)["progress"] == 12
+    _, adds = sent_documents_by_kind(fake)
+    assert len(adds) == 1 and items["md01"]["write_state"] == "done"
+
+
+async def test_add_rows_count_as_first_write(fast, fake):
+    fast.repo.set_setting("first_write_done", False)
+    run_id = seed(fast, fake, [{"md_progress": 7, "action": "add"}, {"md_progress": 9, "action": "add"}])
+    with pytest.raises(ApprovalError, match=FIRST_WRITE_MESSAGE):
+        await fast.orchestrator.approve(run_id, ["md00", "md01"], [], [])
+    await fast.orchestrator.approve(run_id, ["md00"], [], [])
+    await fast.orchestrator.wait()
+    assert fast.repo.get_setting("first_write_done") is True
+
+
+async def test_add_failure_is_reported(fast, fake):
+    run_id = seed(fast, fake, [{"md_progress": 7, "action": "add"}, {"md_progress": 3, "al_progress": 1}])
+    del fake.catalogue[1]  # AniList answers "Not Found." for that media
+    items = await approve_all(fast, run_id)
+    assert items["md00"]["write_state"] == "failed"
+    assert items["md01"]["write_state"] == "done"

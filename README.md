@@ -6,7 +6,9 @@ A local app that copies your MangaDex reading progress to your AniList manga lis
 - Runs on your own machine at `http://127.0.0.1:8765` (never reachable from other devices).
 - Progress is only ever raised, never lowered. The only status it can set is **Completed**, and only when
   AniList says the series is finished and you read the final chapter.
-- It never adds series to your AniList list on its own. You add them one by one on the "Not on my list" page.
+- Matched series that aren't on your AniList list show up in the diff as **add** rows (Reading, or Completed
+  when the series is finished and you've read the last chapter). Like every write, they need your approval, and
+  right before writing the app re-checks your list: a series that is already there is never added or changed.
 - Both APIs are rate-limited; the app paces itself well below the limits.
 
 Design documents live in [`docs/`](docs/).
@@ -121,6 +123,8 @@ It needs AniList connected first (step 4). If it reports anything other than OK,
    matching" or "Undo" to change them).
 3. **Diff.** Open the sync from the dashboard. Each row shows AniList progress → MangaDex progress and why.
    - *To write*: safe updates.
+   - *To add*: series you read on MangaDex that aren't on your AniList list yet. Each one creates a new
+     entry (and, as with any AniList list change, an activity post).
    - *Flagged*: "exceeds total" rows can't be written; "implausible" rows (huge jumps, odd chapter numbering)
      can be written only by ticking **override**.
    - *Skipped*: already up to date, not matched, or not on your list.
@@ -132,9 +136,8 @@ It needs AniList connected first (step 4). If it reports anything other than OK,
 5. **Normal use.** After the first verified write, select as many rows as you like. The estimate above
    the table shows how many AniList requests and how long the write will take.
 
-**Not on my list** shows matched series that aren't on your AniList list yet. Each **Add** creates one
-entry with the status and progress you choose (Completed is pre-selected only when the series is
-finished and you've read the last chapter).
+**Not on my list** shows the same not-yet-listed series one by one, for adding with a status and progress
+you choose (for example a row the diff flagged). Each **Add** first re-checks your list, then creates one entry.
 
 **History** lists every sync and add, with request counts and per-row results.
 

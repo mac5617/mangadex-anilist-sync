@@ -145,7 +145,7 @@ def build_items(repo: Repo, run_id: int, md_ids: set[str] | None = None) -> list
             MdInfo(row["pub_status"], row["last_chapter"], bool(row["chapter_numbers_reset"])),
             jump_limit,
         )
-        action = "skip" if d.action == "not_on_list" else d.action
+        action = d.action
         items.append({
             **base,
             "al_media_id": al_id,
@@ -315,7 +315,7 @@ class SyncOrchestrator:
             fields["state"] = state
         self.repo.update_run(run_id, **fields)
 
-    async def _user_id(self) -> int:
+    async def user_id(self) -> int:
         user_id = self.repo.get_setting("anilist_user_id")
         if user_id is None:
             v = await viewer(self.services.anilist)
@@ -326,7 +326,7 @@ class SyncOrchestrator:
 
     async def _write_phase(self, run_id: int) -> None:
         repo = self.repo
-        writer = Writer(repo, self.services.anilist, self._user_id, lambda msg: self._phase(run_id, detail=msg))
+        writer = Writer(repo, self.services.anilist, self.user_id, lambda msg: self._phase(run_id, detail=msg))
         self._phase(run_id, "writing", "re-reading AniList")
         await writer.write(run_id)
         self._phase(run_id, "verifying", "verifying on AniList")
@@ -345,7 +345,7 @@ class SyncOrchestrator:
         self._phase(run_id, "fetching", "reading MangaDex library")
         md = await fetch_library(s.mangadex, repo, lambda msg: self._phase(run_id, detail=msg))
         self._phase(run_id, detail="reading your AniList list")
-        al = await fetch_list(s.anilist, repo, await self._user_id())
+        al = await fetch_list(s.anilist, repo, await self.user_id())
 
         self._phase(run_id, "resolving", f"matching {md.series} series")
         match = await resolve_all(repo, AniListFetch(s.anilist, repo))

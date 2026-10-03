@@ -35,12 +35,12 @@ def test_fresh_db_creates_all_tables_and_reopen_is_noop(db_path):
     conn = connect(db_path)
     names = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     assert TABLES <= names
-    assert schema_version(conn) == 1
+    assert schema_version(conn) == 2
     conn.close()
 
     conn = connect(db_path)
-    assert schema_version(conn) == 1
-    assert conn.execute("SELECT COUNT(*) FROM schema_version").fetchone()[0] == 1
+    assert schema_version(conn) == 2
+    assert conn.execute("SELECT COUNT(*) FROM schema_version").fetchone()[0] == 2
     conn.close()
 
 
@@ -120,3 +120,25 @@ def test_delete_mapping_removes_candidates(repo):
     repo.delete_mapping("m1")
     assert repo.get_mapping("m1") is None
     assert repo.conn.execute("SELECT COUNT(*) FROM match_candidate").fetchone()[0] == 0
+
+
+def test_migration_002_allows_add_and_keeps_rows(tmp_path):
+    import sqlite3
+
+    from mdal.db.connection import _migrations
+
+    path = tmp_path / "old.db"
+    old = sqlite3.connect(path)
+    old.executescript(_migrations()[0][1])
+    old.execute("CREATE TABLE schema_version(version INTEGER NOT NULL)")
+    old.execute("INSERT INTO schema_version VALUES (1)")
+    old.execute("INSERT INTO sync_run(run_id, started_at, state) VALUES (1, 'x', 'diffed')")
+    old.execute("INSERT INTO sync_item(run_id, md_id, action, reason) VALUES (1, 'a', 'write', 'kept')")
+    old.commit()
+    old.close()
+    conn = connect(path)
+    assert schema_version(conn) == 2
+    assert conn.execute("SELECT reason FROM sync_item").fetchone()[0] == "kept"
+    conn.execute("INSERT INTO sync_item(run_id, md_id, action) VALUES (1, 'b', 'add')")
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute("INSERT INTO sync_item(run_id, md_id, action) VALUES (1, 'c', 'create')")

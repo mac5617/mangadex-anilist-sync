@@ -15,7 +15,7 @@
     <tr class="r-{{ r.action }} w-{{ item.write_state }}">
       <td><a href="{{ r.md_url }}" target="_blank" rel="noopener noreferrer">{{ r.md_title }}</a></td>
       <td>{% if r.al_url %}<a href="{{ r.al_url }}" target="_blank" rel="noopener noreferrer">{{ r.al_title or "AniList" }}</a>{% else %}<span class="muted">—</span>{% endif %}</td>
-      <td class="num">{% if r.md_progress is not none %}{{ r.al_progress if r.al_progress is not none else "—" }} → {{ r.md_progress }}{% else %}—{% endif %}
+      <td class="num">{% if r.md_progress is not none %}{{ r.al_progress if r.al_progress is not none else "new" }} → {{ r.md_progress }}{% else %}—{% endif %}
         {% if r.unresolved %}<br><span class="muted">{{ r.unresolved }} unresolved</span>{% endif %}</td>
       <td><span class="badge a-{{ r.action }}">{{ r.flag_kind | replace("_", " ") if r.flag_kind else r.action }}</span></td>
       <td>{% if r.set_status %}{{ "→ Completed" if item.status_approved else "completion not approved" }}{% if item.al_status_before %}<br><span class="muted">was {{ item.al_status_before }}</span>{% endif %}{% endif %}</td>

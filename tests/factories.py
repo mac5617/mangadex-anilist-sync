@@ -174,6 +174,21 @@ class FakeAniList:
             args = {}
             for name, value in re.findall(r"(\w+): (\$\w+|\w+)", arg_text):
                 args[name] = variables.get(value[1:]) if value.startswith("$") else value
+            if "mediaId" in args:
+                media_id = args["mediaId"]
+                if media_id not in self.catalogue:
+                    data[alias] = None
+                    errors.append({"message": "Not Found.", "path": [alias]})
+                    continue
+                new_id = 9000 + len(self.applied) + 1
+                if not any(g["name"] == "Added" for g in self.lists):
+                    self.lists.append({"name": "Added", "isCustomList": False, "entries": []})
+                group = next(g for g in self.lists if g["name"] == "Added")
+                group["entries"].append({"id": new_id, "status": args["status"], "progress": args["progress"],
+                                         "media": self._public(self.catalogue[media_id])})
+                self.applied.append((new_id, args))
+                data[alias] = {"id": new_id, "mediaId": media_id, "progress": args["progress"], "status": args["status"]}
+                continue
             entry_id = args["id"]
             if entry_id in self.alias_errors:
                 data[alias] = None

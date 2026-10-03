@@ -47,9 +47,25 @@ def test_skip_reason_never_lower():
     assert ev(["12"], al=15).reason == "AniList at/ahead"
 
 
-def test_not_on_list():
+def test_not_on_list_becomes_add():
     d = ev(["9"], entry=False)
-    assert (d.action, d.md_progress) == ("not_on_list", 9)
+    assert (d.action, d.md_progress, d.al_progress, d.set_status) == ("add", 9, None, None)
+    assert "add as Reading at 9" in d.reason
+
+
+def test_add_completed_when_known_finished_at_total():
+    d = ev(["100"], entry=False, media=FIN100)
+    assert (d.action, d.set_status, d.status_source) == ("add", "COMPLETED", "AniList")
+
+
+def test_add_over_total_is_flagged():
+    d = ev(["101"], entry=False, media=FIN100)
+    assert (d.action, d.flag_kind, d.set_status) == ("flag", "exceeds_total", None)
+
+
+def test_add_implausible_is_flagged():
+    d = ev(["1", "2", "40"], entry=False)
+    assert (d.action, d.flag_kind) == ("flag", "implausible")
 
 
 def test_exceeds_total():

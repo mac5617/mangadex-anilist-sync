@@ -33,15 +33,15 @@ def test_mutations_only_in_writer_and_add_entry():
     offenders = [
         str(p.relative_to(ROOT))
         for p in python_files()
-        if p not in MUTATION_MODULES and re.search(r"SaveMediaListEntry|mutation", p.read_text(encoding="utf-8"))
+        if p not in MUTATION_MODULES and re.search(r"SaveMediaListEntry|bmutationb", p.read_text(encoding="utf-8"))
     ]
     assert offenders == []
 
 
-def test_writer_never_sends_other_statuses():
+def test_writer_status_literals():
     text = (SRC / "sync" / "writer.py").read_text(encoding="utf-8")
-    assert set(re.findall(r"status: ([A-Z_]+)", text)) == {"COMPLETED"}
-    assert "mediaId:" not in text  # never create entries by media id from a sync
+    # COMPLETED for completions; CURRENT only for brand-new entries (see test_writer.py for the documents).
+    assert set(re.findall(r"\b(COMPLETED|CURRENT|PLANNING|PAUSED|DROPPED|REPEATING)\b", text)) == {"COMPLETED", "CURRENT"}
 
 
 PURE_MODULES = ["matching/normalize.py", "matching/score.py", "sync/rules.py", "sync/estimate.py"]

@@ -37,7 +37,7 @@ async def add(request: Request, md_id: str, status: str = Form(...), progress: i
     if svc.orchestrator.lock.locked():
         return _row_response(request, md_id, error="A sync is running; add entries after it finishes.", status_code=409)
     try:
-        entry = await add_entry.add(svc.repo, svc.anilist, md_id, status, progress)
+        entry = await add_entry.add(svc.repo, svc.anilist, md_id, status, progress, svc.orchestrator.user_id)
     except add_entry.AddEntryError as exc:
         return _row_response(request, md_id, error=str(exc), status_code=400)
     except AniListError as exc:

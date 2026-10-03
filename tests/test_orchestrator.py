@@ -57,7 +57,7 @@ async def test_run_reaches_diffed_with_one_item_per_series(fast, world):
     assert (items["a"]["action"], items["a"]["md_progress"], items["a"]["al_progress"]) == ("write", 10, 5)
     assert (items["b"]["action"], items["b"]["reason"]) == ("skip", "AniList at/ahead")
     assert (items["c"]["action"], items["c"]["set_status"], items["c"]["status_approved"]) == ("write", "COMPLETED", 1)
-    assert (items["d"]["action"], items["d"]["reason"]) == ("skip", "not on your AniList list")
+    assert (items["d"]["action"], items["d"]["al_entry_id"], items["d"]["md_progress"]) == ("add", None, 3)
     assert (items["e"]["action"], items["e"]["reason"]) == ("skip", "no match")
     assert (items["f"]["action"], items["f"]["flag_kind"]) == ("flag", "implausible")
 
