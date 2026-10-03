@@ -88,6 +88,18 @@ class Repo:
     def chapter_count(self) -> int:
         return self.conn.execute("SELECT COUNT(*) FROM md_chapter").fetchone()[0]
 
+    def chapter_cache_state(self) -> dict[str, int]:
+        """chapter_id -> missing (0 resolved, 1 missed once, 2 permanently missing)."""
+        return {r["chapter_id"]: r["missing"] for r in self.conn.execute("SELECT chapter_id, missing FROM md_chapter")}
+
+    def read_chapters(self, md_id: str) -> list[sqlite3.Row]:
+        """Read chapters of one series with their cached number (NULL chapter or missing>0 = unresolved)."""
+        return self.conn.execute(
+            "SELECT r.chapter_id, c.chapter, c.missing FROM md_read r "
+            "LEFT JOIN md_chapter c ON c.chapter_id = r.chapter_id WHERE r.md_id=?",
+            (md_id,),
+        ).fetchall()
+
     # ---- mapping --------------------------------------------------------
     def get_mapping(self, md_id: str) -> sqlite3.Row | None:
         return self.conn.execute("SELECT * FROM mapping WHERE md_id=?", (md_id,)).fetchone()
