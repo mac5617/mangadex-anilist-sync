@@ -1,6 +1,7 @@
+{% import "_macros.html" as ui %}
 <article class="card" id="card-{{ card.md_id }}">
   <div class="card-md">
-    {% if card.cover %}<img src="{{ card.cover }}" alt="" width="96" loading="lazy" referrerpolicy="no-referrer">{% endif %}
+    {{ ui.thumb(card.cover, "lg") }}
     <div>
       <h3><a href="{{ card.md_url }}" target="_blank" rel="noopener noreferrer">{{ card.title }}</a></h3>
       <p class="muted">{{ card.year or "year ?" }} · {{ card.language or "language ?" }}{% if card.authors %} · {{ card.authors | join(", ") }}{% endif %}</p>
@@ -18,12 +19,12 @@
   <div class="card-candidates">
     {% for c in card.candidates %}
       <div class="candidate">
-        {% if c.cover %}<img src="{{ c.cover }}" alt="" width="64" loading="lazy" referrerpolicy="no-referrer">{% endif %}
+        {{ ui.thumb(c.cover, "md") }}
         <div>
           <strong><a href="{{ c.url }}" target="_blank" rel="noopener noreferrer">{{ c.title }}</a></strong>
           {% if c.english %}<span class="muted">({{ c.english }})</span>{% endif %}
-          <br><span class="muted">{{ c.year or "?" }} · {{ c.format or "?" }} · {{ c.country or "?" }}</span>
-          · <span class="badge">score {{ "%.2f" | format(c.score) }}</span>
+          <div class="row"><span class="muted">{{ c.year or "?" }} · {{ c.format or "?" }} · {{ c.country or "?" }}</span>
+            <span class="badge score">score {{ "%.2f" | format(c.score) }}</span></div>
           <ul class="reasons">{% for r in c.reasons %}<li>{{ r }}</li>{% endfor %}</ul>
           <form hx-post="/review/{{ card.md_id }}/accept" hx-target="#card-{{ card.md_id }}" hx-swap="outerHTML">
             <input type="hidden" name="al_media_id" value="{{ c.media_id }}">
@@ -39,9 +40,9 @@
 
   <div class="card-actions">
     {% if card.state != "not_on_anilist" %}
-    <form hx-post="/review/{{ card.md_id }}/manual" hx-target="#card-{{ card.md_id }}" hx-swap="outerHTML">
-      <label>AniList URL or id <input type="text" name="text" placeholder="https://anilist.co/manga/…" required></label>
-      <button>Use this</button>
+    <form class="inline-form" hx-post="/review/{{ card.md_id }}/manual" hx-target="#card-{{ card.md_id }}" hx-swap="outerHTML">
+      <input type="text" name="text" placeholder="AniList URL or id, e.g. https://anilist.co/manga/…" aria-label="AniList URL or id" required>
+      <button class="secondary">Use this</button>
     </form>
     <form hx-post="/review/{{ card.md_id }}/not-on-anilist" hx-target="#card-{{ card.md_id }}" hx-swap="outerHTML">
       <button class="secondary">Not on AniList</button>

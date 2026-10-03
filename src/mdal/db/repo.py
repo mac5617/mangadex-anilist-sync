@@ -256,7 +256,7 @@ class Repo:
     def diff_rows(self, run_id: int) -> list[sqlite3.Row]:
         """Items with display data: MangaDex title, AniList title/link/total, current AniList status."""
         return self.conn.execute(
-            "SELECT i.*, m.title AS md_title, m.pub_status, m.last_chapter, "
+            "SELECT i.*, m.title AS md_title, m.pub_status, m.last_chapter, m.cover_file, "
             "a.romaji, a.english, a.native, a.site_url, a.chapters AS al_chapters, a.status AS al_media_status, "
             "e.status AS al_status "
             "FROM sync_item i "

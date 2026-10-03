@@ -1,20 +1,23 @@
 <div id="sync-status"{% if active %} hx-get="/sync/status" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
   {% if status_message %}<p class="notice err" role="alert">{{ status_message }}</p>{% endif %}
   {% if run %}
-    <p>Sync #{{ run.run_id }} · <span class="badge state-{{ run.state }}">{{ run.state }}</span>
-      {% if run.phase_detail %}· {{ run.phase_detail }}{% endif %}</p>
+    <p class="row"><strong>Sync #{{ run.run_id }}</strong> <span class="badge state-{{ run.state }}">{{ run.state }}</span></p>
+    {% if run.phase_detail %}<p>{{ run.phase_detail }}</p>{% endif %}
     {% if run.error %}<p class="notice err">{{ run.error }}</p>{% endif %}
-    <p class="muted">Requests: AniList {{ run.req_anilist }}, MangaDex {{ run.req_mangadex }} · started {{ run.started_at }}</p>
-    {% if run.state == "diffed" %}<p><a class="button" href="/sync/{{ run.run_id }}">Review the diff</a></p>{% endif %}
+    <p class="muted">Requests: AniList {{ run.req_anilist }}, MangaDex {{ run.req_mangadex }} · started {{ run.started_at | when }}</p>
   {% else %}
     <p>No sync yet.</p>
   {% endif %}
   {% if resumable and not active %}
-    <p class="notice warn">Sync #{{ resumable }} was interrupted while writing.
+    <p class="notice warn">Sync #{{ resumable }} was interrupted while writing. Only items not yet written are sent.</p>
+  {% endif %}
+  <div class="row actions-row">
+    {% if run and run.state == "diffed" %}<a class="button" href="/sync/{{ run.run_id }}">Review the diff</a>{% endif %}
+    {% if resumable and not active %}
       <button hx-post="/sync/{{ resumable }}/resume" hx-target="#sync-status" hx-swap="outerHTML">Resume</button>
-      <span class="muted">Only items not yet written are sent.</span></p>
-  {% endif %}
-  {% if not active %}
-    <button hx-post="/sync" hx-target="#sync-status" hx-swap="outerHTML">Start sync</button>
-  {% endif %}
+    {% endif %}
+    {% if not active %}
+      <button class="{{ 'secondary' if run and run.state == 'diffed' else '' }}" hx-post="/sync" hx-target="#sync-status" hx-swap="outerHTML">Start sync</button>
+    {% endif %}
+  </div>
 </div>

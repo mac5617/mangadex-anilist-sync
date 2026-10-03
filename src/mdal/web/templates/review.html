@@ -1,18 +1,22 @@
 {% extends "base.html" %}
-{% block title %}Review matches · MangaDex → AniList sync{% endblock %}
+{% block title %}Review matches{% endblock %}
 {% block content %}
-<h1>Review matches</h1>
-<p class="muted">Your decisions here are final: these series are never matched automatically again.
-  Pasting an AniList id that hasn't been seen before costs one AniList request.</p>
+<div class="page-head">
+  <div>
+    <h1>Review matches</h1>
+    <p class="lede">Pick the right AniList entry for each series. Your decisions are final: these series are never
+      matched automatically again. Pasting an AniList id that hasn't been seen before costs one AniList request.</p>
+  </div>
+</div>
 
-<h2>Needs review ({{ review | length }})</h2>
-{% for card in review %}{% include "_review_card.html" %}{% else %}<p class="muted">Nothing to review.</p>{% endfor %}
+<h2 class="section-title">Needs review ({{ review | length }})</h2>
+{% for card in review %}{% include "_review_card.html" %}{% else %}<div class="panel empty">Nothing to review.</div>{% endfor %}
 
-<h2>No match found ({{ unmatched | length }})</h2>
-{% for card in unmatched %}{% include "_review_card.html" %}{% else %}<p class="muted">Nothing unmatched.</p>{% endfor %}
+<h2 class="section-title">No match found ({{ unmatched | length }})</h2>
+{% for card in unmatched %}{% include "_review_card.html" %}{% else %}<div class="panel empty">Nothing unmatched.</div>{% endfor %}
 
-<details{% if not not_on_anilist %} hidden{% endif %}>
-  <summary><h2 class="inline">Marked not on AniList ({{ not_on_anilist | length }})</h2></summary>
+<details class="section"{% if not not_on_anilist %} hidden{% endif %}>
+  <summary><h2 class="section-title">Marked not on AniList ({{ not_on_anilist | length }}) <span class="muted">show</span></h2></summary>
   {% for card in not_on_anilist %}{% include "_review_card.html" %}{% endfor %}
 </details>
 {% endblock %}

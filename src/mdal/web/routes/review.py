@@ -14,12 +14,9 @@ from fastapi.responses import HTMLResponse
 from mdal.db.repo import Repo
 from mdal.matching.pipeline import AniListFetch, confirm, confirm_manual, mark_not_on_anilist, retry_matching
 from mdal.sync.orchestrator import refresh_item
-from mdal.web.app import get_services, render, templates
+from mdal.web.app import get_services, md_cover_url, render, templates
 
 router = APIRouter()
-
-MD_COVER = "https://uploads.mangadex.org/covers/{md_id}/{file}.256.jpg"
-
 
 def _card(repo: Repo, row: Any) -> dict[str, Any]:
     md_id = row["md_id"]
@@ -31,7 +28,7 @@ def _card(repo: Repo, row: Any) -> dict[str, Any]:
         "year": row["year"],
         "language": row["original_language"],
         "authors": json.loads(row["authors"] or "[]"),
-        "cover": MD_COVER.format(md_id=md_id, file=row["cover_file"]) if row["cover_file"] else None,
+        "cover": md_cover_url(md_id, row["cover_file"]),
         "md_url": f"https://mangadex.org/title/{md_id}",
         "reasons": json.loads(row["reasons"] or "[]"),
         "candidates": [

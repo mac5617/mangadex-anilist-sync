@@ -1,8 +1,10 @@
 <article class="card done" id="card-{{ md_id }}">
-  <p>{{ text }}</p>
-  {% if undo %}
-  <form hx-post="/review/{{ md_id }}/retry" hx-target="#card-{{ md_id }}" hx-swap="outerHTML">
-    <button class="secondary">Undo</button>
-  </form>
-  {% endif %}
+  <div class="row">
+    <span>{{ text }}</span>
+    {% if undo %}
+    <form hx-post="/review/{{ md_id }}/retry" hx-target="#card-{{ md_id }}" hx-swap="outerHTML">
+      <button class="secondary">Undo</button>
+    </form>
+    {% endif %}
+  </div>
 </article>

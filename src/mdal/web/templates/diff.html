@@ -1,80 +1,91 @@
 {% extends "base.html" %}
-{% block title %}Sync #{{ run.run_id }} · MangaDex → AniList sync{% endblock %}
+{% import "_macros.html" as ui %}
+{% block title %}Sync #{{ run.run_id }}{% endblock %}
 {% block content %}
-<h1>Sync #{{ run.run_id }} <span class="badge state-{{ run.state }}">{{ run.state }}</span></h1>
-{% if run.phase_detail %}<p class="muted">{{ run.phase_detail }}</p>{% endif %}
+<div class="page-head">
+  <div>
+    <h1>Sync #{{ run.run_id }} <span class="badge state-{{ run.state }}">{{ run.state }}</span></h1>
+    {% if run.phase_detail %}<p class="lede">{{ run.phase_detail }}</p>{% endif %}
+  </div>
+  {% if run.state == "diffed" %}
+  <div class="page-actions">
+    <form method="post" action="/sync/{{ run.run_id }}/discard"><button class="danger">Discard this sync</button></form>
+  </div>
+  {% endif %}
+</div>
 
-<p class="summary">
-  {{ counts.write }} to write · {{ counts.add }} to add · {{ counts.flag }} flagged · {{ counts.skip }} skipped
-  {%- set n_complete = rows | selectattr("set_status") | selectattr("selectable") | list | length %}
-  {%- if n_complete %} · {{ n_complete }} to mark completed{% endif %}
-</p>
+{%- set n_complete = rows | selectattr("set_status") | selectattr("selectable") | list | length %}
+<div class="stats">
+  <div class="stat tone-ok"><span class="stat-value">{{ counts.write }}</span><span class="stat-label">to write</span></div>
+  <div class="stat tone-info"><span class="stat-value">{{ counts.add }}</span><span class="stat-label">to add</span></div>
+  <div class="stat{% if counts.flag %} tone-err{% endif %}"><span class="stat-value">{{ counts.flag }}</span><span class="stat-label">flagged</span></div>
+  <div class="stat"><span class="stat-value">{{ counts.skip }}</span><span class="stat-label">skipped</span></div>
+  {% if n_complete %}<div class="stat tone-ok"><span class="stat-value">{{ n_complete }}</span><span class="stat-label">to mark completed</span></div>{% endif %}
+</div>
 
-<form id="diff-form" class="diff-form" hx-post="/sync/{{ run.run_id }}/estimate" hx-trigger="change" hx-target="#estimate" hx-swap="outerHTML">
-  {% include "_estimate.html" %}
-
+<form id="diff-form" hx-post="/sync/{{ run.run_id }}/estimate" hx-trigger="change" hx-target="#estimate" hx-swap="outerHTML">
   {% for f in ["write", "add", "flag", "skip", "all"] %}
     <input type="radio" name="f" id="f-{{ f }}" value="{{ f }}" class="tab-radio"{% if filter == f %} checked{% endif %}>
   {% endfor %}
-  <div class="tabs">
-    <label for="f-write">To write ({{ counts.write }})</label>
-    <label for="f-add">To add ({{ counts.add }})</label>
-    <label for="f-flag">Flagged ({{ counts.flag }})</label>
-    <label for="f-skip">Skipped ({{ counts.skip }})</label>
-    <label for="f-all">All ({{ counts.all }})</label>
+  <div class="toolbar">
+    <div class="tabs">
+      <label for="f-write">To write ({{ counts.write }})</label>
+      <label for="f-add">To add ({{ counts.add }})</label>
+      <label for="f-flag">Flagged ({{ counts.flag }})</label>
+      <label for="f-skip">Skipped ({{ counts.skip }})</label>
+      <label for="f-all">All ({{ counts.all }})</label>
+    </div>
+    {% include "_estimate.html" %}
   </div>
 
-  <table class="diff">
+  <div class="table-wrap">
+  <table class="data diff">
     <thead><tr>
-      <th></th><th>MangaDex</th><th>AniList</th><th>Progress</th><th>Action</th><th>Status</th><th>Why</th>
+      <th class="check"></th><th>Series</th><th>Progress</th><th>Action</th><th>Status</th><th>Why</th>
     </tr></thead>
     <tbody>
     {% for r in rows %}
       <tr class="r-{{ r.action }}" data-md-id="{{ r.md_id }}">
-        <td>
+        <td class="check">
           {% if r.action != "skip" %}
             <input type="checkbox" name="sel" value="{{ r.md_id }}" aria-label="select {{ r.md_title }}"
               {%- if r.checked and r.selectable %} checked{% endif %}{% if not r.selectable %} disabled{% endif %}>
           {% endif %}
         </td>
-        <td><a href="{{ r.md_url }}" target="_blank" rel="noopener noreferrer">{{ r.md_title }}</a></td>
-        <td>{% if r.al_url %}<a href="{{ r.al_url }}" target="_blank" rel="noopener noreferrer">{{ r.al_title or "AniList" }}</a>{% else %}<span class="muted">—</span>{% endif %}</td>
+        <td>{{ ui.series(r.md_title, r.md_url, r.cover, r.al_title, r.al_url) }}</td>
         <td class="num">
           {% if r.status_only %}{{ r.md_progress }} (unchanged)
           {% elif r.md_progress is not none %}{{ r.al_progress if r.al_progress is not none else "new" }} → {{ r.md_progress }}
           {% else %}<span class="muted">—</span>{% endif %}
-          {% if r.unresolved %}<br><span class="muted" title="read chapters whose number could not be resolved">{{ r.unresolved }} unresolved</span>{% endif %}
+          {% if r.unresolved %}<span class="sub" title="read chapters whose number could not be resolved">{{ r.unresolved }} unresolved</span>{% endif %}
         </td>
         <td><span class="badge a-{{ r.action }}{% if r.flag_kind %} k-{{ r.flag_kind }}{% endif %}">{{ r.flag_kind | replace("_", " ") if r.flag_kind else r.action }}</span></td>
         <td>
           {% if r.status_label and not r.set_status %}<span class="muted">{{ r.status_label }}</span>
           {% elif r.status_label %}
-            <label><input type="checkbox" name="mc" value="{{ r.md_id }}"
+            <label class="complete"><input type="checkbox" name="mc" value="{{ r.md_id }}"
               {%- if r.complete_checked %} checked{% endif %}{% if not r.selectable %} disabled{% endif %}> mark completed</label>
-            <br><span class="muted">{{ r.status_label }}</span>
+            <span class="sub">{{ r.status_label }}</span>
           {% endif %}
         </td>
-        <td>{{ r.reason }}{% if r.hint %}<br><span class="muted">{{ r.hint }}</span>{% endif %}
-          {% if r.flag_kind == "implausible" %}<br><label class="override"><input type="checkbox" name="ov" value="{{ r.md_id }}"> override: write anyway</label>{% endif %}</td>
+        <td class="reason">{{ r.reason }}{% if r.hint %}<span class="sub">{{ r.hint }}</span>{% endif %}
+          {% if r.flag_kind == "implausible" %}<label class="override"><input type="checkbox" name="ov" value="{{ r.md_id }}"> override: write anyway</label>{% endif %}</td>
       </tr>
+    {% else %}
+      <tr><td colspan="6" class="empty">This sync has no rows.</td></tr>
     {% endfor %}
     </tbody>
   </table>
+  </div>
 
-  <p class="actions">
+  <div class="actions-bar">
     {% if approvable %}
       <button type="submit" id="approve" formaction="/sync/{{ run.run_id }}/approve" formmethod="post">Approve and write</button>
-      {% if not first_write_done %}<span class="notice warn">First live write: select exactly one entry. After it is verified, larger batches unlock.</span>{% endif %}
+      {% if not first_write_done %}<span class="notice warn inline">First live write: select exactly one entry. After it is verified, larger batches unlock.</span>{% endif %}
     {% else %}
       <button type="button" id="approve" disabled>Approve and write</button>
       <span class="muted">This sync is {{ run.state }}; only a sync waiting for approval can be written.</span>
     {% endif %}
-  </p>
+  </div>
 </form>
-
-{% if run.state == "diffed" %}
-<form method="post" action="/sync/{{ run.run_id }}/discard">
-  <button class="secondary">Discard this sync</button>
-</form>
-{% endif %}
 {% endblock %}

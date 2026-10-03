@@ -1,18 +1,24 @@
 {% extends "base.html" %}
-{% block title %}Settings · MangaDex → AniList sync{% endblock %}
+{% block title %}Settings{% endblock %}
 {% block content %}
-<h1>Settings</h1>
+<div class="page-head">
+  <div>
+    <h1>Settings</h1>
+    <p class="lede">Accounts, rate limits and matching thresholds. Secrets stay in <code>.env</code> and are never shown here.</p>
+  </div>
+</div>
 
+<div class="grid two">
 <section class="panel" id="anilist">
   <h2>AniList</h2>
   {% if not anilist.client_configured %}
     <p>Set <code>ANILIST_CLIENT_ID</code> and <code>ANILIST_CLIENT_SECRET</code> in <code>.env</code>, then restart.</p>
   {% elif anilist.connected %}
-    <p>Connected{% if anilist.user_name %} as <strong>{{ anilist.user_name }}</strong>{% endif %}.
-       Tokens last one year; reconnect when AniList starts rejecting it.</p>
-    <form method="post" action="/auth/anilist/disconnect"><button>Disconnect</button></form>
+    <p><span class="badge ok">connected</span>{% if anilist.user_name %} as <strong>{{ anilist.user_name }}</strong>{% endif %}</p>
+    <p class="muted">Tokens last one year; reconnect when AniList starts rejecting it.</p>
+    <form method="post" action="/auth/anilist/disconnect"><button class="secondary">Disconnect</button></form>
   {% else %}
-    <p>Not connected.</p>
+    <p><span class="badge err">not connected</span></p>
     {% if anilist.uses_pin %}
       <p><a href="{{ anilist.pin_url }}" target="_blank" rel="noopener noreferrer">Open AniList</a>,
          approve, then paste the token shown there:</p>
@@ -22,8 +28,8 @@
          <code>https://anilist.co/api/v2/oauth/pin</code> instead, set it as <code>ANILIST_REDIRECT_URI</code>,
          and paste the token below.</p>
     {% endif %}
-    <form method="post" action="/auth/anilist/token">
-      <label>Access token <input type="password" name="token" autocomplete="off" required></label>
+    <form method="post" action="/auth/anilist/token" class="inline-form">
+      <input type="password" name="token" autocomplete="off" placeholder="Access token" aria-label="Access token" required>
       <button>Save token</button>
     </form>
   {% endif %}
@@ -32,14 +38,15 @@
 <section class="panel" id="mangadex">
   <h2>MangaDex</h2>
   {% if mangadex.configured %}
-    <p>Credentials are set in <code>.env</code> for <strong>{{ mangadex.username }}</strong>.</p>
-    <form method="post" action="/auth/mangadex/check"><button>Check login</button></form>
-    <p class="muted">Uses one token request.</p>
+    <p><span class="badge ok">configured</span> for <strong>{{ mangadex.username }}</strong></p>
+    <p class="muted">Check login uses one token request.</p>
+    <form method="post" action="/auth/mangadex/check"><button class="secondary">Check login</button></form>
   {% else %}
     <p>Set <code>MANGADEX_USERNAME</code>, <code>MANGADEX_PASSWORD</code>, <code>MANGADEX_CLIENT_ID</code> and
        <code>MANGADEX_CLIENT_SECRET</code> in <code>.env</code>, then restart.</p>
   {% endif %}
 </section>
+</div>
 
 <section class="panel" id="tunables">
   <h2>Sync settings</h2>
@@ -49,18 +56,22 @@
       <span>
         <input id="t-{{ t.key }}" type="number" name="{{ t.key }}" value="{{ value }}" min="{{ t.low }}" max="{{ t.high }}"
           step="{{ 1 if t.kind.__name__ == 'int' else 'any' }}" required>
-        <span class="muted">{{ t.low | float | round(2) }}–{{ t.high | float | round(2) }}{% if t.help %} · {{ t.help }}{% endif %}</span>
+        <span class="hint">{{ t.low | float | round(2) }}–{{ t.high | float | round(2) }}{% if t.help %} · {{ t.help }}{% endif %}</span>
       </span>
     {% endfor %}
-    <span></span><span><button>Save</button></span>
+    <span></span><span><button>Save settings</button></span>
   </form>
-  <form method="post" action="/settings/reset-batch"><button class="secondary">Reset write batch size to 10</button></form>
-  <p class="muted">First live write: {% if first_write_done %}done{% else %}not yet (the first approval is limited to one entry){% endif %}.</p>
+  <div class="row">
+    <form method="post" action="/settings/reset-batch"><button class="secondary">Reset write batch size to 10</button></form>
+    <span class="muted">First live write: {% if first_write_done %}done{% else %}not yet (the first approval is limited to one entry){% endif %}.</span>
+  </div>
 </section>
 
 <section class="panel" id="storage">
   <h2>Storage and secrets</h2>
-  <p>Database: <code>{{ db_path }}</code> <span class="muted">(change with <code>MDAL_DB_PATH</code> in <code>.env</code>)</span></p>
+  <dl class="facts">
+    <dt>Database</dt><dd><code>{{ db_path }}</code> <span class="muted">(change with <code>MDAL_DB_PATH</code> in <code>.env</code>)</span></dd>
+  </dl>
   <table class="env">
     {% for key, is_set in env_status %}
       <tr><td><code>{{ key }}</code></td><td>{% if is_set %}<span class="badge ok">set</span>{% else %}<span class="badge err">not set</span>{% endif %}</td></tr>

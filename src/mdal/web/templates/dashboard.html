@@ -1,30 +1,40 @@
 {% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
 {% block content %}
-<h1>Dashboard</h1>
+<div class="page-head">
+  <div>
+    <h1>Dashboard</h1>
+    <p class="lede">Sync reads both services and shows you a diff. Nothing is written to AniList until you approve it.</p>
+  </div>
+</div>
 
-<section class="panel">
-  <h2>Accounts</h2>
-  <ul class="plain">
-    <li>AniList:
-      {% if auth.anilist %}<span class="badge ok">connected</span>{% if auth.anilist_user %} as {{ auth.anilist_user }}{% endif %}
-      {% else %}<span class="badge err">not connected</span> · <a href="/settings#anilist">Connect</a>{% endif %}</li>
-    <li>MangaDex:
-      {% if auth.mangadex %}<span class="badge ok">configured</span> for {{ auth.mangadex_user }}
-      {% else %}<span class="badge err">missing credentials</span> · <a href="/settings#mangadex">Details</a>{% endif %}</li>
-  </ul>
-</section>
+<div class="stats">
+  <a class="stat{% if nav.review %} tone-warn{% endif %}" href="/review">
+    <span class="stat-value">{{ nav.review }}</span><span class="stat-label">series to review</span></a>
+  <a class="stat{% if nav.not_on_list %} tone-info{% endif %}" href="/not-listed">
+    <span class="stat-value">{{ nav.not_on_list }}</span><span class="stat-label">matched, not on your list</span></a>
+  {% if run %}
+  <a class="stat" href="/history/{{ run.run_id }}">
+    <span class="stat-value">#{{ run.run_id }}</span><span class="stat-label">last sync · {{ run.state }}</span></a>
+  {% endif %}
+</div>
 
-<section class="panel">
-  <h2>Sync</h2>
-  {% include "_sync_status.html" %}
-  <p class="muted">A sync reads both services and shows you a diff. Nothing is written to AniList until you approve it.</p>
-</section>
+<div class="grid two">
+  <section class="panel">
+    <h2>Sync</h2>
+    {% include "_sync_status.html" %}
+  </section>
 
-<section class="panel">
-  <h2>Needs attention</h2>
-  <ul class="plain">
-    <li><a href="/review">{{ nav.review }} series to review</a></li>
-    <li><a href="/not-listed">{{ nav.not_on_list }} matched series not on your AniList list</a></li>
-  </ul>
-</section>
+  <section class="panel">
+    <h2>Accounts</h2>
+    <dl class="facts">
+      <dt>AniList</dt>
+      <dd>{% if auth.anilist %}<span class="badge ok">connected</span>{% if auth.anilist_user %} as {{ auth.anilist_user }}{% endif %}
+        {% else %}<span class="badge err">not connected</span> · <a href="/settings#anilist">Connect</a>{% endif %}</dd>
+      <dt>MangaDex</dt>
+      <dd>{% if auth.mangadex %}<span class="badge ok">configured</span> for {{ auth.mangadex_user }}
+        {% else %}<span class="badge err">missing credentials</span> · <a href="/settings#mangadex">Details</a>{% endif %}</dd>
+    </dl>
+  </section>
+</div>
 {% endblock %}

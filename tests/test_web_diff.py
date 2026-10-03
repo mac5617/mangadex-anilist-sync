@@ -34,8 +34,8 @@ def row(html: str, md_id: str) -> str:
 
 def test_diff_page_summary_and_estimate(client, run_id, mock):
     html = client.get(f"/sync/{run_id}").text
-    assert "3 to write · 0 to add · 2 flagged · 1 skipped" in html
-    assert "2 to mark completed" in html
+    stats = {label: value for value, label in re.findall(r'<span class="stat-value">(\d+)</span><span class="stat-label">([^<]+)</span>', html)}
+    assert stats == {"to write": "3", "to add": "0", "flagged": "2", "skipped": "1", "to mark completed": "2"}
     # Default selection: the 3 writes (status-only counts because its completion is checked).
     assert "3 selected, 2 to mark completed" in html
     assert "≈ 3 AniList requests, ≈ 9 s" in html
@@ -161,3 +161,20 @@ def test_add_rows(client, services, run_id):
     c = row(html, "w3")
     assert "New entry → Completed (AniList: finished, 120 ch); untick to add as Reading" in c
     assert re.search(r'name="mc" value="w3"\s*checked', c)
+
+
+def test_rows_show_mangadex_cover(client, run_id):
+    html = client.get(f"/sync/{run_id}").text
+    w = row(html, "w")
+    img = re.search(r"<img [^>]*>", w).group(0)
+    assert 'src="https://uploads.mangadex.org/covers/w/c.jpg.256.jpg"' in img
+    assert 'loading="lazy"' in img and 'referrerpolicy="no-referrer"' in img
+    assert 'class="md-title"' in w and "AniList:" in w
+
+
+def test_page_chrome(client, run_id):
+    html = client.get(f"/sync/{run_id}").text
+    assert f"<title>Sync #{run_id} · MangaDex → AniList</title>" in html
+    assert '<a href="/sync/latest" aria-current="page">Sync</a>' in html
+    assert 'id="theme-toggle"' in html and 'localStorage.getItem("theme")' in html
+    assert "prefers-color-scheme: dark" in client.get("/static/app.css").text

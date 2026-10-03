@@ -17,7 +17,7 @@ from mdal.services import Services
 from mdal.sync.estimate import estimate
 from mdal.sync.orchestrator import ACTIVE_STATES, ApprovalError, SyncAlreadyRunning, SyncStateError
 from mdal.sync.rules import AlMediaInfo, MdInfo, completion_info, completion_label
-from mdal.web.app import get_services, render, templates
+from mdal.web.app import get_services, md_cover_url, render, templates
 
 router = APIRouter()
 
@@ -63,6 +63,7 @@ class DiffRow:
     md_id: str
     md_title: str
     md_url: str
+    cover: str | None
     al_title: str | None
     al_url: str | None
     al_progress: int | None
@@ -101,6 +102,7 @@ def diff_rows(repo: Repo, run_id: int) -> list[DiffRow]:
             md_id=r["md_id"],
             md_title=r["md_title"] or r["md_id"],
             md_url=MANGADEX_TITLE_URL.format(r["md_id"]),
+            cover=md_cover_url(r["md_id"], r["cover_file"]),
             al_title=r["romaji"] or r["english"] or r["native"],
             al_url=r["site_url"],
             al_progress=r["al_progress"],

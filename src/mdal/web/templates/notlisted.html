@@ -1,16 +1,22 @@
 {% extends "base.html" %}
-{% block title %}Not on my list · MangaDex → AniList sync{% endblock %}
+{% block title %}Not on my list{% endblock %}
 {% block content %}
-<h1>Not on my list ({{ rows | length }})</h1>
-<p class="muted">These MangaDex series are matched to AniList but are not on your AniList list. Syncs never add entries
-  by themselves; each “Add” here creates one entry with one AniList request.</p>
+<div class="page-head">
+  <div>
+    <h1>Not on my list ({{ rows | length }})</h1>
+    <p class="lede">Matched series that aren't on your AniList list. They also appear as “add” rows in each sync's diff;
+      here you can add one at a time with your own status and progress. Each add first re-checks your list.</p>
+  </div>
+</div>
 {% if not first_write_done %}<p class="notice warn">Your first live write hasn't happened yet: adding one entry here counts as it.</p>{% endif %}
-<table class="diff">
-  <thead><tr><th></th><th>MangaDex</th><th>AniList</th><th>Read</th><th>Add as</th></tr></thead>
+<div class="table-wrap">
+<table class="data">
+  <thead><tr><th>Series</th><th>Read</th><th>Add as</th></tr></thead>
   <tbody>
   {% for r in rows %}{% with md_id = r.md_id %}{% include "_notlisted_row.html" %}{% endwith %}{% else %}
-    <tr><td colspan="5" class="muted">Nothing here.</td></tr>
+    <tr><td colspan="3" class="empty">Nothing here: every matched series is on your list.</td></tr>
   {% endfor %}
   </tbody>
 </table>
+</div>
 {% endblock %}

@@ -13,6 +13,25 @@ from mdal.services import Services
 WEB_DIR = Path(__file__).parent
 templates = Jinja2Templates(directory=WEB_DIR / "templates")
 
+MD_COVER = "https://uploads.mangadex.org/covers/{md_id}/{file}.256.jpg"
+
+
+def md_cover_url(md_id: str, cover_file: str | None) -> str | None:
+    """MangaDex's smallest thumbnail. Loaded by the browser, lazily, with no referrer (api-notes risk 6)."""
+    return MD_COVER.format(md_id=md_id, file=cover_file) if cover_file else None
+
+
+def when(iso: str | None) -> str:
+    """'2026-10-03T20:43:45+00:00' -> '2026-10-03 20:43 UTC' (stored times are UTC)."""
+    if not iso:
+        return "—"
+    text = str(iso).replace("T", " ")
+    return text[:16] + " UTC" if text.endswith("+00:00") and len(text) >= 16 else text
+
+
+templates.env.globals["md_cover"] = md_cover_url
+templates.env.filters["when"] = when
+
 
 def get_services(request: Request) -> Services:
     return request.app.state.services

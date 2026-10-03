@@ -1,28 +1,39 @@
 {% extends "base.html" %}
-{% block title %}Sync #{{ run.run_id }} history · MangaDex → AniList sync{% endblock %}
+{% import "_macros.html" as ui %}
+{% block title %}Sync #{{ run.run_id }} details{% endblock %}
 {% block content %}
-<h1>Sync #{{ run.run_id }} <span class="badge state-{{ run.state }}">{{ run.state }}</span></h1>
-<p class="muted">Started {{ run.started_at }}{% if run.finished_at %} · finished {{ run.finished_at }}{% endif %}{% if duration %} · {{ duration }}{% endif %}
-  · requests: AniList {{ run.req_anilist }}, MangaDex {{ run.req_mangadex }}</p>
+<div class="page-head">
+  <div>
+    <h1>Sync #{{ run.run_id }} <span class="badge state-{{ run.state }}">{{ run.state }}</span></h1>
+    <p class="lede">Started {{ run.started_at | when }}{% if run.finished_at %} · finished {{ run.finished_at | when }}{% endif %}{% if duration %} · {{ duration }}{% endif %}
+      · requests: AniList {{ run.req_anilist }}, MangaDex {{ run.req_mangadex }}</p>
+  </div>
+  <div class="page-actions">
+    {% if run.state == "diffed" %}<a class="button" href="/sync/{{ run.run_id }}">Open the diff to approve</a>{% endif %}
+    <a class="button secondary" href="/history">All syncs</a>
+  </div>
+</div>
 {% if run.phase_detail %}<p>{{ run.phase_detail }}</p>{% endif %}
 {% if run.error %}<p class="notice err">{{ run.error }}</p>{% endif %}
-{% if run.state == "diffed" %}<p><a class="button" href="/sync/{{ run.run_id }}">Open the diff to approve</a></p>{% endif %}
 
-<table class="diff">
-  <thead><tr><th>MangaDex</th><th>AniList</th><th>Progress</th><th>Action</th><th>Status</th><th>Write</th><th>Notes</th></tr></thead>
+<div class="table-wrap">
+<table class="data diff">
+  <thead><tr><th>Series</th><th>Progress</th><th>Action</th><th>Status</th><th>Write</th><th>Notes</th></tr></thead>
   <tbody>
   {% for r, item in rows %}
     <tr class="r-{{ r.action }} w-{{ item.write_state }}">
-      <td><a href="{{ r.md_url }}" target="_blank" rel="noopener noreferrer">{{ r.md_title }}</a></td>
-      <td>{% if r.al_url %}<a href="{{ r.al_url }}" target="_blank" rel="noopener noreferrer">{{ r.al_title or "AniList" }}</a>{% else %}<span class="muted">—</span>{% endif %}</td>
+      <td>{{ ui.series(r.md_title, r.md_url, r.cover, r.al_title, r.al_url) }}</td>
       <td class="num">{% if r.md_progress is not none %}{{ r.al_progress if r.al_progress is not none else "new" }} → {{ r.md_progress }}{% else %}—{% endif %}
-        {% if r.unresolved %}<br><span class="muted">{{ r.unresolved }} unresolved</span>{% endif %}</td>
+        {% if r.unresolved %}<span class="sub">{{ r.unresolved }} unresolved</span>{% endif %}</td>
       <td><span class="badge a-{{ r.action }}">{{ r.flag_kind | replace("_", " ") if r.flag_kind else r.action }}</span></td>
-      <td>{% if r.set_status %}{{ "→ Completed" if item.status_approved else "completion not approved" }}{% if item.al_status_before %}<br><span class="muted">was {{ item.al_status_before }}</span>{% endif %}{% endif %}</td>
-      <td>{% if item.write_state != "none" %}<span class="badge ws-{{ item.write_state }}">{{ item.write_state }}</span>{% if item.written_at %}<br><span class="muted">{{ item.written_at }}</span>{% endif %}{% else %}<span class="muted">not approved</span>{% endif %}</td>
-      <td>{{ r.reason }}{% if item.verify_note %}<br><strong>{{ item.verify_note }}</strong>{% endif %}</td>
+      <td>{% if r.set_status %}{{ "→ Completed" if item.status_approved else "completion not approved" }}{% if item.al_status_before %}<span class="sub">was {{ item.al_status_before }}</span>{% endif %}{% endif %}</td>
+      <td>{% if item.write_state != "none" %}<span class="badge ws-{{ item.write_state }}">{{ item.write_state }}</span>{% if item.written_at %}<span class="sub">{{ item.written_at | when }}</span>{% endif %}{% else %}<span class="muted">not approved</span>{% endif %}</td>
+      <td class="reason">{{ r.reason }}{% if item.verify_note %}<span class="sub"><strong>{{ item.verify_note }}</strong></span>{% endif %}</td>
     </tr>
+  {% else %}
+    <tr><td colspan="6" class="empty">No rows in this run.</td></tr>
   {% endfor %}
   </tbody>
 </table>
+</div>
 {% endblock %}

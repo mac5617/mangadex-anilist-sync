@@ -1,15 +1,14 @@
-{% if done or not r -%}
-<tr id="nl-{{ md_id }}" class="done"><td colspan="5">{{ done or row_error or "No longer listed." }}</td></tr>
+{% import "_macros.html" as ui %}
+{%- if done or not r -%}
+<tr id="nl-{{ md_id }}" class="done"><td colspan="3">{{ done or row_error or "No longer listed." }}</td></tr>
 {%- else -%}
 <tr id="nl-{{ r.md_id }}">
-  <td>{% if r.cover %}<img src="{{ r.cover }}" alt="" width="48" loading="lazy" referrerpolicy="no-referrer">{% endif %}</td>
-  <td><a href="{{ r.md_url }}" target="_blank" rel="noopener noreferrer">{{ r.md_title }}</a></td>
-  <td><a href="{{ r.al_url }}" target="_blank" rel="noopener noreferrer">{{ r.al_title }}</a>
-    {% if r.chapters %}<br><span class="muted">{{ r.chapters }} ch</span>{% endif %}</td>
-  <td>
-    {% if r.proposed is not none %}read up to {{ r.proposed }}{% else %}<span class="muted">nothing read</span>{% endif %}
-    {% if r.unresolved %}<br><span class="muted">{{ r.unresolved }} unresolved</span>{% endif %}
-    {% if r.over_total %}<br><span class="notice warn">MangaDex reads ({{ r.proposed }}) exceed AniList's total ({{ r.chapters }}); progress capped.</span>{% endif %}
+  <td>{{ ui.series(r.md_title, r.md_url, md_cover(r.md_id, r.md_cover_file) or r.cover, r.al_title, r.al_url,
+                   (r.chapters ~ " chapters on AniList") if r.chapters else None) }}</td>
+  <td class="num">
+    {% if r.proposed is not none %}read up to <strong>{{ r.proposed }}</strong>{% else %}<span class="muted">nothing read</span>{% endif %}
+    {% if r.unresolved %}<span class="sub">{{ r.unresolved }} unresolved</span>{% endif %}
+    {% if r.over_total %}<p class="notice warn inline">MangaDex reads ({{ r.proposed }}) exceed AniList's total ({{ r.chapters }}); progress capped.</p>{% endif %}
   </td>
   <td>
     {% if row_error %}<p class="notice err" role="alert">{{ row_error }}</p>{% endif %}

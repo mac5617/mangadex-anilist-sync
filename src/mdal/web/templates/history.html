@@ -1,24 +1,31 @@
 {% extends "base.html" %}
-{% block title %}History · MangaDex → AniList sync{% endblock %}
+{% block title %}History{% endblock %}
 {% block content %}
-<h1>Sync history</h1>
-<table class="diff">
+<div class="page-head">
+  <div>
+    <h1>Sync history</h1>
+    <p class="lede">Every sync and every single add, newest first. Open one to see each row's result.</p>
+  </div>
+</div>
+<div class="table-wrap">
+<table class="data">
   <thead><tr><th>#</th><th>Started</th><th>State</th><th>Items</th><th>Written</th><th>Requests</th><th>Duration</th><th>Notes</th></tr></thead>
   <tbody>
   {% for r in runs %}
     <tr>
-      <td><a href="/history/{{ r.run_id }}">{{ r.run_id }}</a></td>
-      <td class="num">{{ r.started_at }}</td>
+      <td><a href="/history/{{ r.run_id }}"><strong>#{{ r.run_id }}</strong></a></td>
+      <td class="num">{{ r.started_at | when }}</td>
       <td><span class="badge state-{{ r.state }}">{{ r.state }}</span></td>
-      <td class="num">{{ r.counts.get("write", 0) }} write · {{ r.counts.get("flag", 0) }} flag · {{ r.counts.get("skip", 0) }} skip</td>
+      <td class="num">{{ r.counts.get("write", 0) }} write · {{ r.counts.get("flag", 0) }} flag · {{ r.counts.get("skip", 0) }} skip{% if r.counts.get("add") %}<span class="sub">{{ r.counts.add }} add</span>{% endif %}</td>
       <td class="num">{{ r.counts.get("done", 0) }} done{% if r.counts.get("failed") %} · {{ r.counts.failed }} failed{% endif %}{% if r.counts.get("dropped") %} · {{ r.counts.dropped }} dropped{% endif %}{% if r.counts.get("pending") %} · {{ r.counts.pending }} pending{% endif %}</td>
       <td class="num">AniList {{ r.req_anilist }} · MangaDex {{ r.req_mangadex }}</td>
       <td class="num">{{ r.duration or "—" }}</td>
-      <td>{% if r.error %}<span class="notice err">{{ r.error }}</span>{% elif r.phase_detail %}<span class="muted">{{ r.phase_detail }}</span>{% endif %}</td>
+      <td class="reason">{% if r.error %}<span class="notice err inline">{{ r.error }}</span>{% elif r.phase_detail %}<span class="muted">{{ r.phase_detail }}</span>{% endif %}</td>
     </tr>
   {% else %}
-    <tr><td colspan="8" class="muted">No syncs yet.</td></tr>
+    <tr><td colspan="8" class="empty">No syncs yet.</td></tr>
   {% endfor %}
   </tbody>
 </table>
+</div>
 {% endblock %}

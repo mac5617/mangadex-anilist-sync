@@ -29,6 +29,7 @@ class NotListedRow:
     md_id: str
     md_title: str
     md_url: str
+    md_cover_file: str | None
     media_id: int
     al_title: str
     al_url: str
@@ -63,6 +64,7 @@ def not_listed_rows(repo: Repo) -> list[NotListedRow]:
             md_id=m["md_id"],
             md_title=md["title"],
             md_url=f"https://mangadex.org/title/{m['md_id']}",
+            md_cover_file=md["cover_file"],
             media_id=m["al_media_id"],
             al_title=title or f"AniList {m['al_media_id']}",
             al_url=(al["site_url"] if al else None) or f"https://anilist.co/manga/{m['al_media_id']}",
