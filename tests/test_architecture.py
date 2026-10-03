@@ -30,3 +30,17 @@ def test_no_mutation_before_story_16():
     # Removed by story 16, which replaces it with "only writer.py and add_entry.py".
     offenders = [str(p.relative_to(ROOT)) for p in python_files() if "SaveMediaListEntry" in p.read_text(encoding="utf-8")]
     assert offenders == []
+
+
+PURE_MODULES = ["matching/normalize.py", "matching/score.py", "sync/rules.py", "sync/estimate.py"]
+IMPURE_IMPORT = re.compile(
+    r"^\s*(import|from)\s+(httpx|sqlite3|asyncio|socket|urllib|pathlib|os|mdal\.(db|clients|fetch|web|services|config))\b",
+    re.MULTILINE,
+)
+
+
+def test_pure_modules_do_no_io():
+    present = [SRC / m for m in PURE_MODULES if (SRC / m).exists()]
+    assert present, "at least matching/normalize.py and matching/score.py exist from story 10"
+    offenders = [str(p.relative_to(ROOT)) for p in present if IMPURE_IMPORT.search(p.read_text(encoding="utf-8"))]
+    assert offenders == []
