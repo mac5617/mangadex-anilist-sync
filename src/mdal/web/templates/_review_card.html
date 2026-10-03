@@ -1,0 +1,54 @@
+<article class="card" id="card-{{ card.md_id }}">
+  <div class="card-md">
+    {% if card.cover %}<img src="{{ card.cover }}" alt="" width="96" loading="lazy" referrerpolicy="no-referrer">{% endif %}
+    <div>
+      <h3><a href="{{ card.md_url }}" target="_blank" rel="noopener noreferrer">{{ card.title }}</a></h3>
+      <p class="muted">{{ card.year or "year ?" }} · {{ card.language or "language ?" }}{% if card.authors %} · {{ card.authors | join(", ") }}{% endif %}</p>
+      {% if card.alt_titles %}
+        <details><summary>{{ card.alt_titles | length }} alt titles</summary>
+          <ul>{% for t in card.alt_titles %}<li>{{ t }}</li>{% endfor %}</ul></details>
+      {% endif %}
+      {% if card.reasons %}<p class="muted">{{ card.reasons | join("; ") }}</p>{% endif %}
+    </div>
+  </div>
+
+  {% if card_error %}<p class="notice err" role="alert">{{ card_error }}</p>{% endif %}
+
+  {% if card.state != "not_on_anilist" %}
+  <div class="card-candidates">
+    {% for c in card.candidates %}
+      <div class="candidate">
+        {% if c.cover %}<img src="{{ c.cover }}" alt="" width="64" loading="lazy" referrerpolicy="no-referrer">{% endif %}
+        <div>
+          <strong><a href="{{ c.url }}" target="_blank" rel="noopener noreferrer">{{ c.title }}</a></strong>
+          {% if c.english %}<span class="muted">({{ c.english }})</span>{% endif %}
+          <br><span class="muted">{{ c.year or "?" }} · {{ c.format or "?" }} · {{ c.country or "?" }}</span>
+          · <span class="badge">score {{ "%.2f" | format(c.score) }}</span>
+          <ul class="reasons">{% for r in c.reasons %}<li>{{ r }}</li>{% endfor %}</ul>
+          <form hx-post="/review/{{ card.md_id }}/accept" hx-target="#card-{{ card.md_id }}" hx-swap="outerHTML">
+            <input type="hidden" name="al_media_id" value="{{ c.media_id }}">
+            <button>This one</button>
+          </form>
+        </div>
+      </div>
+    {% else %}
+      <p class="muted">No candidates found.</p>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <div class="card-actions">
+    {% if card.state != "not_on_anilist" %}
+    <form hx-post="/review/{{ card.md_id }}/manual" hx-target="#card-{{ card.md_id }}" hx-swap="outerHTML">
+      <label>AniList URL or id <input type="text" name="text" placeholder="https://anilist.co/manga/…" required></label>
+      <button>Use this</button>
+    </form>
+    <form hx-post="/review/{{ card.md_id }}/not-on-anilist" hx-target="#card-{{ card.md_id }}" hx-swap="outerHTML">
+      <button class="secondary">Not on AniList</button>
+    </form>
+    {% endif %}
+    <form hx-post="/review/{{ card.md_id }}/retry" hx-target="#card-{{ card.md_id }}" hx-swap="outerHTML">
+      <button class="secondary">{% if card.state == "not_on_anilist" %}Undo{% else %}Retry matching{% endif %}</button>
+    </form>
+  </div>
+</article>

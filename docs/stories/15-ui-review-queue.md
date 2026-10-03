@@ -15,14 +15,20 @@ Uncertain matches wait here. Decisions made here are tier 1 and are never re-mat
 - After any action, the card is swapped out via HTMX. If the current `diffed` run contains this series, recompute that one `sync_item` with `rules.evaluate` (no requests).
 
 ## Acceptance criteria
-- [ ] Accepting a candidate sets `state='confirmed', tier=1`, and the next sync does not re-match it (verified with the pipeline).
-- [ ] A manual `https://anilist.co/manga/30013/x` that is not cached makes exactly 1 request. An anime id, or a non-existent id, shows an error and changes nothing.
-- [ ] "Not on AniList" removes the series from the queue on this and future syncs. Undo restores matching.
-- [ ] A decision made while a `diffed` run exists updates that run's item (e.g. skip "awaiting match review" → write).
-- [ ] Covers are lazy and no-referrer.
+- [x] Accepting a candidate sets `state='confirmed', tier=1`, and the next sync does not re-match it (verified with the pipeline).
+- [x] A manual `https://anilist.co/manga/30013/x` that is not cached makes exactly 1 request. An anime id, or a non-existent id, shows an error and changes nothing.
+- [x] "Not on AniList" removes the series from the queue on this and future syncs. Undo restores matching.
+- [x] A decision made while a `diffed` run exists updates that run's item (e.g. skip "awaiting match review" → write).
+- [x] Covers are lazy and no-referrer.
 
 ## Tests
 `test_web_review.py`.
 
 ## Dev notes
-_(fill in after implementation)_
+- Done 2026-10-03; 306 tests pass in total (15 new).
+- The pasted-id validation lives in `matching/pipeline.confirm_manual()` (web code may not call clients or fetchers, §2). Cached media cost nothing; uncached ids make one `media_by_ids` request. Anime ids/URLs and unknown ids give an inline error and change nothing.
+- `accept` only takes media that are among the series' stored candidates.
+- "Undo" for a not-on-AniList series is the retry action (deletes the mapping; re-matched next sync). The done-card after "Not on AniList" also offers Undo.
+- `sync/orchestrator.refresh_item()` recomputes one series' row in the latest run, only when that run is `diffed` (no requests).
+- Unmatched series (no candidates) show the paste box, "Not on AniList" and "Retry matching".
+- Repo additions: `mapped_series(state)`, `candidate_media(md_id)`.

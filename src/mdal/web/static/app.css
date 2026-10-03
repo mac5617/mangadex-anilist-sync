@@ -32,3 +32,14 @@ table.diff td.num { white-space: nowrap; }
 #f-write:checked ~ table.diff tbody tr:not(.r-write),
 #f-flag:checked ~ table.diff tbody tr:not(.r-flag),
 #f-skip:checked ~ table.diff tbody tr:not(.r-skip) { display: none; }
+.card { border: 1px solid var(--line); border-radius: 6px; padding: .75rem 1rem; margin: .75rem 0; }
+.card.done { background: #f6f8f6; }
+.card-md, .candidate { display: flex; gap: .75rem; align-items: flex-start; }
+.card-md h3 { margin: 0; }
+.card-candidates { display: grid; grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr)); gap: .75rem; margin: .75rem 0; }
+.candidate { border: 1px solid var(--line); border-radius: 4px; padding: .5rem; }
+.candidate img, .card-md img { border-radius: 3px; flex: none; }
+ul.reasons { margin: .25rem 0; padding-left: 1.1rem; font-size: .85em; color: var(--muted); }
+.card-actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+.card-actions form { margin: 0; }
+h2.inline { display: inline; }

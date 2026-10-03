@@ -37,11 +37,12 @@ def create_app(services: Services) -> FastAPI:
     app.state.oauth_states = {}
     app.mount("/static", StaticFiles(directory=WEB_DIR / "static"), name="static")
 
-    from mdal.web.routes import auth, dashboard, settings, sync
+    from mdal.web.routes import auth, dashboard, review, settings, sync
 
     app.include_router(auth.router)
     app.include_router(settings.router)
     app.include_router(dashboard.router)
     app.include_router(sync.router)
+    app.include_router(review.router)
 
     return app

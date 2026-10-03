@@ -271,6 +271,21 @@ def mark_not_on_anilist(repo: Repo, md_id: str) -> None:
     )
 
 
+async def confirm_manual(repo: Repo, al: AniListLookup, md_id: str, text: str) -> str | None:
+    """Confirm a pasted AniList id/URL. Uncached ids cost one validation request. Returns an error or None."""
+    media_id = parse_anilist_ref(text)
+    if media_id is None:
+        return "Paste an AniList manga id or URL, e.g. https://anilist.co/manga/30013/…"
+    cached = repo.media([media_id]).get(media_id)
+    if cached is not None:
+        if cached["type"] != "MANGA":
+            return f"AniList {media_id} is not a manga."
+    elif media_id not in await al.media_by_ids([media_id]):
+        return f"AniList has no manga with id {media_id}."
+    confirm(repo, md_id, media_id)
+    return None
+
+
 def retry_matching(repo: Repo, md_id: str) -> None:
     """Forget the mapping and candidates; the next sync matches the series again."""
     repo.delete_mapping(md_id)

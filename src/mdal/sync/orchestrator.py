@@ -76,12 +76,12 @@ def failure_message(exc: Exception) -> str:
     return f"{exc.__class__.__name__}: {exc}"
 
 
-def build_items(repo: Repo, run_id: int) -> list[dict[str, Any]]:
-    """One sync_item per library series (§8). Pure DB reads; no API calls."""
+def build_items(repo: Repo, run_id: int, md_ids: set[str] | None = None) -> list[dict[str, Any]]:
+    """One sync_item per library series (§8), or only `md_ids`. Pure DB reads; no API calls."""
     mappings = repo.mappings()
     entries = repo.al_entries()
     jump_limit = repo.get_setting("jump_limit")
-    rows = repo.md_manga()
+    rows = [r for r in repo.md_manga() if md_ids is None or r["md_id"] in md_ids]
     mapped_ids = [m["al_media_id"] for m in mappings.values() if m["al_media_id"] is not None]
     media = repo.media(mapped_ids)
     items: list[dict[str, Any]] = []
@@ -123,6 +123,20 @@ def build_items(repo: Repo, run_id: int) -> list[dict[str, Any]]:
             "unresolved_reads": d.unresolved,
         })
     return items
+
+
+def refresh_item(repo: Repo, md_id: str) -> bool:
+    """After a match decision: recompute this series' row in the open `diffed` run, if any. No requests."""
+    run = repo.latest_run()
+    if run is None or run["state"] != "diffed":
+        return False
+    if not repo.conn.execute("SELECT 1 FROM sync_item WHERE run_id=? AND md_id=?", (run["run_id"], md_id)).fetchone():
+        return False
+    for item in build_items(repo, run["run_id"], {md_id}):
+        with repo.conn:
+            repo.conn.execute("DELETE FROM sync_item WHERE run_id=? AND md_id=?", (run["run_id"], md_id))
+        repo.upsert_item(item)
+    return True
 
 
 class SyncOrchestrator:

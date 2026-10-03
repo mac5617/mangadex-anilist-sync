@@ -172,6 +172,22 @@ class Repo:
                     (row["md_id"], c["al_media_id"], c["score"], reasons, rank),
                 )
 
+    def mapped_series(self, state: str) -> list[sqlite3.Row]:
+        """Library series in one mapping state, with their MangaDex details (review screen)."""
+        return self.conn.execute(
+            "SELECT p.*, m.title, m.alt_titles, m.year, m.original_language, m.authors, m.cover_file "
+            "FROM mapping p JOIN md_manga m ON m.md_id = p.md_id WHERE p.state=? ORDER BY m.title COLLATE NOCASE",
+            (state,),
+        ).fetchall()
+
+    def candidate_media(self, md_id: str) -> list[sqlite3.Row]:
+        """Ranked candidates joined with their AniList media."""
+        return self.conn.execute(
+            "SELECT c.score, c.reasons AS candidate_reasons, c.rank, a.* FROM match_candidate c "
+            "JOIN al_media a ON a.media_id = c.al_media_id WHERE c.md_id=? ORDER BY c.rank",
+            (md_id,),
+        ).fetchall()
+
     def candidates(self, md_id: str) -> list[sqlite3.Row]:
         return self.conn.execute("SELECT * FROM match_candidate WHERE md_id=? ORDER BY rank", (md_id,)).fetchall()
 
