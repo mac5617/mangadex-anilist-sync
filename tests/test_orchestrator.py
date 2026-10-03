@@ -140,3 +140,19 @@ async def test_status(fast, world):
     s = fast.orchestrator.status(run_id)
     assert s.state == "diffed" and s.req_anilist > 0
     assert fast.orchestrator.status(9999) is None
+
+
+async def test_new_sync_supersedes_older_diffed_run(fast, world):
+    first = await run(fast)
+    second = await run(fast)
+    r1 = fast.repo.get_run(first)
+    assert (r1["state"], r1["error"]) == ("cancelled", f"superseded by sync #{second}")
+    assert fast.repo.get_run(second)["state"] == "diffed"
+
+
+async def test_summary_counts_all_mappings_not_just_new_ones(fast, world):
+    await run(fast)
+    second = await run(fast)
+    detail = fast.repo.get_run(second)["phase_detail"]
+    assert "(0 newly matched)" in detail
+    assert "5 matched" in detail and "1 unmatched" in detail

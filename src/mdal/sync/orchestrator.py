@@ -212,6 +212,12 @@ class SyncOrchestrator:
         await self.lock.acquire()
         try:
             run_id = self.repo.create_run("fetching")
+            # An older diff waiting for approval is superseded: only the newest one can be approved.
+            for old in self.repo.conn.execute(
+                "SELECT run_id FROM sync_run WHERE state='diffed' AND run_id<?", (run_id,)
+            ).fetchall():
+                self.repo.update_run(old["run_id"], state="cancelled", finished_at=now_iso(),
+                                     error=f"superseded by sync #{run_id}")
         except BaseException:
             self.lock.release()
             raise
@@ -350,9 +356,12 @@ class SyncOrchestrator:
 
         n_write = sum(1 for i in items if i["action"] == "write")
         req, sec = estimate(n_write, repo.get_setting("anilist_write_batch"), repo.get_setting("anilist_rpm"))
+        states = [m["state"] for m in repo.mappings().values()]
+        newly = match.auto + match.review + match.unmatched
         detail = (
             f"{md.series} series, {al.entries} AniList entries; "
-            f"matched {match.auto} auto, {match.review} to review, {match.unmatched} unmatched; "
+            f"{sum(s in ('auto', 'confirmed') for s in states)} matched ({newly} newly matched), "
+            f"{states.count('review')} to review, {states.count('unmatched')} unmatched; "
             f"{n_write} to write"
         )
         repo.update_run(run_id, state="diffed", phase_detail=detail, est_requests=req, est_seconds=sec)

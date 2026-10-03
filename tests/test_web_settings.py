@@ -71,3 +71,16 @@ def test_reset_batch(client, services):
     response = client.post("/settings/reset-batch")
     assert "reset to 10" in response.text
     assert services.repo.get_setting("anilist_write_batch") == 10
+
+
+def test_no_secret_values_on_any_page(client, services):
+    from tests.factories import seed_diffed_run
+
+    services.store_anilist_token("al-access-token-secret-777")
+    run_id = seed_diffed_run(services.repo)
+    secrets = [FAKE_ENV[k] for k in ("MANGADEX_PASSWORD", "MANGADEX_CLIENT_SECRET", "ANILIST_CLIENT_SECRET")]
+    secrets.append("al-access-token-secret-777")
+    for url in ("/", "/settings", "/history", f"/history/{run_id}", f"/sync/{run_id}", "/review", "/not-listed", "/sync/status"):
+        html = client.get(url).text
+        for s in secrets:
+            assert s not in html, (url, s)
