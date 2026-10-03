@@ -133,6 +133,56 @@ class FakeAniList:
     viewer: dict = field(default_factory=lambda: {"id": 1, "name": "Reader"})
     requests: list[dict] = field(default_factory=list)              # parsed request bodies
     route: respx.Route | None = None
+    # mutation behaviour (story 16)
+    mutations: list[dict] = field(default_factory=list)             # bodies of executed mutation documents
+    applied: list[tuple[int, dict]] = field(default_factory=list)   # (entry_id, args) per executed alias
+    complexity_limit: int | None = None                            # more aliases than this → complexity error
+    alias_errors: dict[int, str] = field(default_factory=dict)      # entry_id -> per-alias error message
+    status_429: int = 0                                            # answer the next N mutations with 429
+    server_status_after_write: dict[int, str] = field(default_factory=dict)  # entry_id -> status AniList sets itself
+
+    def entry(self, entry_id: int) -> dict | None:
+        for group in self.lists:
+            for e in group["entries"]:
+                if e["id"] == entry_id:
+                    return e
+        return None
+
+    def _mutate(self, query: str, variables: dict) -> httpx.Response:
+        if self.status_429:
+            self.status_429 -= 1
+            return httpx.Response(429, headers={"Retry-After": "0"}, text="<html>Too Many Requests</html>")
+        aliases = re.findall(r"(m\d+): SaveMediaListEntry\(([^)]*)\)", query)
+        if self.complexity_limit is not None and len(aliases) > self.complexity_limit:
+            return httpx.Response(400, json={"data": None, "errors": [{"message": "Max query complexity exceeded"}]})
+        self.mutations.append({"query": query, "variables": variables})
+        data, errors = {}, []
+        for alias, arg_text in aliases:
+            args = {}
+            for name, value in re.findall(r"(\w+): (\$\w+|\w+)", arg_text):
+                args[name] = variables.get(value[1:]) if value.startswith("$") else value
+            entry_id = args["id"]
+            if entry_id in self.alias_errors:
+                data[alias] = None
+                errors.append({"message": self.alias_errors[entry_id], "path": [alias]})
+                continue
+            e = self.entry(entry_id)
+            if e is None:
+                data[alias] = None
+                errors.append({"message": "Not Found.", "path": [alias]})
+                continue
+            if "progress" in args:
+                e["progress"] = args["progress"]
+            if "status" in args:
+                e["status"] = args["status"]
+            if entry_id in self.server_status_after_write:
+                e["status"] = self.server_status_after_write[entry_id]
+            self.applied.append((entry_id, args))
+            data[alias] = {"id": e["id"], "mediaId": e["media"]["id"], "progress": e["progress"], "status": e["status"]}
+        body = {"data": data}
+        if errors:
+            body["errors"] = errors
+        return httpx.Response(200 if not errors else 400, json=body)
 
     def add_media(self, *media: dict) -> None:
         for m in media:
@@ -164,6 +214,8 @@ class FakeAniList:
         body = json.loads(request.content)
         self.requests.append(body)
         query, variables = body["query"], body.get("variables") or {}
+        if query.lstrip().startswith("mutation"):
+            return self._mutate(query, variables)
         if "Viewer" in query:
             data = {"Viewer": self.viewer}
         elif "MediaListCollection" in query:

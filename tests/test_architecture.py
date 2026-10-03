@@ -26,10 +26,22 @@ def test_only_clients_import_httpx():
     assert offenders == []
 
 
-def test_no_mutation_before_story_16():
-    # Removed by story 16, which replaces it with "only writer.py and add_entry.py".
-    offenders = [str(p.relative_to(ROOT)) for p in python_files() if "SaveMediaListEntry" in p.read_text(encoding="utf-8")]
+MUTATION_MODULES = {SRC / "sync" / "writer.py", SRC / "sync" / "add_entry.py"}
+
+
+def test_mutations_only_in_writer_and_add_entry():
+    offenders = [
+        str(p.relative_to(ROOT))
+        for p in python_files()
+        if p not in MUTATION_MODULES and re.search(r"SaveMediaListEntry|mutation", p.read_text(encoding="utf-8"))
+    ]
     assert offenders == []
+
+
+def test_writer_never_sends_other_statuses():
+    text = (SRC / "sync" / "writer.py").read_text(encoding="utf-8")
+    assert set(re.findall(r"status: ([A-Z_]+)", text)) == {"COMPLETED"}
+    assert "mediaId:" not in text  # never create entries by media id from a sync
 
 
 PURE_MODULES = ["matching/normalize.py", "matching/score.py", "sync/rules.py", "sync/estimate.py"]

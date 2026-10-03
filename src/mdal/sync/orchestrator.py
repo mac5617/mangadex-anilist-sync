@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterable
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -20,6 +20,7 @@ from mdal.fetch.mangadex_library import fetch_library
 from mdal.matching.pipeline import AniListFetch, resolve_all
 from mdal.sync.estimate import estimate
 from mdal.sync.rules import AlEntry, AlMediaInfo, MdInfo, evaluate
+from mdal.sync.writer import Writer
 
 if TYPE_CHECKING:
     from mdal.services import Services
@@ -44,6 +45,44 @@ class SyncAlreadyRunning(Exception):
 
 class SyncStateError(Exception):
     pass
+
+
+class ApprovalError(Exception):
+    """Shown to the user as-is."""
+
+
+FIRST_WRITE_MESSAGE = "First live write is limited to one entry. Pick one."
+RESUMABLE = ("writing", "verifying", "failed", "halted")
+
+
+def validate_approval(
+    repo: Repo, run_id: int, selected: Iterable[str], completing: Iterable[str], overrides: Iterable[str]
+) -> list[tuple[str, int]]:
+    """Returns [(md_id, status_approved)] to approve, or raises ApprovalError."""
+    run = repo.get_run(run_id)
+    if run is None or run["state"] != "diffed":
+        raise ApprovalError("Only a sync that is waiting for approval can be approved.")
+    items = {i["md_id"]: i for i in repo.items(run_id)}
+    chosen, marks, ok = set(selected), set(completing), set(overrides)
+    approved: list[tuple[str, int]] = []
+    for md_id in sorted(chosen):
+        item = items.get(md_id)
+        if item is None or item["action"] == "skip":
+            raise ApprovalError("The selection contains a row that cannot be written.")
+        if item["flag_kind"] == "exceeds_total":
+            raise ApprovalError("Rows that exceed AniList's total chapter count cannot be written.")
+        if item["flag_kind"] == "implausible" and md_id not in ok:
+            raise ApprovalError("Tick “override” on flagged rows you want to write anyway.")
+        completes = int(item["set_status"] == "COMPLETED" and md_id in marks)
+        status_only = item["md_progress"] is not None and item["al_progress"] is not None and item["md_progress"] <= item["al_progress"]
+        if status_only and not completes:
+            continue  # nothing to send
+        approved.append((md_id, completes))
+    if not approved:
+        raise ApprovalError("Nothing selected to write.")
+    if not repo.get_setting("first_write_done") and len(approved) != 1:
+        raise ApprovalError(FIRST_WRITE_MESSAGE)
+    return approved
 
 
 @dataclass(frozen=True)
@@ -189,6 +228,50 @@ class SyncOrchestrator:
             return None
         return RunStatus(r["run_id"], r["state"], r["phase_detail"], r["error"], r["req_anilist"], r["req_mangadex"])
 
+    async def approve(
+        self, run_id: int, selected: Iterable[str], completing: Iterable[str], overrides: Iterable[str]
+    ) -> int:
+        """Validate, mark items pending and start writing. Returns the number of approved items."""
+        if self.lock.locked() or (self.task and not self.task.done()):
+            raise SyncAlreadyRunning("a sync is already running")
+        approved = validate_approval(self.repo, run_id, selected, completing, overrides)
+        await self.lock.acquire()
+        try:
+            self.repo.update_items(run_id, [
+                (md_id, {"approved": 1, "write_state": "pending", "status_approved": completes})
+                for md_id, completes in approved
+            ])
+            self.repo.update_run(run_id, state="writing", approved_at=now_iso(), phase_detail="starting")
+        except BaseException:
+            self.lock.release()
+            raise
+        self.task = asyncio.create_task(self._guarded(run_id, self._write_phase))
+        return len(approved)
+
+    def can_resume(self, run_id: int) -> bool:
+        r = self.repo.get_run(run_id)
+        if r is None or r["state"] not in RESUMABLE or r["approved_at"] is None:
+            return False
+        if r["state"] in ("writing", "verifying"):
+            return not (self.task and not self.task.done())
+        return bool(self.repo.items_in_state(run_id, "pending")) or bool(self.repo.items_in_state(run_id, "done"))
+
+    async def resume(self, run_id: int) -> None:
+        if self.lock.locked() or (self.task and not self.task.done()):
+            raise SyncAlreadyRunning("a sync is already running")
+        if not self.can_resume(run_id):
+            raise SyncStateError("this sync cannot be resumed")
+        await self.lock.acquire()
+        self.repo.update_run(run_id, state="writing", error=None, finished_at=None, phase_detail="resuming")
+        self.task = asyncio.create_task(self._guarded(run_id, self._write_phase))
+
+    def resumable_run(self) -> Any:
+        r = self.repo.conn.execute(
+            f"SELECT run_id FROM sync_run WHERE state IN ({','.join('?' * len(RESUMABLE))}) "
+            "AND approved_at IS NOT NULL ORDER BY run_id DESC LIMIT 1", RESUMABLE,
+        ).fetchone()
+        return r["run_id"] if r and self.can_resume(r["run_id"]) else None
+
     def discard(self, run_id: int) -> None:
         r = self.repo.get_run(run_id)
         if r is None or r["state"] != "diffed":
@@ -234,6 +317,21 @@ class SyncOrchestrator:
             self.repo.set_setting("anilist_user_name", v.get("name"))
             user_id = v["id"]
         return int(user_id)
+
+    async def _write_phase(self, run_id: int) -> None:
+        repo = self.repo
+        writer = Writer(repo, self.services.anilist, self._user_id, lambda msg: self._phase(run_id, detail=msg))
+        self._phase(run_id, "writing", "re-reading AniList")
+        await writer.write(run_id)
+        self._phase(run_id, "verifying", "verifying on AniList")
+        notes = await writer.verify(run_id)
+        counts = {s: len(repo.items_in_state(run_id, s)) for s in ("done", "failed", "dropped", "pending")}
+        if counts["done"] and not repo.get_setting("first_write_done"):
+            repo.set_setting("first_write_done", True)
+        detail = f"{counts['done']} written, {counts['failed']} failed, {counts['dropped']} dropped"
+        if notes:
+            detail += f"; {len(notes)} need a look: " + " | ".join(notes[:5])
+        repo.update_run(run_id, state="done", phase_detail=detail, finished_at=now_iso())
 
     async def _dry_run(self, run_id: int) -> None:
         s, repo = self.services, self.repo

@@ -10,12 +10,12 @@ from dataclasses import dataclass
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from mdal.db.repo import Repo
 from mdal.services import Services
 from mdal.sync.estimate import estimate
-from mdal.sync.orchestrator import ACTIVE_STATES, SyncAlreadyRunning, SyncStateError
+from mdal.sync.orchestrator import ACTIVE_STATES, ApprovalError, SyncAlreadyRunning, SyncStateError
 from mdal.sync.rules import AlMediaInfo, MdInfo, completion_info, completion_label
 from mdal.web.app import get_services, render, templates
 
@@ -31,6 +31,7 @@ def status_context(svc: Services, message: str | None = None) -> dict[str, Any]:
         "run": run,
         "active": bool(run and run["state"] in ACTIVE_STATES),
         "status_message": message,
+        "resumable": svc.orchestrator.resumable_run(),
     }
 
 
@@ -80,6 +81,8 @@ class DiffRow:
 
 
 def diff_rows(repo: Repo, run_id: int) -> list[DiffRow]:
+    """Before the first live write nothing is pre-selected: that write must be a single, deliberate pick."""
+    preselect = bool(repo.get_setting("first_write_done"))
     rows = []
     for r in repo.diff_rows(run_id):
         status_label = None
@@ -106,7 +109,7 @@ def diff_rows(repo: Repo, run_id: int) -> list[DiffRow]:
             status_label=status_label,
             status_only=bool(r["set_status"]) and r["md_progress"] is not None and r["md_progress"] == r["al_progress"],
             selectable=selectable,
-            checked=bool(r["approved"]) if r["write_state"] != "none" else r["action"] == "write",
+            checked=bool(r["approved"]) if r["write_state"] != "none" else (preselect and r["action"] == "write"),
             complete_checked=bool(r["status_approved"]),
         ))
     return rows
@@ -155,8 +158,7 @@ def latest_sync(request: Request) -> RedirectResponse:
     return RedirectResponse(f"/sync/{run['run_id']}" if run else "/", status_code=303)
 
 
-@router.get("/sync/{run_id}", response_class=HTMLResponse)
-def diff_page(request: Request, run_id: int, f: str = "write") -> HTMLResponse:
+def _diff_page(request: Request, run_id: int, f: str = "write", error: str | None = None, status_code: int = 200) -> HTMLResponse:
     repo = get_services(request).repo
     run = _run_or_404(repo, run_id)
     rows = diff_rows(repo, run_id)
@@ -165,8 +167,38 @@ def diff_page(request: Request, run_id: int, f: str = "write") -> HTMLResponse:
     return render(request, "diff.html", {
         "run": run, "rows": rows, "counts": counts, "est": default_estimate(repo, rows),
         "filter": f if f in FILTERS else "write",
-        "approvable": False,  # writing arrives in story 16
-    })
+        "approvable": run["state"] == "diffed",
+        "first_write_done": bool(repo.get_setting("first_write_done")),
+        "error": error,
+    }, status_code=status_code)
+
+
+@router.get("/sync/{run_id}", response_class=HTMLResponse)
+def diff_page(request: Request, run_id: int, f: str = "write") -> HTMLResponse:
+    return _diff_page(request, run_id, f)
+
+
+@router.post("/sync/{run_id}/approve", response_class=HTMLResponse)
+async def approve(request: Request, run_id: int) -> Response:
+    svc = get_services(request)
+    _run_or_404(svc.repo, run_id)
+    form = await request.form()
+    try:
+        await svc.orchestrator.approve(run_id, form.getlist("sel"), form.getlist("mc"), form.getlist("ov"))
+    except (ApprovalError, SyncAlreadyRunning) as exc:
+        return _diff_page(request, run_id, str(form.get("f") or "write"), error=str(exc), status_code=400)
+    return RedirectResponse("/", status_code=303)
+
+
+@router.post("/sync/{run_id}/resume", response_class=HTMLResponse)
+async def resume(request: Request, run_id: int) -> HTMLResponse:
+    svc = get_services(request)
+    _run_or_404(svc.repo, run_id)
+    try:
+        await svc.orchestrator.resume(run_id)
+    except (SyncStateError, SyncAlreadyRunning) as exc:
+        return _status_fragment(request, str(exc), status_code=409)
+    return _status_fragment(request)
 
 
 @router.post("/sync/{run_id}/estimate", response_class=HTMLResponse)

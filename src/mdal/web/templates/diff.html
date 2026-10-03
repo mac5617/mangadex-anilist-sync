@@ -52,15 +52,21 @@
             <br><span class="muted">{{ r.status_label }}</span>
           {% endif %}
         </td>
-        <td>{{ r.reason }}{% if r.hint %}<br><span class="muted">{{ r.hint }}</span>{% endif %}</td>
+        <td>{{ r.reason }}{% if r.hint %}<br><span class="muted">{{ r.hint }}</span>{% endif %}
+          {% if r.flag_kind == "implausible" %}<br><label class="override"><input type="checkbox" name="ov" value="{{ r.md_id }}"> override: write anyway</label>{% endif %}</td>
       </tr>
     {% endfor %}
     </tbody>
   </table>
 
   <p class="actions">
-    <button type="button" id="approve" disabled>Approve and write</button>
-    {% if not approvable %}<span class="muted">Writing arrives in a later build.</span>{% endif %}
+    {% if approvable %}
+      <button type="submit" id="approve" formaction="/sync/{{ run.run_id }}/approve" formmethod="post">Approve and write</button>
+      {% if not first_write_done %}<span class="notice warn">First live write: select exactly one entry. After it is verified, larger batches unlock.</span>{% endif %}
+    {% else %}
+      <button type="button" id="approve" disabled>Approve and write</button>
+      <span class="muted">This sync is {{ run.state }}; only a sync waiting for approval can be written.</span>
+    {% endif %}
   </p>
 </form>
 

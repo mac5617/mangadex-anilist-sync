@@ -267,5 +267,20 @@ class Repo:
             "AND p.al_media_id NOT IN (SELECT media_id FROM al_entry) ORDER BY m.title COLLATE NOCASE"
         ).fetchall()
 
+    def items_in_state(self, run_id: int, write_state: str) -> list[sqlite3.Row]:
+        return self.conn.execute(
+            "SELECT * FROM sync_item WHERE run_id=? AND write_state=? ORDER BY md_id", (run_id, write_state)
+        ).fetchall()
+
+    def update_items(self, run_id: int, updates: list[tuple[str, dict[str, Any]]]) -> None:
+        """[(md_id, {column: value})] in one transaction (one commit per write batch)."""
+        with self.conn:
+            for md_id, fields in updates:
+                if fields:
+                    self.conn.execute(
+                        f"UPDATE sync_item SET {', '.join(f'{k}=?' for k in fields)} WHERE run_id=? AND md_id=?",
+                        [*fields.values(), run_id, md_id],
+                    )
+
     def items(self, run_id: int) -> list[sqlite3.Row]:
         return self.conn.execute("SELECT * FROM sync_item WHERE run_id=? ORDER BY md_id", (run_id,)).fetchall()

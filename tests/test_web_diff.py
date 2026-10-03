@@ -22,6 +22,7 @@ def client(services, mock):
 
 @pytest.fixture
 def run_id(services):
+    services.repo.set_setting("first_write_done", True)
     return seed_diffed_run(services.repo)
 
 
@@ -72,10 +73,30 @@ def test_status_column(client, run_id):
     assert "2 unresolved" in row(html, "w")
 
 
-def test_approve_button_disabled(client, run_id):
+def test_approve_button_enabled_for_diffed_run(client, run_id):
+    html = client.get(f"/sync/{run_id}").text
+    assert f'formaction="/sync/{run_id}/approve"' in html
+    assert "First live write" not in html
+
+
+def test_approve_button_disabled_for_other_states(client, services, run_id):
+    services.repo.update_run(run_id, state="done")
     html = client.get(f"/sync/{run_id}").text
     assert '<button type="button" id="approve" disabled>' in html
-    assert "Writing arrives in a later build." in html
+
+
+def test_nothing_preselected_before_first_write(client, services, run_id):
+    services.repo.set_setting("first_write_done", False)
+    html = client.get(f"/sync/{run_id}").text
+    assert "First live write: select exactly one entry" in html
+    assert "0 selected" in html
+    assert not re.search(r'name="sel" value="\w"[^>]*checked', html)
+
+
+def test_implausible_rows_have_override(client, run_id):
+    html = client.get(f"/sync/{run_id}").text
+    assert 'name="ov" value="i"' in row(html, "i")
+    assert 'name="ov"' not in row(html, "w")
 
 
 def test_titles_are_escaped(client, run_id):

@@ -43,3 +43,5 @@ ul.reasons { margin: .25rem 0; padding-left: 1.1rem; font-size: .85em; color: va
 .card-actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
 .card-actions form { margin: 0; }
 h2.inline { display: inline; }
+.notice.warn { background: #fff4de; color: #8a5a00; display: inline-block; }
+label.override { font-size: .85em; color: #8a5a00; }

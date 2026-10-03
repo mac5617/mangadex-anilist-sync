@@ -9,6 +9,11 @@
   {% else %}
     <p>No sync yet.</p>
   {% endif %}
+  {% if resumable and not active %}
+    <p class="notice warn">Sync #{{ resumable }} was interrupted while writing.
+      <button hx-post="/sync/{{ resumable }}/resume" hx-target="#sync-status" hx-swap="outerHTML">Resume</button>
+      <span class="muted">Only items not yet written are sent.</span></p>
+  {% endif %}
   {% if not active %}
     <button hx-post="/sync" hx-target="#sync-status" hx-swap="outerHTML">Start sync</button>
   {% endif %}
