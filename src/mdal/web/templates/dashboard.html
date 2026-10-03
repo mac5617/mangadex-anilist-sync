@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Dashboard</h1>
+
+<section class="panel">
+  <h2>Accounts</h2>
+  <ul class="plain">
+    <li>AniList:
+      {% if auth.anilist %}<span class="badge ok">connected</span>{% if auth.anilist_user %} as {{ auth.anilist_user }}{% endif %}
+      {% else %}<span class="badge err">not connected</span> · <a href="/settings#anilist">Connect</a>{% endif %}</li>
+    <li>MangaDex:
+      {% if auth.mangadex %}<span class="badge ok">configured</span> for {{ auth.mangadex_user }}
+      {% else %}<span class="badge err">missing credentials</span> · <a href="/settings#mangadex">Details</a>{% endif %}</li>
+  </ul>
+</section>
+
+<section class="panel">
+  <h2>Sync</h2>
+  {% include "_sync_status.html" %}
+  <p class="muted">A sync reads both services and shows you a diff. Nothing is written to AniList until you approve it.</p>
+</section>
+
+<section class="panel">
+  <h2>Needs attention</h2>
+  <ul class="plain">
+    <li><a href="/review">{{ nav.review }} series to review</a></li>
+    <li><a href="/not-on-list">{{ nav.not_on_list }} matched series not on your AniList list</a></li>
+  </ul>
+</section>
+{% endblock %}

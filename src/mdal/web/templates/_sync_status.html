@@ -1,0 +1,15 @@
+<div id="sync-status"{% if active %} hx-get="/sync/status" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
+  {% if status_message %}<p class="notice err" role="alert">{{ status_message }}</p>{% endif %}
+  {% if run %}
+    <p>Sync #{{ run.run_id }} · <span class="badge state-{{ run.state }}">{{ run.state }}</span>
+      {% if run.phase_detail %}· {{ run.phase_detail }}{% endif %}</p>
+    {% if run.error %}<p class="notice err">{{ run.error }}</p>{% endif %}
+    <p class="muted">Requests: AniList {{ run.req_anilist }}, MangaDex {{ run.req_mangadex }} · started {{ run.started_at }}</p>
+    {% if run.state == "diffed" %}<p><a class="button" href="/sync/{{ run.run_id }}">Review the diff</a></p>{% endif %}
+  {% else %}
+    <p>No sync yet.</p>
+  {% endif %}
+  {% if not active %}
+    <button hx-post="/sync" hx-target="#sync-status" hx-swap="outerHTML">Start sync</button>
+  {% endif %}
+</div>

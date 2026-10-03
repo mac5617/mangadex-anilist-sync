@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
@@ -17,6 +18,13 @@ def get_services(request: Request) -> Services:
     return request.app.state.services
 
 
+def render(request: Request, name: str, context: dict[str, Any] | None = None, status_code: int = 200) -> HTMLResponse:
+    """TemplateResponse plus the nav counts every full page shows."""
+    repo = get_services(request).repo
+    ctx = {"nav": {"review": repo.review_count(), "not_on_list": len(repo.not_on_list())}, **(context or {})}
+    return templates.TemplateResponse(request, name, ctx, status_code=status_code)
+
+
 def create_app(services: Services) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -29,14 +37,11 @@ def create_app(services: Services) -> FastAPI:
     app.state.oauth_states = {}
     app.mount("/static", StaticFiles(directory=WEB_DIR / "static"), name="static")
 
-    from mdal.web.routes import auth, settings
+    from mdal.web.routes import auth, dashboard, settings, sync
 
     app.include_router(auth.router)
     app.include_router(settings.router)
-
-    @app.get("/", response_class=HTMLResponse)
-    def index() -> str:
-        # Placeholder until the dashboard (story 14).
-        return '<!doctype html><title>MangaDex → AniList sync</title><h1>MangaDex → AniList sync</h1><a href="/settings">Settings</a>'
+    app.include_router(dashboard.router)
+    app.include_router(sync.router)
 
     return app

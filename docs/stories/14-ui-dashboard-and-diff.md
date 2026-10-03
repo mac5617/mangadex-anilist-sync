@@ -12,17 +12,25 @@ These are the first real screens. Server-rendered Jinja + HTMX, with no JS build
 - Every user-supplied or API-supplied string is auto-escaped (Jinja autoescape on).
 
 ## Acceptance criteria
-- [ ] The dashboard renders with no runs, with an active run, and with a `diffed` run.
-- [ ] `POST /sync` starts a run and returns the status fragment. A second POST during a run shows "a sync is already running".
-- [ ] The diff page shows the estimate and per-action counts, and the filters work.
-- [ ] `exceeds_total` rows have a disabled checkbox. `implausible` rows are unchecked but enabled.
-- [ ] The approve button is present and disabled.
-- [ ] Rows with `set_status` show the status transition and a checked "mark completed" box. The summary header counts "N to mark completed".
-- [ ] A series title containing `<script>` is rendered escaped.
-- [ ] Rendering any page makes 0 outbound API calls (respx asserts no calls).
+- [x] The dashboard renders with no runs, with an active run, and with a `diffed` run.
+- [x] `POST /sync` starts a run and returns the status fragment. A second POST during a run shows "a sync is already running".
+- [x] The diff page shows the estimate and per-action counts, and the filters work.
+- [x] `exceeds_total` rows have a disabled checkbox. `implausible` rows are unchecked but enabled.
+- [x] The approve button is present and disabled.
+- [x] Rows with `set_status` show the status transition and a checked "mark completed" box. The summary header counts "N to mark completed".
+- [x] A series title containing `<script>` is rendered escaped.
+- [x] Rendering any page makes 0 outbound API calls (respx asserts no calls).
 
 ## Tests
 `test_web_dashboard.py`, `test_web_diff.py`.
 
 ## Dev notes
-_(fill in after implementation)_
+- Done 2026-10-03; 291 tests pass in total (24 new).
+- htmx 2.0.4 vendored as `static/htmx.min.js` (sha256 `e209dda5…b447`, from unpkg).
+- Filter tabs are hidden radio inputs plus CSS sibling selectors, so all rows stay in the form and the selection survives switching tabs without extra JS. `?f=` picks the initial tab.
+- Checkboxes: `sel` = select row, `mc` = "mark completed". `POST /sync/{id}/estimate` counts selected writable rows; a status-only row whose completion is unticked has nothing left to send and is not counted; `exceeds_total` never counts.
+- Nav counts come from a shared `render()` helper in `web/app.py` (review = mappings in `review`; not-on-list = auto/confirmed matches whose media is not in `al_entry`). The settings page now uses it too.
+- `GET /sync/latest` redirects to the newest run (or the dashboard). Review / Not on my list / History links 404 until stories 15, 17, 18.
+- `POST /sync` during a run → 409 with "A sync is already running." in the status fragment.
+- `POST /sync/{id}/discard` → `cancelled` (only from `diffed`).
+- New: `rules.completion_label()`; repo `latest_run`, `runs`, `diff_rows`, `review_count`, `not_on_list`.

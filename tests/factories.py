@@ -222,3 +222,73 @@ def generate_library(n: int = 500, reads_per_series: int = 60) -> tuple[FakeMang
             entries.append((50000 + i, media_id, "CURRENT", reads_per_series - (10 if i % 8 == 0 else 0)))
     al.add_list("Reading", entries)
     return md, al
+
+
+# ---- seeded runs for web tests (no API) ------------------------------------
+
+def md_manga_row(md_id: str, title: str, **kw) -> dict:
+    from mdal.fetch.mangadex_library import links_hash
+
+    links = kw.pop("links", {})
+    row = {
+        "md_id": md_id, "in_library": 1, "reading_status": "reading", "title": title,
+        "alt_titles": json.dumps(kw.pop("alt_titles", [])), "original_language": "ja", "year": 2020,
+        "pub_status": "ongoing", "last_chapter": None, "links": json.dumps(links, sort_keys=True),
+        "links_hash": links_hash(links), "authors": json.dumps(["Author A"]), "cover_file": "c.jpg",
+        "chapter_numbers_reset": 0, "fetched_at": "2026-10-03T00:00:00+00:00",
+    }
+    row.update(kw)
+    return row
+
+
+def al_media_row(media_id: int, romaji: str, **kw) -> dict:
+    row = {
+        "media_id": media_id, "id_mal": None, "type": "MANGA", "format": "MANGA", "status": "RELEASING",
+        "chapters": None, "country": "JP", "start_year": 2020, "romaji": romaji, "english": None, "native": None,
+        "synonyms": "[]", "staff": "[]", "cover_url": f"https://img.example/{media_id}.jpg",
+        "site_url": f"https://anilist.co/manga/{media_id}", "fetched_at": "2026-10-03T00:00:00+00:00",
+    }
+    row.update(kw)
+    return row
+
+
+def seed_diffed_run(repo, *, evil_title: str = "<script>alert(1)</script> Evil") -> int:
+    """A diffed run with one row of each kind: write, completion, status-only, implausible, exceeds_total, skip."""
+    repo.replace_md_snapshot([
+        md_manga_row("w", "Writer Series"),
+        md_manga_row("c", "Completing Series"),
+        md_manga_row("s", "Status Only Series"),
+        md_manga_row("i", "Implausible Series"),
+        md_manga_row("x", "Exceeds Series"),
+        md_manga_row("k", evil_title),
+    ], {})
+    repo.upsert_media([
+        al_media_row(1, "AL Writer"),
+        al_media_row(2, "AL Completing", status="FINISHED", chapters=120),
+        al_media_row(3, "AL Status Only", status="FINISHED", chapters=50),
+        al_media_row(4, "AL Implausible"),
+        al_media_row(5, "AL Exceeds", status="FINISHED", chapters=10),
+    ])
+    repo.replace_al_entries([
+        {"entry_id": 100 + i, "media_id": i, "status": "CURRENT", "progress": p, "fetched_at": "x"}
+        for i, p in [(1, 5), (2, 110), (3, 50), (4, 10), (5, 9)]
+    ])
+    run_id = repo.create_run("diffed")
+    base = {"run_id": run_id}
+    repo.replace_items(run_id, [
+        {**base, "md_id": "w", "al_media_id": 1, "al_entry_id": 101, "al_progress": 5, "md_progress": 12,
+         "action": "write", "reason": "MangaDex 12 > AniList 5", "unresolved_reads": 2},
+        {**base, "md_id": "c", "al_media_id": 2, "al_entry_id": 102, "al_progress": 110, "md_progress": 120,
+         "action": "write", "reason": "MangaDex 120 > AniList 110", "set_status": "COMPLETED",
+         "status_source": "AniList", "status_approved": 1},
+        {**base, "md_id": "s", "al_media_id": 3, "al_entry_id": 103, "al_progress": 50, "md_progress": 50,
+         "action": "write", "reason": "at final chapter; mark completed", "set_status": "COMPLETED",
+         "status_source": "AniList", "status_approved": 1},
+        {**base, "md_id": "i", "al_media_id": 4, "al_entry_id": 104, "al_progress": 10, "md_progress": 400,
+         "action": "flag", "flag_kind": "implausible", "reason": "jump of 390 chapters exceeds the limit of 200"},
+        {**base, "md_id": "x", "al_media_id": 5, "al_entry_id": 105, "al_progress": 9, "md_progress": 11,
+         "action": "flag", "flag_kind": "exceeds_total", "reason": "MangaDex 11 exceeds AniList's total of 10 chapters"},
+        {**base, "md_id": "k", "action": "skip", "reason": "no match"},
+    ])
+    repo.update_run(run_id, phase_detail="6 series", est_requests=3, est_seconds=9)
+    return run_id

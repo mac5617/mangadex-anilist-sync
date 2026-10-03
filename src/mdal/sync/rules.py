@@ -166,9 +166,13 @@ def evaluate(
     return item("write", f"MangaDex {md_progress} > AniList {al}")
 
 
-def status_change_label(d: DiffItem, entry_status: str | None) -> str | None:
+def completion_label(entry_status: str | None, status_source: str | None, total: int | None) -> str:
     """e.g. "Reading → Completed (AniList: finished, 120 ch)" for the diff screen."""
+    source = "AniList: finished" if status_source == "AniList" else "AniList: finished, total from MangaDex"
+    return f"{_label(entry_status)} → Completed ({source}, {total} ch)"
+
+
+def status_change_label(d: DiffItem, entry_status: str | None) -> str | None:
     if d.set_status != "COMPLETED":
         return None
-    source = "AniList: finished" if d.status_source == "AniList" else "AniList: finished, total from MangaDex"
-    return f"{_label(entry_status)} → Completed ({source}, {d.total} ch)"
+    return completion_label(entry_status, d.status_source, d.total)

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
-from mdal.web.app import get_services, templates
+from mdal.web.app import get_services, render
 
 router = APIRouter()
 
@@ -28,7 +28,7 @@ def render_settings(request: Request, *, message: str | None = None, error: str 
             "username": s.mangadex_username,
         },
     }
-    return templates.TemplateResponse(request, "settings.html", context, status_code=status_code)
+    return render(request, "settings.html", context, status_code=status_code)
 
 
 @router.get("/settings", response_class=HTMLResponse)

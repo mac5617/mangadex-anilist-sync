@@ -219,5 +219,37 @@ class Repo:
             for row in rows:
                 _upsert(self.conn, "sync_item", row, ["run_id", "md_id"])
 
+    def latest_run(self) -> sqlite3.Row | None:
+        return self.conn.execute("SELECT * FROM sync_run ORDER BY run_id DESC LIMIT 1").fetchone()
+
+    def runs(self, limit: int = 50) -> list[sqlite3.Row]:
+        return self.conn.execute("SELECT * FROM sync_run ORDER BY run_id DESC LIMIT ?", (limit,)).fetchall()
+
+    def diff_rows(self, run_id: int) -> list[sqlite3.Row]:
+        """Items with display data: MangaDex title, AniList title/link/total, current AniList status."""
+        return self.conn.execute(
+            "SELECT i.*, m.title AS md_title, m.pub_status, m.last_chapter, "
+            "a.romaji, a.english, a.native, a.site_url, a.chapters AS al_chapters, a.status AS al_media_status, "
+            "e.status AS al_status "
+            "FROM sync_item i "
+            "LEFT JOIN md_manga m ON m.md_id = i.md_id "
+            "LEFT JOIN al_media a ON a.media_id = i.al_media_id "
+            "LEFT JOIN al_entry e ON e.entry_id = i.al_entry_id "
+            "WHERE i.run_id=? ORDER BY COALESCE(m.title, i.md_id) COLLATE NOCASE",
+            (run_id,),
+        ).fetchall()
+
+    def review_count(self) -> int:
+        return self.conn.execute("SELECT COUNT(*) FROM mapping WHERE state='review'").fetchone()[0]
+
+    def not_on_list(self) -> list[sqlite3.Row]:
+        """Library series matched to AniList media that is not on the user's list (story 17)."""
+        return self.conn.execute(
+            "SELECT p.md_id, p.al_media_id, p.state FROM mapping p "
+            "JOIN md_manga m ON m.md_id = p.md_id "
+            "WHERE p.state IN ('auto','confirmed') AND p.al_media_id IS NOT NULL "
+            "AND p.al_media_id NOT IN (SELECT media_id FROM al_entry) ORDER BY m.title COLLATE NOCASE"
+        ).fetchall()
+
     def items(self, run_id: int) -> list[sqlite3.Row]:
         return self.conn.execute("SELECT * FROM sync_item WHERE run_id=? ORDER BY md_id", (run_id,)).fetchall()

@@ -11,3 +11,24 @@ main { max-width: 64rem; margin: 0 auto; padding: 1rem; }
 .button, button { display: inline-block; padding: .35rem .8rem; border: 1px solid var(--accent); border-radius: 4px;
   background: var(--accent); color: #fff; text-decoration: none; cursor: pointer; font: inherit; }
 input[type=password], input[type=text] { font: inherit; padding: .25rem .4rem; min-width: 20rem; }
+nav .count { background: var(--accent); color: #fff; border-radius: 9px; padding: 0 .4rem; font-size: .8em; }
+ul.plain { list-style: none; padding: 0; }
+.badge { display: inline-block; padding: 0 .45rem; border-radius: 4px; font-size: .85em; background: #eee; }
+.badge.ok, .badge.a-write, .badge.state-done, .badge.state-diffed { background: #e7f5ec; color: var(--ok); }
+.badge.err, .badge.a-flag, .badge.state-failed, .badge.state-halted { background: #fbeaea; color: var(--err); }
+.badge.k-implausible { background: #fff4de; color: #8a5a00; }
+button.secondary { background: #fff; color: var(--accent); }
+button[disabled] { opacity: .5; cursor: not-allowed; }
+.summary { font-weight: 600; }
+.estimate { background: #f4f6fb; padding: .4rem .75rem; border-radius: 4px; }
+table.diff { width: 100%; border-collapse: collapse; font-size: .92em; }
+table.diff th, table.diff td { border-bottom: 1px solid var(--line); padding: .3rem .4rem; text-align: left; vertical-align: top; }
+table.diff td.num { white-space: nowrap; }
+.tab-radio { position: absolute; opacity: 0; pointer-events: none; }
+.tabs { margin: .75rem 0; }
+.tabs label { display: inline-block; padding: .25rem .7rem; border: 1px solid var(--line); border-radius: 4px; cursor: pointer; margin-right: .25rem; }
+#f-write:checked ~ .tabs label[for=f-write], #f-flag:checked ~ .tabs label[for=f-flag],
+#f-skip:checked ~ .tabs label[for=f-skip], #f-all:checked ~ .tabs label[for=f-all] { background: var(--accent); color: #fff; border-color: var(--accent); }
+#f-write:checked ~ table.diff tbody tr:not(.r-write),
+#f-flag:checked ~ table.diff tbody tr:not(.r-flag),
+#f-skip:checked ~ table.diff tbody tr:not(.r-skip) { display: none; }

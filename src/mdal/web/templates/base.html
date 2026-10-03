@@ -5,11 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}MangaDex → AniList sync{% endblock %}</title>
   <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/htmx.min.js" defer></script>
 </head>
 <body>
   <header>
     <nav>
       <a href="/">Dashboard</a>
+      <a href="/sync/latest">Sync</a>
+      <a href="/review">Review{% if nav and nav.review %} <span class="count">{{ nav.review }}</span>{% endif %}</a>
+      <a href="/not-on-list">Not on my list{% if nav and nav.not_on_list %} <span class="count">{{ nav.not_on_list }}</span>{% endif %}</a>
+      <a href="/history">History</a>
       <a href="/settings">Settings</a>
     </nav>
   </header>
