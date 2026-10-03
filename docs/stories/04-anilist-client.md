@@ -9,7 +9,7 @@ This is the only way the app talks to `graphql.anilist.co`. 429s may arrive as C
 - `clients/anilist.py`: `AniListClient(token_provider, queue, transport=None, request_counter=None)`. It owns one `httpx.AsyncClient` (timeout 30 s, User-Agent from §3).
 - `async graphql(query, variables) -> dict` implements the steps in §5, including the exception hierarchy: `AniListError` → `AniListRateLimited`, `AniListUnavailable`, `AniListAuthError`, `AniListGraphQLError` → `AniListComplexityError`.
 - `request_counter` is a callable invoked once per HTTP attempt; the orchestrator later wires it to `sync_run.req_anilist`.
-- A module-level factory `get_anilist_client()` returns a singleton built from settings.
+- ~~A module-level factory `get_anilist_client()`~~ Moved to story 13: the client needs the DB tunables (`anilist_rpm`) and the run's request counter, which exist only there.
 - Architecture guard tests (they live in `tests/test_architecture.py` and grow over time):
   1. Only `mdal/clients/*` imports `httpx`.
   2. Until story 16: no source file outside tests contains `SaveMediaListEntry`.

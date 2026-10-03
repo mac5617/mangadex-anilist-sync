@@ -9,7 +9,7 @@ This wires 07, 08, 11 and 12 into one run. It ends at `diffed` and has no path t
 - `sync/orchestrator.py`: a `SyncOrchestrator` singleton with a global `asyncio.Lock`.
   - `start_run()` → creates `sync_run(state='fetching')` and launches the task. It returns `run_id`, or raises `SyncAlreadyRunning`.
   - Phases: `fetching` (MangaDex fetch, then AniList list fetch), `resolving` (pipeline), `diffing` (rules for each library series → `sync_item` rows), then `diffed` with `est_requests`/`est_seconds` computed over the default-selected items (action = write).
-  - Wires the clients' `request_counter` to the run's `req_*` columns.
+  - Owns the client singletons (`AniListClient`, `MangaDexClient`), built with PacedQueues from the DB tunables (moved here from stories 04/05), and wires their `request_counter` to the run's `req_*` columns.
   - `MangaDexBlocked`/`MangaDexRateLimited`/`AniListUnavailable`/`AniListRateLimited` → `halted` with a user-facing message. Other exceptions → `failed`.
   - `status(run_id)` gives the phase and phase_detail (e.g. "resolving chapters 300/3000") for UI polling.
   - On app startup: runs in `fetching`/`resolving`/`diffing` → `failed` ("interrupted; start a new sync").
