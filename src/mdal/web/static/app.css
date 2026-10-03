@@ -48,3 +48,10 @@ label.override { font-size: .85em; color: #8a5a00; }
 .inline-form { display: flex; gap: .35rem; align-items: center; flex-wrap: wrap; margin: 0; }
 .inline-form input[type=number] { width: 5rem; font: inherit; padding: .2rem .3rem; }
 tr.done td { background: #f6f8f6; }
+.settings-form { display: grid; grid-template-columns: minmax(12rem, 18rem) 1fr; gap: .4rem .75rem; align-items: center; margin-bottom: .75rem; }
+.settings-form input[type=number] { width: 7rem; font: inherit; padding: .2rem .3rem; }
+table.env td { padding: .1rem .75rem .1rem 0; }
+.badge.ws-done { background: #e7f5ec; color: var(--ok); }
+.badge.ws-failed { background: #fbeaea; color: var(--err); }
+.badge.ws-dropped, .badge.ws-pending { background: #fff4de; color: #8a5a00; }
+@media (max-width: 40rem) { .settings-form { grid-template-columns: 1fr; } }

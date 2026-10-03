@@ -245,6 +245,14 @@ class Repo:
     def runs(self, limit: int = 50) -> list[sqlite3.Row]:
         return self.conn.execute("SELECT * FROM sync_run ORDER BY run_id DESC LIMIT ?", (limit,)).fetchall()
 
+    def run_counts(self) -> dict[int, dict[str, int]]:
+        """run_id -> counts by action and by write_state (history screen)."""
+        counts: dict[int, dict[str, int]] = {}
+        for column in ("action", "write_state"):
+            for r in self.conn.execute(f"SELECT run_id, {column} AS k, COUNT(*) AS n FROM sync_item GROUP BY run_id, {column}"):
+                counts.setdefault(r["run_id"], {})[r["k"]] = r["n"]
+        return counts
+
     def diff_rows(self, run_id: int) -> list[sqlite3.Row]:
         """Items with display data: MangaDex title, AniList title/link/total, current AniList status."""
         return self.conn.execute(

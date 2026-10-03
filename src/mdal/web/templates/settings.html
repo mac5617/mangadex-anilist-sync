@@ -40,4 +40,31 @@
        <code>MANGADEX_CLIENT_SECRET</code> in <code>.env</code>, then restart.</p>
   {% endif %}
 </section>
+
+<section class="panel" id="tunables">
+  <h2>Sync settings</h2>
+  <form method="post" action="/settings" class="settings-form">
+    {% for t, value in tunables %}
+      <label for="t-{{ t.key }}">{{ t.label }}</label>
+      <span>
+        <input id="t-{{ t.key }}" type="number" name="{{ t.key }}" value="{{ value }}" min="{{ t.low }}" max="{{ t.high }}"
+          step="{{ 1 if t.kind.__name__ == 'int' else 'any' }}" required>
+        <span class="muted">{{ t.low | float | round(2) }}–{{ t.high | float | round(2) }}{% if t.help %} · {{ t.help }}{% endif %}</span>
+      </span>
+    {% endfor %}
+    <span></span><span><button>Save</button></span>
+  </form>
+  <form method="post" action="/settings/reset-batch"><button class="secondary">Reset write batch size to 10</button></form>
+  <p class="muted">First live write: {% if first_write_done %}done{% else %}not yet (the first approval is limited to one entry){% endif %}.</p>
+</section>
+
+<section class="panel" id="storage">
+  <h2>Storage and secrets</h2>
+  <p>Database: <code>{{ db_path }}</code> <span class="muted">(change with <code>MDAL_DB_PATH</code> in <code>.env</code>)</span></p>
+  <table class="env">
+    {% for key, is_set in env_status %}
+      <tr><td><code>{{ key }}</code></td><td>{% if is_set %}<span class="badge ok">set</span>{% else %}<span class="badge err">not set</span>{% endif %}</td></tr>
+    {% endfor %}
+  </table>
+</section>
 {% endblock %}
