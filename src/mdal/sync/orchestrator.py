@@ -252,8 +252,8 @@ class SyncOrchestrator:
         r = self.repo.get_run(run_id)
         if r is None or r["state"] not in RESUMABLE or r["approved_at"] is None:
             return False
-        if r["state"] in ("writing", "verifying"):
-            return not (self.task and not self.task.done())
+        if r["state"] in ("writing", "verifying") and self.task and not self.task.done():
+            return False
         return bool(self.repo.items_in_state(run_id, "pending")) or bool(self.repo.items_in_state(run_id, "done"))
 
     async def resume(self, run_id: int) -> None:

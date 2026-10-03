@@ -1,0 +1,25 @@
+{% if done or not r -%}
+<tr id="nl-{{ md_id }}" class="done"><td colspan="5">{{ done or row_error or "No longer listed." }}</td></tr>
+{%- else -%}
+<tr id="nl-{{ r.md_id }}">
+  <td>{% if r.cover %}<img src="{{ r.cover }}" alt="" width="48" loading="lazy" referrerpolicy="no-referrer">{% endif %}</td>
+  <td><a href="{{ r.md_url }}" target="_blank" rel="noopener noreferrer">{{ r.md_title }}</a></td>
+  <td><a href="{{ r.al_url }}" target="_blank" rel="noopener noreferrer">{{ r.al_title }}</a>
+    {% if r.chapters %}<br><span class="muted">{{ r.chapters }} ch</span>{% endif %}</td>
+  <td>
+    {% if r.proposed is not none %}read up to {{ r.proposed }}{% else %}<span class="muted">nothing read</span>{% endif %}
+    {% if r.unresolved %}<br><span class="muted">{{ r.unresolved }} unresolved</span>{% endif %}
+    {% if r.over_total %}<br><span class="notice warn">MangaDex reads ({{ r.proposed }}) exceed AniList's total ({{ r.chapters }}); progress capped.</span>{% endif %}
+  </td>
+  <td>
+    {% if row_error %}<p class="notice err" role="alert">{{ row_error }}</p>{% endif %}
+    <form hx-post="/not-listed/{{ r.md_id }}/add" hx-target="#nl-{{ r.md_id }}" hx-swap="outerHTML" class="inline-form">
+      <select name="status" aria-label="status">
+        {% for s in statuses %}<option value="{{ s }}"{% if s == r.default_status %} selected{% endif %}>{{ labels[s] }}</option>{% endfor %}
+      </select>
+      <input type="number" name="progress" value="{{ r.progress }}" min="0"{% if r.chapters %} max="{{ r.chapters }}"{% endif %} aria-label="progress">
+      <button>Add</button>
+    </form>
+  </td>
+</tr>
+{% endif %}

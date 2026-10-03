@@ -45,3 +45,6 @@ ul.reasons { margin: .25rem 0; padding-left: 1.1rem; font-size: .85em; color: va
 h2.inline { display: inline; }
 .notice.warn { background: #fff4de; color: #8a5a00; display: inline-block; }
 label.override { font-size: .85em; color: #8a5a00; }
+.inline-form { display: flex; gap: .35rem; align-items: center; flex-wrap: wrap; margin: 0; }
+.inline-form input[type=number] { width: 5rem; font: inherit; padding: .2rem .3rem; }
+tr.done td { background: #f6f8f6; }

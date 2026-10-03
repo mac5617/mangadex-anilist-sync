@@ -139,6 +139,10 @@ class Repo:
             found.setdefault(r["id_mal"], []).append(r)
         return found
 
+    def add_al_entry(self, row: dict[str, Any]) -> None:
+        with self.conn:
+            _upsert(self.conn, "al_entry", row, ["entry_id"])
+
     def al_entries(self) -> dict[int, sqlite3.Row]:
         """media_id -> entry."""
         return {r["media_id"]: r for r in self.conn.execute("SELECT * FROM al_entry")}

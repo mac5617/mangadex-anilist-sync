@@ -152,6 +152,19 @@ class FakeAniList:
         if self.status_429:
             self.status_429 -= 1
             return httpx.Response(429, headers={"Retry-After": "0"}, text="<html>Too Many Requests</html>")
+        created = re.search(r"SaveMediaListEntry\(mediaId: \$m, status: (\w+), progress: \$p\)", query)
+        if created:
+            self.mutations.append({"query": query, "variables": variables})
+            media_id, status, progress = variables["m"], created.group(1), variables["p"]
+            if media_id not in self.catalogue:
+                return httpx.Response(404, json={"data": {"SaveMediaListEntry": None}, "errors": [{"message": "Not Found.", "path": ["SaveMediaListEntry"]}]})
+            entry_id = 9000 + len(self.mutations)
+            if not any(g["name"] == "Added" for g in self.lists):
+                self.lists.append({"name": "Added", "isCustomList": False, "entries": []})
+            group = next(g for g in self.lists if g["name"] == "Added")
+            group["entries"].append({"id": entry_id, "status": status, "progress": progress, "media": self._public(self.catalogue[media_id])})
+            self.applied.append((entry_id, {"mediaId": media_id, "status": status, "progress": progress}))
+            return httpx.Response(200, json={"data": {"SaveMediaListEntry": {"id": entry_id, "mediaId": media_id, "progress": progress, "status": status}}})
         aliases = re.findall(r"(m\d+): SaveMediaListEntry\(([^)]*)\)", query)
         if self.complexity_limit is not None and len(aliases) > self.complexity_limit:
             return httpx.Response(400, json={"data": None, "errors": [{"message": "Max query complexity exceeded"}]})
