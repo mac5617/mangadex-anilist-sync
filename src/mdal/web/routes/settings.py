@@ -104,7 +104,6 @@ def render_settings(
             "username": s.mangadex_username,
         },
         "tunables": [(t, (form_values or {}).get(t.key, stored[t.key])) for t in TUNABLES],
-        "first_write_done": bool(stored["first_write_done"]),
         "db_path": str(s.db_path),
         "env_status": _env_status(svc),
     }

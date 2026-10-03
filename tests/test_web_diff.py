@@ -76,7 +76,6 @@ def test_status_column(client, run_id):
 def test_approve_button_enabled_for_diffed_run(client, run_id):
     html = client.get(f"/sync/{run_id}").text
     assert f'formaction="/sync/{run_id}/approve"' in html
-    assert "First live write" not in html
 
 
 def test_approve_button_disabled_for_other_states(client, services, run_id):
@@ -85,12 +84,13 @@ def test_approve_button_disabled_for_other_states(client, services, run_id):
     assert '<button type="button" id="approve" disabled>' in html
 
 
-def test_nothing_preselected_before_first_write(client, services, run_id):
-    services.repo.set_setting("first_write_done", False)
-    html = client.get(f"/sync/{run_id}").text
-    assert "First live write: select exactly one entry" in html
-    assert "0 selected" in html
-    assert not re.search(r'name="sel" value="\w"[^>]*checked', html)
+def test_writes_and_adds_preselected_flags_not(client, services, run_id):
+    services.repo.set_setting("first_write_done", False)  # no longer matters
+    html = client.get(f"/sync/{run_id}?f=all").text
+    for md_id in ("w", "c", "s"):
+        assert re.search(rf'name="sel" value="{md_id}"[^>]*checked', row(html, md_id))
+    assert "checked" not in row(html, "i").split('name="mc"')[0]
+    assert "3 selected" in html
 
 
 def test_implausible_rows_have_override(client, run_id):

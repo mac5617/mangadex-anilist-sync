@@ -27,7 +27,6 @@ def not_listed(request: Request) -> HTMLResponse:
     return render(request, "notlisted.html", {
         "rows": add_entry.not_listed_rows(svc.repo),
         "statuses": add_entry.ADD_STATUSES, "labels": STATUS_LABELS,
-        "first_write_done": bool(svc.repo.get_setting("first_write_done")),
     })
 
 

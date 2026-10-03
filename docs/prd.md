@@ -13,7 +13,7 @@ Inputs: `brief.md`, `api-notes.md`. Trace codes: **P:<section>** = the original 
 - **FR-6** The write phase records each successful write in SQLite immediately. An interrupted sync can be resumed and skips items already written. *(P:rate, resumable)*
 - **FR-7** Immediately before writing, the app re-reads the AniList list (one request) and drops any approved item where AniList is now at or ahead of the proposed value. *(P:decisions never-lower; decision: protects against a stale diff)*
 - **FR-8** After writing, a verify step re-reads the AniList list. It reports any entry whose progress differs from what was written, and any entry whose **status** changed. *(P:workflow state machine; A:Mutations side effects)*
-- **FR-9** The very first live write the app ever performs is restricted to exactly one user-selected entry. Larger approvals unlock only after that write has been verified. *(P:working)*
+- **FR-9** ~~The very first live write is restricted to exactly one entry.~~ Removed by user decision 2026-10-03: write and add rows are pre-selected in every diff (flagged rows are not), and any approval size is allowed from the start. *(P:working, amended)*
 
 ### Data reading
 - **FR-10** Reads the MangaDex library (every reading status) via `/manga/status`, plus manga details and grouped read markers in batches of 100. *(P:api_facts; A:MangaDex endpoints)*

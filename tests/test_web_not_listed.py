@@ -22,7 +22,6 @@ def test_page_lists_rows_with_defaults(client, fake):  # noqa: F811
     assert '<option value="CURRENT" selected>Reading</option>' in rel and 'value="7"' in rel
     over = re.search(r'<tr id="nl-over">.*?</tr>', html, re.S).group(0)
     assert "progress capped" in over and 'name="progress" value="50"' in over
-    assert "Your first live write" in html
     assert 'loading="lazy"' in html and 'referrerpolicy="no-referrer"' in html
     assert fake.call_count == 0
 

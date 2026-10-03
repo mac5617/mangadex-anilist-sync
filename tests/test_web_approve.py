@@ -35,15 +35,7 @@ def run_id(services):
     return seed_diffed_run(services.repo)
 
 
-def test_first_write_must_be_one(client, services, run_id, fake):
-    response = client.post(f"/sync/{run_id}/approve", data={"sel": ["w", "c"]})
-    assert response.status_code == 400
-    assert "First live write is limited to one entry. Pick one." in response.text
-    assert fake.mutations == []
-    assert services.repo.get_run(run_id)["state"] == "diffed"
-
-
-def test_first_write_single_item(client, services, run_id, fake):
+def test_approve_writes_selection(client, services, run_id, fake):
     response = client.post(f"/sync/{run_id}/approve", data={"sel": ["w"]})
     assert response.status_code == 303 and response.headers["location"] == "/"
     # The TestClient's loop runs the task; poll the status endpoint until it finishes.

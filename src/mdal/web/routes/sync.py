@@ -82,8 +82,7 @@ class DiffRow:
 
 
 def diff_rows(repo: Repo, run_id: int) -> list[DiffRow]:
-    """Before the first live write nothing is pre-selected: that write must be a single, deliberate pick."""
-    preselect = bool(repo.get_setting("first_write_done"))
+    """Writes and adds are pre-selected; flagged rows wait for an explicit tick (and override)."""
     rows = []
     for r in repo.diff_rows(run_id):
         status_label = None
@@ -116,7 +115,7 @@ def diff_rows(repo: Repo, run_id: int) -> list[DiffRow]:
             status_label=status_label,
             status_only=bool(r["set_status"]) and r["md_progress"] is not None and r["md_progress"] == r["al_progress"],
             selectable=selectable,
-            checked=bool(r["approved"]) if r["write_state"] != "none" else (preselect and r["action"] in ("write", "add")),
+            checked=bool(r["approved"]) if r["write_state"] != "none" else r["action"] in ("write", "add"),
             complete_checked=bool(r["status_approved"]),
         ))
     return rows
@@ -182,7 +181,6 @@ def _diff_page(request: Request, run_id: int, f: str = "write", error: str | Non
         "filter": f if f in FILTERS else "write",
         "approvable": run["state"] == "diffed",
         "restorable": svc.orchestrator.can_restore(run_id),
-        "first_write_done": bool(repo.get_setting("first_write_done")),
         "error": error,
     }, status_code=status_code)
 

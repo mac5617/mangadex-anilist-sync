@@ -7,7 +7,7 @@ import pytest
 import respx
 
 import mdal.sync.writer as writer_module
-from mdal.sync.orchestrator import ApprovalError, FIRST_WRITE_MESSAGE
+from mdal.sync.orchestrator import ApprovalError
 from tests.factories import FakeAniList, al_media
 
 FORBIDDEN_ARGS = ("score", "notes", "startedAt", "completedAt", "repeat", "private", "mediaId", "hiddenFromStatusLists")
@@ -277,19 +277,13 @@ async def test_verify_ok_and_status_change_flagged(fast, fake):
 # ---- approval / first write --------------------------------------------------------
 
 
-async def test_first_write_guard(fast, fake):
+async def test_first_approval_can_be_a_whole_batch(fast, fake):
     fast.repo.set_setting("first_write_done", False)
     run_id = seed(fast, fake, [{"md_progress": 10, "al_progress": 5}, {"md_progress": 8, "al_progress": 2}])
-    with pytest.raises(ApprovalError, match=FIRST_WRITE_MESSAGE):
-        await fast.orchestrator.approve(run_id, ["md00", "md01"], [], [])
-    assert fast.repo.get_run(run_id)["state"] == "diffed"
-
-    await fast.orchestrator.approve(run_id, ["md00"], [], [])
+    await fast.orchestrator.approve(run_id, ["md00", "md01"], [], [])
     await fast.orchestrator.wait()
-    assert len(fake.mutations) == 1 and [a["id"] for a in sent_aliases(fake)] == [100]
+    assert sorted(a["id"] for a in sent_aliases(fake)) == [100, 101]
     assert fast.repo.get_setting("first_write_done") is True
-    items = {i["md_id"]: i for i in fast.repo.items(run_id)}
-    assert items["md01"]["write_state"] == "none"
 
 
 @pytest.mark.parametrize(
@@ -381,16 +375,6 @@ async def test_add_dropped_if_series_is_on_the_list_by_write_time(fast, fake):
     assert fake.entry(555)["status"] == "COMPLETED" and fake.entry(555)["progress"] == 12
     _, adds = sent_documents_by_kind(fake)
     assert len(adds) == 1 and items["md01"]["write_state"] == "done"
-
-
-async def test_add_rows_count_as_first_write(fast, fake):
-    fast.repo.set_setting("first_write_done", False)
-    run_id = seed(fast, fake, [{"md_progress": 7, "action": "add"}, {"md_progress": 9, "action": "add"}])
-    with pytest.raises(ApprovalError, match=FIRST_WRITE_MESSAGE):
-        await fast.orchestrator.approve(run_id, ["md00", "md01"], [], [])
-    await fast.orchestrator.approve(run_id, ["md00"], [], [])
-    await fast.orchestrator.wait()
-    assert fast.repo.get_setting("first_write_done") is True
 
 
 async def test_add_failure_is_reported(fast, fake):

@@ -54,7 +54,6 @@ class ApprovalError(Exception):
     """Shown to the user as-is."""
 
 
-FIRST_WRITE_MESSAGE = "First live write is limited to one entry. Pick one."
 RESUMABLE = ("writing", "verifying", "failed", "halted")
 
 
@@ -83,8 +82,6 @@ def validate_approval(
         approved.append((md_id, completes))
     if not approved:
         raise ApprovalError("Nothing selected to write.")
-    if not repo.get_setting("first_write_done") and len(approved) != 1:
-        raise ApprovalError(FIRST_WRITE_MESSAGE)
     return approved
 
 

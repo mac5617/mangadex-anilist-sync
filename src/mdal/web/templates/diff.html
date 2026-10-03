@@ -48,7 +48,7 @@
   <div class="actions-bar">
     {% if approvable %}
       <button type="submit" id="approve" formaction="/sync/{{ run.run_id }}/approve" formmethod="post">Approve and write</button>
-      {% if not first_write_done %}<span class="notice warn inline">First live write: select exactly one entry. After it is verified, larger batches unlock.</span>{% endif %}
+      <span class="muted">Writes and adds are ticked for you; untick anything you want to leave out.</span>
     {% else %}
       <button type="button" id="approve" disabled>Approve and write</button>
       <span class="muted">This sync is {{ run.state }}; only a sync waiting for approval can be written.</span>

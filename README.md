@@ -130,11 +130,10 @@ It needs AniList connected first (step 4). If it reports anything other than OK,
    - *Skipped*: already up to date, not matched, or not on your list.
    - Rows that would finish a series carry a **mark completed** box (ticked by default; untick to only
      update progress).
-4. **Approve exactly one entry.** The first live write is limited to a single row on purpose. Approve it,
-   wait for the dashboard to show `done`, then open that series on AniList and check it looks right
-   (progress, status, and that nothing else changed). History shows the verification result.
-5. **Normal use.** After the first verified write, select as many rows as you like. The estimate above
-   the table shows how many AniList requests and how long the write will take.
+4. **Approve.** Every *to write* and *to add* row is ticked for you; untick anything you want to leave out
+   (flagged rows stay unticked). The estimate above the table shows how many AniList requests and how long
+   the write will take. When the dashboard shows `done`, History shows each row's verified result.
+   If you'd rather start carefully, untick all but one row the first time and check it on AniList.
 
 **Not on my list** shows the same not-yet-listed series one by one, for adding with a status and progress
 you choose (for example a row the diff flagged). Each **Add** first re-checks your list, then creates one entry.
