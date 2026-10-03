@@ -33,9 +33,12 @@ def now_iso() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
 
 
-def _upsert(conn: sqlite3.Connection, table: str, row: Mapping[str, Any], key: Iterable[str]) -> None:
+def _upsert(
+    conn: sqlite3.Connection, table: str, row: Mapping[str, Any], key: Iterable[str], preserve: Iterable[str] = ()
+) -> None:
+    """Insert or update. Columns in `preserve` are written on insert but never overwritten."""
     cols = list(row)
-    updates = [c for c in cols if c not in set(key)]
+    updates = [c for c in cols if c not in set(key) | set(preserve)]
     sql = (
         f"INSERT INTO {table} ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))}) "
         f"ON CONFLICT({', '.join(key)}) DO "
@@ -99,6 +102,46 @@ class Repo:
             "LEFT JOIN md_chapter c ON c.chapter_id = r.chapter_id WHERE r.md_id=?",
             (md_id,),
         ).fetchall()
+
+    # ---- AniList ----------------------------------------------------------
+    def upsert_media(self, rows: list[dict[str, Any]]) -> None:
+        """Rows with `staff=None` (queries that did not ask for staff) keep the cached staff list."""
+        with self.conn:
+            for row in rows:
+                if row.get("staff") is None:
+                    _upsert(self.conn, "al_media", {**row, "staff": "[]"}, ["media_id"], preserve=["staff"])
+                else:
+                    _upsert(self.conn, "al_media", row, ["media_id"])
+
+    def replace_al_entries(self, rows: list[dict[str, Any]]) -> None:
+        with self.conn:
+            self.conn.execute("DELETE FROM al_entry")
+            for row in rows:
+                _upsert(self.conn, "al_entry", row, ["entry_id"])
+
+    def media(self, media_ids: Iterable[int]) -> dict[int, sqlite3.Row]:
+        ids = list(media_ids)
+        if not ids:
+            return {}
+        rows = self.conn.execute(
+            f"SELECT * FROM al_media WHERE media_id IN ({','.join('?' * len(ids))})", ids
+        ).fetchall()
+        return {r["media_id"]: r for r in rows}
+
+    def media_by_mal(self, mal_ids: Iterable[int]) -> dict[int, list[sqlite3.Row]]:
+        ids = list(mal_ids)
+        if not ids:
+            return {}
+        found: dict[int, list[sqlite3.Row]] = {}
+        for r in self.conn.execute(
+            f"SELECT * FROM al_media WHERE id_mal IN ({','.join('?' * len(ids))}) ORDER BY media_id", ids
+        ):
+            found.setdefault(r["id_mal"], []).append(r)
+        return found
+
+    def al_entries(self) -> dict[int, sqlite3.Row]:
+        """media_id -> entry."""
+        return {r["media_id"]: r for r in self.conn.execute("SELECT * FROM al_entry")}
 
     # ---- mapping --------------------------------------------------------
     def get_mapping(self, md_id: str) -> sqlite3.Row | None:

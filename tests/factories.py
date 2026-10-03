@@ -7,6 +7,10 @@ from dataclasses import dataclass, field
 import httpx
 import respx
 
+import json
+import re
+
+from mdal.clients.anilist import ANILIST_URL
 from mdal.clients.mangadex import API_URL, TOKEN_URL
 
 
@@ -102,3 +106,83 @@ class FakeMangaDex:
 
     def data_calls(self) -> dict[str, int]:
         return {name: route.call_count for name, route in self.routes.items()}
+
+
+# ---- AniList ---------------------------------------------------------------
+
+def al_media(media_id: int, romaji: str, *, english: str | None = None, native: str | None = None,
+             id_mal: int | None = None, fmt: str = "MANGA", status: str = "RELEASING", chapters: int | None = None,
+             country: str = "JP", year: int | None = 2020, synonyms: list[str] | None = None,
+             staff: list[str] | None = None, type_: str = "MANGA") -> dict:
+    """An AniList Media object as the API returns it."""
+    return {
+        "id": media_id, "idMal": id_mal, "type": type_, "format": fmt, "status": status, "chapters": chapters,
+        "countryOfOrigin": country, "startDate": {"year": year},
+        "title": {"romaji": romaji, "english": english, "native": native},
+        "synonyms": synonyms or [], "coverImage": {"medium": f"https://img.example/{media_id}.jpg"},
+        "siteUrl": f"https://anilist.co/manga/{media_id}",
+        "_staff": staff or [],
+    }
+
+
+@dataclass
+class FakeAniList:
+    """Answers the read queries in fetch/anilist_list.py from an in-memory catalogue."""
+    catalogue: dict[int, dict] = field(default_factory=dict)        # media_id -> media
+    lists: list[dict] = field(default_factory=list)                 # MediaListCollection.lists
+    viewer: dict = field(default_factory=lambda: {"id": 1, "name": "Reader"})
+    requests: list[dict] = field(default_factory=list)              # parsed request bodies
+    route: respx.Route | None = None
+
+    def add_media(self, *media: dict) -> None:
+        for m in media:
+            self.catalogue[m["id"]] = m
+
+    def add_list(self, name: str, entries: list[tuple[int, int, str, int]], custom: bool = False) -> None:
+        """entries: (entry_id, media_id, status, progress)."""
+        self.lists.append({
+            "name": name, "isCustomList": custom,
+            "entries": [{"id": e, "status": s, "progress": p, "media": self._public(self.catalogue[m])}
+                        for e, m, s, p in entries],
+        })
+
+    @staticmethod
+    def _public(m: dict, with_staff: bool = False) -> dict:
+        out = {k: v for k, v in m.items() if not k.startswith("_")}
+        if with_staff:
+            out["staff"] = {"nodes": [{"name": {"full": n, "native": None}} for n in m["_staff"]]}
+        return out
+
+    def _search(self, text: str) -> list[dict]:
+        needle = text.lower()
+        hits = [m for m in self.catalogue.values() if m["type"] == "MANGA" and any(
+            needle in (t or "").lower() or (t or "").lower() in needle
+            for t in [*m["title"].values(), *m["synonyms"]] if t)]
+        return [self._public(m, with_staff=True) for m in hits[:5]]
+
+    def handle(self, request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        self.requests.append(body)
+        query, variables = body["query"], body.get("variables") or {}
+        if "Viewer" in query:
+            data = {"Viewer": self.viewer}
+        elif "MediaListCollection" in query:
+            data = {"MediaListCollection": {"lists": self.lists}}
+        elif "id_in" in query or "idMal_in" in query:
+            key = "id" if "id_in" in query else "idMal"
+            ids = set(variables["ids"])
+            media = [self._public(m) for m in self.catalogue.values() if m[key] in ids and m["type"] == "MANGA"]
+            data = {"Page": {"pageInfo": {"hasNextPage": False}, "media": media[: variables["perPage"]]}}
+        elif re.search(r"\bs0: Page", query):
+            data = {f"s{i}": {"media": self._search(variables[f"q{i}"])} for i in range(len(variables))}
+        else:
+            return httpx.Response(400, json={"errors": [{"message": "unexpected query in fake"}]})
+        return httpx.Response(200, json={"data": data})
+
+    def install(self, router: respx.MockRouter) -> "FakeAniList":
+        self.route = router.post(ANILIST_URL).mock(side_effect=self.handle)
+        return self
+
+    @property
+    def call_count(self) -> int:
+        return self.route.call_count if self.route else 0

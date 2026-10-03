@@ -13,6 +13,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from mdal.clients.anilist import AniListAuthError, AniListError
 from mdal.clients.anilist_oauth import AniListOAuthError
 from mdal.clients.mangadex import MangaDexAuthError, MangaDexError
+from mdal.fetch.anilist_list import viewer
 from mdal.web.app import get_services
 from mdal.web.routes.settings import render_settings
 
@@ -20,7 +21,6 @@ log = logging.getLogger(__name__)
 router = APIRouter()
 
 STATE_TTL = 600.0
-VIEWER_QUERY = "query { Viewer { id name } }"
 
 
 def _oauth_states(request: Request) -> dict[str, float]:
@@ -64,16 +64,16 @@ async def _connect(request: Request, token: str) -> HTMLResponse:
     svc = get_services(request)
     svc.store_anilist_token(token)
     try:
-        viewer = (await svc.anilist.graphql(VIEWER_QUERY))["Viewer"]
+        user = await viewer(svc.anilist)
     except AniListAuthError:
         svc.clear_anilist_token()
         return render_settings(request, error="AniList rejected that token. Nothing was saved.", status_code=400)
     except AniListError as exc:
         log.warning("Saved AniList token but could not verify it: %s", exc)
         return render_settings(request, error=f"Token saved, but AniList could not be reached to verify it: {exc}", status_code=502)
-    svc.repo.set_setting("anilist_user_id", viewer["id"])
-    svc.repo.set_setting("anilist_user_name", viewer["name"])
-    return render_settings(request, message=f"Connected to AniList as {viewer['name']}.")
+    svc.repo.set_setting("anilist_user_id", user["id"])
+    svc.repo.set_setting("anilist_user_name", user["name"])
+    return render_settings(request, message=f"Connected to AniList as {user['name']}.")
 
 
 @router.post("/auth/anilist/disconnect", response_class=HTMLResponse)
