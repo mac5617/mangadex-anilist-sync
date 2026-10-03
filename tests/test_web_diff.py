@@ -27,7 +27,7 @@ def run_id(services):
 
 
 def row(html: str, md_id: str) -> str:
-    m = re.search(rf'<tr class="r-\w+" data-md-id="{md_id}">.*?</tr>', html, re.S)
+    m = re.search(rf'<tr class="r-\w+" data-md-id="{md_id}"[^>]*>.*?</tr>', html, re.S)
     assert m, md_id
     return m.group(0)
 

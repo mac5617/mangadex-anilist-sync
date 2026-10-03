@@ -20,7 +20,8 @@
       <td class="num">{{ r.counts.get("done", 0) }} done{% if r.counts.get("failed") %} · {{ r.counts.failed }} failed{% endif %}{% if r.counts.get("dropped") %} · {{ r.counts.dropped }} dropped{% endif %}{% if r.counts.get("pending") %} · {{ r.counts.pending }} pending{% endif %}</td>
       <td class="num">AniList {{ r.req_anilist }} · MangaDex {{ r.req_mangadex }}</td>
       <td class="num">{{ r.duration or "—" }}</td>
-      <td class="reason">{% if r.error %}<span class="notice err inline">{{ r.error }}</span>{% elif r.phase_detail %}<span class="muted">{{ r.phase_detail }}</span>{% endif %}</td>
+      <td class="reason">{% if r.error %}<span class="notice {{ 'warn' if r.state == 'cancelled' else 'err' }} inline">{{ r.error }}</span>{% elif r.phase_detail %}<span class="muted">{{ r.phase_detail }}</span>{% endif %}
+        {% if r.restorable %}<form method="post" action="/sync/{{ r.run_id }}/restore" class="sub"><button class="link-button">Restore</button></form>{% endif %}</td>
     </tr>
   {% else %}
     <tr><td colspan="8" class="empty">No syncs yet.</td></tr>

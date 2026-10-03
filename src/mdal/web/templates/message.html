@@ -1,5 +1,8 @@
 {% extends "base.html" %}
 {% block title %}{{ "Error" if error else "Done" }}{% endblock %}
 {% block content %}
-{% if back %}<p><a class="button secondary" href="{{ back }}">Back</a></p>{% endif %}
+<div class="row">
+  {% if restore %}<form method="post" action="/sync/{{ restore }}/restore"><button>Undo: restore sync #{{ restore }}</button></form>{% endif %}
+  {% if back %}<a class="button secondary" href="{{ back }}">Back</a>{% endif %}
+</div>
 {% endblock %}

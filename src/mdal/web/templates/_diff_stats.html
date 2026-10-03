@@ -1,0 +1,7 @@
+<div class="stats" id="diff-stats"{% if oob %} hx-swap-oob="true"{% endif %}>
+  <div class="stat tone-ok"><span class="stat-value">{{ counts.write }}</span><span class="stat-label">to write</span></div>
+  <div class="stat tone-info"><span class="stat-value">{{ counts.add }}</span><span class="stat-label">to add</span></div>
+  <div class="stat{% if counts.flag %} tone-err{% endif %}"><span class="stat-value">{{ counts.flag }}</span><span class="stat-label">flagged</span></div>
+  <div class="stat"><span class="stat-value">{{ counts.skip }}</span><span class="stat-label">skipped</span></div>
+  {% if counts.complete %}<div class="stat tone-ok"><span class="stat-value">{{ counts.complete }}</span><span class="stat-label">to mark completed</span></div>{% endif %}
+</div>

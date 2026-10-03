@@ -156,3 +156,21 @@ async def test_summary_counts_all_mappings_not_just_new_ones(fast, world):
     detail = fast.repo.get_run(second)["phase_detail"]
     assert "(0 newly matched)" in detail
     assert "5 matched" in detail and "1 unmatched" in detail
+
+
+async def test_dismissed_flag_stays_dismissed_until_progress_changes(fast, world):
+    md, _ = world
+    first = await run(fast)
+    f = {i["md_id"]: i for i in fast.repo.items(first)}["f"]
+    assert f["action"] == "flag"
+    fast.repo.dismiss_flag("f", f["md_progress"], f["flag_kind"], f["reason"])
+
+    second = await run(fast)
+    f2 = {i["md_id"]: i for i in fast.repo.items(second)}["f"]
+    assert (f2["action"], f2["flag_kind"]) == ("skip", "implausible")
+    assert f2["reason"].startswith("dismissed by you: ")
+
+    md.series["f"].reads.append("f2")
+    md.chapters["f2"] = {"chapter": "41", "volume": None, "manga": "f"}
+    third = await run(fast)
+    assert {i["md_id"]: i for i in fast.repo.items(third)}["f"]["action"] == "flag"  # new reads: flagged again

@@ -2,7 +2,9 @@ import sqlite3
 
 import pytest
 
-from mdal.db.connection import connect, schema_version
+from mdal.db.connection import _migrations, connect, schema_version
+
+LATEST = _migrations()[-1][0]
 from mdal.db.repo import SETTING_DEFAULTS, Repo
 
 TABLES = {
@@ -35,12 +37,12 @@ def test_fresh_db_creates_all_tables_and_reopen_is_noop(db_path):
     conn = connect(db_path)
     names = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     assert TABLES <= names
-    assert schema_version(conn) == 2
+    assert schema_version(conn) == LATEST
     conn.close()
 
     conn = connect(db_path)
-    assert schema_version(conn) == 2
-    assert conn.execute("SELECT COUNT(*) FROM schema_version").fetchone()[0] == 2
+    assert schema_version(conn) == LATEST
+    assert conn.execute("SELECT COUNT(*) FROM schema_version").fetchone()[0] == LATEST
     conn.close()
 
 
@@ -137,7 +139,7 @@ def test_migration_002_allows_add_and_keeps_rows(tmp_path):
     old.commit()
     old.close()
     conn = connect(path)
-    assert schema_version(conn) == 2
+    assert schema_version(conn) == LATEST
     assert conn.execute("SELECT reason FROM sync_item").fetchone()[0] == "kept"
     conn.execute("INSERT INTO sync_item(run_id, md_id, action) VALUES (1, 'b', 'add')")
     with pytest.raises(sqlite3.IntegrityError):

@@ -39,6 +39,9 @@ MAPPING_SKIPS = {
 }
 
 
+DISMISSED_PREFIX = "dismissed by you: "
+
+
 class SyncAlreadyRunning(Exception):
     pass
 
@@ -119,6 +122,7 @@ def build_items(repo: Repo, run_id: int, md_ids: set[str] | None = None) -> list
     """One sync_item per library series (§8), or only `md_ids`. Pure DB reads; no API calls."""
     mappings = repo.mappings()
     entries = repo.al_entries()
+    dismissed = repo.dismissed_flags()
     jump_limit = repo.get_setting("jump_limit")
     rows = [r for r in repo.md_manga() if md_ids is None or r["md_id"] in md_ids]
     mapped_ids = [m["al_media_id"] for m in mappings.values() if m["al_media_id"] is not None]
@@ -145,7 +149,10 @@ def build_items(repo: Repo, run_id: int, md_ids: set[str] | None = None) -> list
             MdInfo(row["pub_status"], row["last_chapter"], bool(row["chapter_numbers_reset"])),
             jump_limit,
         )
-        action = d.action
+        action, reason = d.action, d.reason
+        gone = dismissed.get(md_id)
+        if action == "flag" and gone is not None and gone["md_progress"] == d.md_progress:
+            action, reason = "skip", f"{DISMISSED_PREFIX}{d.reason}"
         items.append({
             **base,
             "al_media_id": al_id,
@@ -157,17 +164,22 @@ def build_items(repo: Repo, run_id: int, md_ids: set[str] | None = None) -> list
             "status_approved": 1 if d.set_status else 0,
             "action": action,
             "flag_kind": d.flag_kind,
-            "reason": d.reason,
+            "reason": reason,
             "hint": d.hint,
             "unresolved_reads": d.unresolved,
         })
     return items
 
 
+def open_diff(repo: Repo) -> Any:
+    """The sync waiting for approval (at most one; it may be an older, restored run)."""
+    return repo.conn.execute("SELECT * FROM sync_run WHERE state='diffed' ORDER BY run_id DESC LIMIT 1").fetchone()
+
+
 def refresh_item(repo: Repo, md_id: str) -> bool:
-    """After a match decision: recompute this series' row in the open `diffed` run, if any. No requests."""
-    run = repo.latest_run()
-    if run is None or run["state"] != "diffed":
+    """After a match or dismiss decision: recompute this series' row in the open `diffed` run. No requests."""
+    run = open_diff(repo)
+    if run is None:
         return False
     if not repo.conn.execute("SELECT 1 FROM sync_item WHERE run_id=? AND md_id=?", (run["run_id"], md_id)).fetchone():
         return False
@@ -278,11 +290,30 @@ class SyncOrchestrator:
         ).fetchone()
         return r["run_id"] if r and self.can_resume(r["run_id"]) else None
 
+    def can_restore(self, run_id: int) -> bool:
+        """A discarded or superseded sync that never reached approval."""
+        r = self.repo.get_run(run_id)
+        if r is None or r["state"] != "cancelled" or r["approved_at"] is not None:
+            return False
+        return self.repo.conn.execute("SELECT 1 FROM sync_item WHERE run_id=? LIMIT 1", (run_id,)).fetchone() is not None
+
+    def restore(self, run_id: int) -> None:
+        """Bring a discarded sync back to `diffed`. Any other open diff is closed (only one can be approved)."""
+        if self.lock.locked() or (self.task and not self.task.done()):
+            raise SyncAlreadyRunning("a sync is running; restore it when it finishes")
+        if not self.can_restore(run_id):
+            raise SyncStateError("only a discarded sync that was never approved can be restored")
+        other = open_diff(self.repo)
+        if other is not None:
+            self.repo.update_run(other["run_id"], state="cancelled", finished_at=now_iso(),
+                                 error=f"superseded by restored sync #{run_id}")
+        self.repo.update_run(run_id, state="diffed", error=None, finished_at=None)
+
     def discard(self, run_id: int) -> None:
         r = self.repo.get_run(run_id)
         if r is None or r["state"] != "diffed":
             raise SyncStateError("only a diffed run can be discarded")
-        self.repo.update_run(run_id, state="cancelled", finished_at=now_iso())
+        self.repo.update_run(run_id, state="cancelled", finished_at=now_iso(), error="discarded by you")
 
     # ---- running --------------------------------------------------------
     @contextmanager

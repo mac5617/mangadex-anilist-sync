@@ -26,18 +26,21 @@ def _duration(started: str | None, finished: str | None) -> str | None:
 
 @router.get("/history", response_class=HTMLResponse)
 def history(request: Request) -> HTMLResponse:
-    repo = get_services(request).repo
+    svc = get_services(request)
+    repo = svc.repo
     counts = repo.run_counts()
     runs: list[dict[str, Any]] = []
     for r in repo.runs(200):
         c = counts.get(r["run_id"], {})
-        runs.append({**dict(r), "counts": c, "duration": _duration(r["started_at"], r["finished_at"])})
+        runs.append({**dict(r), "counts": c, "duration": _duration(r["started_at"], r["finished_at"]),
+                     "restorable": svc.orchestrator.can_restore(r["run_id"])})
     return render(request, "history.html", {"runs": runs})
 
 
 @router.get("/history/{run_id}", response_class=HTMLResponse)
 def history_run(request: Request, run_id: int) -> HTMLResponse:
-    repo = get_services(request).repo
+    svc = get_services(request)
+    repo = svc.repo
     run = repo.get_run(run_id)
     if run is None:
         raise HTTPException(404, "no such sync run")
@@ -45,4 +48,5 @@ def history_run(request: Request, run_id: int) -> HTMLResponse:
     rows = [(row, states[row.md_id]) for row in diff_rows(repo, run_id)]
     return render(request, "history_run.html", {
         "run": run, "rows": rows, "duration": _duration(run["started_at"], run["finished_at"]),
+        "restorable": svc.orchestrator.can_restore(run_id),
     })
