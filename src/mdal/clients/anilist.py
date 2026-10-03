@@ -74,6 +74,7 @@ class AniListClient:
         self._token = token_provider
         self._wall = wall_clock
         self._sleep = sleep
+        self.last_rate_headers: dict[str, str] = {}  # diagnostics only; never used for pacing
         self._http = httpx.AsyncClient(
             transport=transport,
             timeout=30.0,
@@ -109,6 +110,9 @@ class AniListClient:
             if self.request_counter:
                 self.request_counter()
             response = await self._http.post(ANILIST_URL, json=payload, headers=headers)
+            self.last_rate_headers = {
+                k: v for k, v in response.headers.items() if k.lower().startswith("x-ratelimit") or k.lower() == "retry-after"
+            }
             if response.status_code == 429:
                 wait = self._rate_limit_wait(response)
                 log.warning("AniList 429: pausing all AniList requests for %.0f s", wait)

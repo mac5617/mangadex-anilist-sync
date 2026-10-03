@@ -172,7 +172,10 @@ class FakeAniList:
             key = "id" if "id_in" in query else "idMal"
             ids = set(variables["ids"])
             media = [self._public(m) for m in self.catalogue.values() if m[key] in ids and m["type"] == "MANGA"]
-            data = {"Page": {"pageInfo": {"hasNextPage": False}, "media": media[: variables["perPage"]]}}
+            data = {"Page": {"pageInfo": {"hasNextPage": False}, "media": media[: variables.get("perPage", 50)]}}
+        elif re.search(r"\bm0: Media\(", query):
+            ids = [int(x) for x in re.findall(r"Media\(id: (\d+)\)", query)]
+            data = {f"m{i}": self._public(self.catalogue[mid]) if mid in self.catalogue else None for i, mid in enumerate(ids)}
         elif re.search(r"\bs0: Page", query):
             data = {f"s{i}": {"media": self._search(variables[f"q{i}"])} for i in range(len(variables))}
         else:

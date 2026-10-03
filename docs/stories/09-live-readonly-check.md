@@ -19,13 +19,19 @@ The prompt requires that the first live AniList test is read-only. This script i
 Results go into `docs/api-notes.md` under "Live check YYYY-MM-DD" (manually, by the developer, from the printed report).
 
 ## Acceptance criteria
-- [ ] The script contains no `mutation` keyword (enforced by a test that greps it).
-- [ ] With `--dry` it prints the planned requests without sending anything (tested).
-- [ ] It refuses to run unless `.env` has the required keys, and prints which are missing (names only).
-- [ ] It uses the shared clients (no direct `httpx`; the architecture test covers `scripts/` too).
+- [x] The script contains no `mutation` keyword (enforced by a test that greps it).
+- [x] With `--dry` it prints the planned requests without sending anything (tested).
+- [x] It refuses to run unless `.env` has the required keys, and prints which are missing (names only).
+- [x] It uses the shared clients (no direct `httpx`; the architecture test covers `scripts/` too).
 
 ## Tests
 `test_live_check_static.py` (grep for `mutation`; `--dry` output; missing-env message).
 
 ## Dev notes
-_(fill in after implementation; record live results in api-notes.md)_
+- Script done 2026-10-03; 114 tests pass in total. **Live run pending: the user runs it.** Record the report in `api-notes.md`.
+- Prerequisite: AniList must be connected first (the app's Settings → Connect AniList stores `ANILIST_ACCESS_TOKEN`). Without it, the script exits with code 2 and lists the missing key names. Verified against the real `.env`.
+- It makes 5 AniList and 5 MangaDex requests, at the default budgets (about 15 s on the AniList side). It uses `Services` and the real paced clients, never `httpx` directly.
+- Step 5 uses 10 aliased `Media(id)` read roots as a rough complexity signal. The real write-batch check is still the halve-on-complexity logic in story 16.
+- New: `AniListClient.last_rate_headers` (X-RateLimit-* / Retry-After of the last response), for diagnostics only and never used for pacing.
+- The safety test greps the script for `mutation`, `SaveMediaListEntry` and any `.post/.put/.delete/.patch(` call. Keep those words out of the script, even in comments.
+- `FakeAniList` now also answers aliased `Media(id: N)` roots and defaults `perPage` to 50.
