@@ -139,7 +139,7 @@ The header has four sections:
 | **Home** | Latest sync, open items, accounts, and a start button per site |
 | **Sync** | **Changes** for the latest sync, and **History** of every sync and single add, for both sites |
 | **Matches** | **To review** (uncertain or missing matches) and **Unlisted** (matched series not on your AniList list) |
-| **Stats** | **Library** (your AniList list) and **Activity** (what syncs have written, per site or both) |
+| **Stats** | **Library** (your AniList list), **Connections** (how your tags and genres go together) and **Activity** (what syncs have written, per site or both) |
 | **Discover** | **For you**, **Genres**, **Tags**, **Creators** (recommendations) and **Map** |
 
 ### First sync
@@ -191,6 +191,11 @@ of your choice. Each add re-checks your AniList list first.
   publication status, release years, genres, tags and staff, and a grid comparing MangaDex and AniList
   statuses. Status, format and country filters apply to everything on the page. Every bar, column and grid
   square opens **Entries**, a sortable list of the series it counts.
+- **Connections** is a network of the tags (or genres) on your list. Two are linked when they share series
+  more often than chance (at least 1.25 times as often, and at least 3 series), and each keeps only its four
+  strongest links, so related themes gather into clusters. Size is how many series have it, shade is how much
+  you like it (the same measure Discover uses). Clicking one lists its series; the table below the graph has
+  the strongest pairings. The Library filters apply here too.
 - **Activity** shows what syncs have written: chapters added, entries updated and added, completions,
   problems, and the largest updates, for all syncs or one.
 
@@ -219,7 +224,11 @@ requests:
 |---|---|
 | **For you** | A summary of your taste and the model's 12 picks, then more ranked by the combined score |
 | **Genres / Tags / Creators** | Your strongest ones (each opens the series on your list) and the series that best match them, with the reason for each |
-| **Map** | Your top 24 recommendations linked to the genres, tags, creators and series on your list that led to them. Drag nodes; hover to trace links; click to open on AniList. A table below lists the same links. |
+| **Map** | Your top 24 recommendations, shown as covers, linked to the genres, tags, creators and series on your list that led to them. A table below lists the same links. |
+
+Both network graphs work the same way: scroll or **+**/**−** to zoom, drag the background to pan, drag a
+node to move it, hover to trace its links, click to open it, double-click or **Fit** to see everything again.
+They're laid out with [d3-force](https://d3js.org/d3-force), bundled in `static/vendor/` (no internet needed).
 
 **Not interested** hides a series for good (**Show N hidden** brings them all back). Adult titles are left out
 unless you tick **Include adult titles**. **Find on MangaDex** opens a MangaDex search for the title.
@@ -290,9 +299,9 @@ mangadex-anilist-sync/
 │   ├── matching/                # title normalisation, scoring, matching pipeline
 │   ├── sync/                    # progress rules, sync state machine, writers, single adds, estimates
 │   ├── recommend/               # taste profile, scoring, model prompt, map, background refresh
-│   ├── stats.py                 # numbers for the stats pages (database reads only)
+│   ├── stats.py, stats_graph.py # numbers and the Connections graph for the stats pages (database reads only)
 │   └── web/                     # FastAPI app, routes/, templates/, static/
-├── tests/                       # 35 test modules plus factories and fakes
+├── tests/                       # 36 test modules plus factories and fakes
 ├── docs/                        # brief, PRD, architecture, API notes, stories/
 ├── scripts/live_check.py        # read-only API probe
 ├── pyproject.toml, uv.lock

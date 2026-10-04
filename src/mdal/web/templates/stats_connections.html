@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Connections{% endblock %}
+{% block content %}
+{% with section = "stats" %}{% include "_subnav.html" %}{% endwith %}
+<div class="page-head">
+  <div>
+    <h1>Connections</h1>
+    <p class="lede">How the {{ show }} on your list go together. Two are linked when they share series more often than chance;
+      each keeps only its strongest links, so related themes gather into clusters.</p>
+  </div>
+</div>
+
+<form method="get" action="/stats/connections" class="filter-row">
+  <div class="seg" role="group" aria-label="Show">
+    {% for value, text in [("tags", "Tags"), ("genres", "Genres")] %}
+      <a href="{{ show_urls[value] }}"{% if show == value %} aria-current="page"{% endif %}>{{ text }}</a>
+    {% endfor %}
+  </div>
+  {% for key, label in [("status", "Status"), ("format", "Format"), ("country", "Country")] %}
+    <label>{{ label }}
+      <select name="{{ key }}" onchange="this.form.submit()">
+        <option value="">All</option>
+        {% for value, text in options[key] %}<option value="{{ value }}"{% if filters.get(key) == value %} selected{% endif %}>{{ text }}</option>{% endfor %}
+      </select>
+    </label>
+  {% endfor %}
+  <input type="hidden" name="show" value="{{ show }}">
+  <noscript><button class="secondary">Apply</button></noscript>
+  {% if filters %}<a href="/stats/connections?show={{ show }}">Clear filters</a>{% endif %}
+</form>
+
+{% if not graph.nodes %}
+  <div class="panel empty">{% if show == "tags" and not tags_known %}Tags arrive with the next sync (or a Discover refresh).{% elif filters %}Too few series match these filters.{% else %}No AniList list yet. It appears after the first sync.{% endif %}</div>
+{% else %}
+  {% set legend %}
+    <span class="net-key">Size: series on your list</span>
+    <span class="net-ramp">Shade: how much you like it
+      <span class="muted small">less</span>
+      {% for i in range(1, 6) %}<i style="background: var(--heat-{{ i }})"></i>{% endfor %}
+      <span class="muted small">more</span></span>
+  {% endset %}
+  {% with net_id = "theme-net", net_json = graph_json, net_label = "Network of the " ~ show ~ " on your list", legend = legend %}
+    {% include "_network.html" %}
+  {% endwith %}
+  <p class="muted small">Based on {{ graph.total | num }} series. "How much you like it" combines your scores with statuses and chapters read.
+    Hover to see what a theme goes with; click to list its series. Scroll or + and − to zoom, drag to pan, double-click to fit.</p>
+
+  {% if graph.pairs %}
+  <section class="panel stack">
+    <h2>Strongest pairings</h2>
+    <div class="table-wrap"><table class="data">
+      <thead><tr><th>Pair</th><th class="num">Series together</th><th class="num">vs. chance</th></tr></thead>
+      <tbody>
+      {% for p in graph.pairs %}
+        <tr><td><a href="{{ p.href_a }}">{{ p.a }}</a> + <a href="{{ p.href_b }}">{{ p.b }}</a></td>
+          <td class="num">{{ p.shared | num }}</td><td class="num">{{ "%.1f" | format(p.lift) }}×</td></tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+  </section>
+  {% endif %}
+{% endif %}
+{% endblock %}

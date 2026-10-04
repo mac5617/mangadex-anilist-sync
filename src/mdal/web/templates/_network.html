@@ -1,0 +1,17 @@
+{#- A network graph panel. Include with `net_id` (unique), `net_json`, `net_label` and an optional
+    `legend` block rendered by the caller before including. Needs static/vendor/d3-force.bundle.js. -#}
+<div class="network-panel panel">
+  <div class="network-bar">
+    <div class="network-legend">{{ legend | safe }}</div>
+    <div class="network-zoom" role="group" aria-label="Zoom">
+      <button type="button" class="secondary" data-net-zoom="out" aria-label="Zoom out">−</button>
+      <button type="button" class="secondary" data-net-zoom="fit">Fit</button>
+      <button type="button" class="secondary" data-net-zoom="in" aria-label="Zoom in">+</button>
+    </div>
+  </div>
+  <svg class="network" data-network="{{ net_id }}" role="group" aria-label="{{ net_label }}"></svg>
+  <div class="chart-tip network-tip" hidden></div>
+  <script id="{{ net_id }}" type="application/json">{{ net_json | safe }}</script>
+</div>
+<script src="/static/vendor/d3-force.bundle.js" defer></script>
+<script src="/static/network.js" defer></script>

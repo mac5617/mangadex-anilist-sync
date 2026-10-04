@@ -9,6 +9,7 @@
   <a href="/not-listed"{% if path.startswith("/not-listed") %} aria-current="page"{% endif %}>Unlisted{% if nav %}<span class="count">{{ nav.not_on_list }}</span>{% endif %}</a>
 {%- elif section == "stats" %}
   <a href="/stats"{% if path == "/stats" or path.startswith("/stats/entries") %} aria-current="page"{% endif %}>Library</a>
+  <a href="/stats/connections"{% if path.startswith("/stats/connections") %} aria-current="page"{% endif %}>Connections</a>
   <a href="/stats/syncs"{% if path.startswith("/stats/syncs") %} aria-current="page"{% endif %}>Activity</a>
 {%- elif section == "discover" %}
   {%- set q = "?adult=1" if adult else "" %}

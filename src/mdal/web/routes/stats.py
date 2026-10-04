@@ -20,14 +20,17 @@ from mdal.stats import (
     Bar,
     chart,
     entries,
+    entry_rows,
     filter_label,
     list_stats,
+    matches,
     runs_with_writes,
     sync_stats,
 )
+from mdal.stats_graph import theme_graph
 from mdal.sync.orchestrator import SITE_NAMES
 from mdal.sync.rules import STATUS_LABELS
-from mdal.web.app import get_services, md_cover_url, render
+from mdal.web.app import get_services, graph_json, md_cover_url, render
 
 router = APIRouter()
 
@@ -162,4 +165,27 @@ def stats_syncs(request: Request, run: str = "", site: str = "") -> HTMLResponse
         "s": s, "runs": runs, "selected": run, "site": target or "", "sites": SITE_NAMES,
         "has_mal": bool(runs_with_writes(repo, "mal")),
         "c": {"per_run": chart(s.per_run), "jumps": chart(s.jumps), "transitions": chart(s.transitions)},
+    })
+
+
+@router.get("/stats/connections", response_class=HTMLResponse)
+def stats_connections(request: Request, show: str = "tags") -> HTMLResponse:
+    filters = _filters(request, GLOBAL_FILTERS)
+    show = show if show in ("tags", "genres") else "tags"
+    rows = [r for r in entry_rows(get_services(request).repo) if matches(r, filters)]
+    graph = theme_graph(rows, show)
+    key = "tag" if show == "tags" else "genre"
+    for n in graph["nodes"]:
+        n["href"] = entries_url(filters, **{key: n["id"]})
+    for p in graph["pairs"]:
+        p["href_a"], p["href_b"] = entries_url(filters, **{key: p["a"]}), entries_url(filters, **{key: p["b"]})
+    return render(request, "stats_connections.html", {
+        "graph": graph, "graph_json": graph_json(graph), "show": show, "filters": filters,
+        "show_urls": {v: "/stats/connections?" + urlencode({**filters, "show": v}) for v in ("tags", "genres")},
+        "options": {
+            "status": [(k, STATUS_LABELS[k]) for k in STATUS_ORDER],
+            "format": list(FORMAT_LABELS.items()),
+            "country": list(COUNTRY_LABELS.items()),
+        },
+        "tags_known": any(r["tags_known"] for r in rows),
     })

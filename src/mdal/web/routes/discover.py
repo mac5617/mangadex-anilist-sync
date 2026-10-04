@@ -6,7 +6,6 @@ Pages read stored candidates and the model's stored picks; only Refresh (AniList
 
 from __future__ import annotations
 
-import json
 from typing import Any
 from urllib.parse import quote, urlencode
 
@@ -18,7 +17,7 @@ from mdal.recommend.score import Rec, ranked
 from mdal.recommend.service import RecsBusy
 from mdal.stats import COUNTRY_LABELS, FORMAT_LABELS, Bar, chart
 from mdal.web.routes.stats import entries_url
-from mdal.web.app import get_services, render, templates
+from mdal.web.app import get_services, graph_json, render, templates
 
 router = APIRouter()
 
@@ -93,15 +92,11 @@ def rec_map(request: Request) -> HTMLResponse:
     svc = get_services(request)
     profile, recs = svc.recommender.recs(_adult(request))
     top = ranked(recs, "overall", MAP_SIZE)
-    titles = {f["media_id"]: f["title"] for f in profile.favourites}
-    titles.update({r["media_id"]: r["romaji"] or r["english"] or r["native"] for r in svc.repo.conn.execute(
-        "SELECT m.media_id, m.romaji, m.english, m.native FROM al_entry e JOIN al_media m USING (media_id)")})
-    graph = build_graph(profile, top, titles)
-    return _page(request, "discover_map.html", {
-        "graph": graph,
-        # "</" escaped: a title can never close the <script> element the JSON sits in.
-        "graph_json": json.dumps(graph, ensure_ascii=False).replace("</", "<\\/"),
-    })
+    series = {r["media_id"]: (r["romaji"] or r["english"] or r["native"] or f"#{r['media_id']}", r["cover_url"])
+              for r in svc.repo.conn.execute(
+                  "SELECT m.media_id, m.romaji, m.english, m.native, m.cover_url FROM al_entry e JOIN al_media m USING (media_id)")}
+    graph = build_graph(profile, top, series)
+    return _page(request, "discover_map.html", {"graph": graph, "graph_json": graph_json(graph)})
 
 
 @router.get("/discover/{page}", response_class=HTMLResponse)

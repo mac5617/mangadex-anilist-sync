@@ -276,7 +276,7 @@ async def test_pages_with_data(services, world, mock):
         assert "Mangaka 7 (Story &amp; Art), who made" in c.get("/discover/creators").text
         assert "Gore" in c.get("/discover/tags").text
         page = c.get("/discover/map").text
-        data = re.search(r'<script id="graph-data" type="application/json">(.*?)</script>', page, re.S).group(1)
+        data = re.search(r'<script id="rec-map" type="application/json">(.*?)</script>', page, re.S).group(1)
         assert "</script>" not in data and json.loads(data)["nodes"]
 
         assert c.post("/discover-hide/500").text == ""

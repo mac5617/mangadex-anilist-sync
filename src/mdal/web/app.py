@@ -1,3 +1,4 @@
+import json
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -58,6 +59,11 @@ def date_from_unix(value: int | None) -> str:
 
 
 templates.env.filters["date_from_unix"] = date_from_unix
+
+
+def graph_json(graph: dict[str, Any]) -> str:
+    """JSON for a <script type="application/json"> block. "</" is escaped so no title can close the element."""
+    return json.dumps(graph, ensure_ascii=False).replace("</", "<\\/")
 
 
 def get_services(request: Request) -> Services:
