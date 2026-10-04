@@ -146,8 +146,10 @@ def stats_entries(request: Request, sort: str = "title", dir: str = "", page: in
 
 
 @router.get("/stats/syncs", response_class=HTMLResponse)
-def stats_syncs(request: Request, run: int | None = None, site: str = "") -> HTMLResponse:
+def stats_syncs(request: Request, run: str = "", site: str = "") -> HTMLResponse:
+    """`run` and `site` arrive as "" when a filter is set to All."""
     repo = get_services(request).repo
+    run = int(run) if run.strip().isdigit() else None
     target = site if site in SITE_NAMES else None
     runs = runs_with_writes(repo, target)
     if run is not None and run not in runs:

@@ -358,3 +358,9 @@ def test_tag_and_role_cleaning():
         {"role": "Original Creator", "node": {"id": 3, "name": {"full": "Creator"}}},
     ]})
     assert [r["id"] for r in roles] == [1, 3]
+
+
+def test_activity_filters_accept_all(client):
+    assert client.get("/stats/syncs?run=&site=").status_code == 200
+    assert client.get("/stats/syncs?site=mal&run=").status_code == 200
+    assert client.get("/stats/syncs?run=abc").status_code == 200
