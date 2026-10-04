@@ -67,5 +67,5 @@ Inputs: `brief.md`, `api-notes.md`. Trace codes: **P:<section>** = the original 
 ### Quality
 - **NFR-13** Tests never call live APIs (respx; real network is disabled in pytest). *(P:QA)*
 - **NFR-14** The first live AniList contact is a read-only check script. *(P:working)*
-- **NFR-15** SQLite defaults to a path outside OneDrive. *(brief: environment)*
+- **NFR-15** SQLite defaults to the local app-data folder (`%LOCALAPPDATA%`), configurable with `MDAL_DB_PATH`. *(brief: environment)*
 - **NFR-16** Each sync writes a per-run request count for each API to history. *(supports NFR-6, FR-31)*

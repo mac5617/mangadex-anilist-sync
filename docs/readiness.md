@@ -39,7 +39,7 @@ No requirement is without a story.
 
 ## Open questions: resolved by the user (2026-10-03)
 1. **AniList activity feed:** leave it on. No change.
-2. **OneDrive:** the user removed `DEV` from OneDrive sync. The DB still defaults to `%LOCALAPPDATA%`. The user's `DEV/.env` (6 credential keys set) moves into the project root in story 01.
+2. **Database and `.env`:** the DB defaults to `%LOCALAPPDATA%`. The user's `DEV/.env` (6 credential keys set) moves into the project root in story 01.
 3. **"Add to AniList" status:** a per-row dropdown is fine. **Amendment:** when a series is known finished and progress is at its final chapter, mark it Completed automatically, whatever the current status. Implemented as FR-25 (rewritten), architecture §8 step 5 and §9, and stories 12, 14, 16, 17 and 19. Safeguards:
    - "known finished" requires AniList media status FINISHED;
    - it is proposed in the diff and opt-out per row;

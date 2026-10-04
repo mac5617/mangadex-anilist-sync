@@ -50,9 +50,7 @@ uv sync
 
 If you move the project folder later, delete `.venv` and run `uv sync` again; uv's launchers remember the old path.
 
-> **OneDrive.** Keep the database out of a OneDrive-synced folder, since OneDrive can lock or roll back the
-> SQLite file while Shiori uses it. The default location is `%LOCALAPPDATA%\mangadex-anilist-sync\sync.db`;
-> `MDAL_DB_PATH` in `.env` moves it.
+The database lives at `%LOCALAPPDATA%\mangadex-anilist-sync\sync.db` unless `MDAL_DB_PATH` in `.env` points elsewhere.
 
 ## Setup
 

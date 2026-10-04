@@ -21,10 +21,9 @@ def test_secret_values_lists_only_set_secrets(make_settings):
     assert sorted(s.secret_values()) == ["hunter2pw", "tok-abcdef"]
 
 
-def test_default_db_path_is_outside_onedrive(make_settings):
+def test_default_db_path_used_without_override(make_settings):
     s = make_settings()
     assert s.db_path == default_db_path()
-    assert not any("onedrive" in part.lower() for part in s.db_path.parts)
 
 
 def test_default_db_path_uses_localappdata(monkeypatch, tmp_path):

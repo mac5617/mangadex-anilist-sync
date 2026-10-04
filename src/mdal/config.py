@@ -18,7 +18,7 @@ USER_AGENT = f"mangadex-anilist-sync/{__version__}"
 
 
 def default_db_path() -> Path:
-    """Outside OneDrive: %LOCALAPPDATA% on Windows, XDG data dir elsewhere."""
+    """%LOCALAPPDATA% on Windows, the XDG data dir elsewhere."""
     local = os.environ.get("LOCALAPPDATA")
     base = Path(local) if local else Path.home() / ".local" / "share"
     return base / APP_DIR_NAME / "sync.db"

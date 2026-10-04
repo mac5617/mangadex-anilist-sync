@@ -20,7 +20,7 @@ This is the first commit, so secrets must be protected before anything else exis
 - [x] `.env` exists in the project root with the 6 credential keys, and `DEV/.env` no longer exists.
 - [x] `uv run mdal` starts the server on 127.0.0.1:8765, and `GET /` returns 200.
 - [x] A log record containing the configured AniList token, the MangaDex password, or `Bearer xyz` is emitted with those values replaced by `***`.
-- [x] With no `MDAL_DB_PATH`, the resolved DB path is not under any directory containing `OneDrive`.
+- [x] With no `MDAL_DB_PATH`, the DB path is under the local app-data folder.
 - [x] A test that opens a real socket to an external host fails.
 
 ## Tests

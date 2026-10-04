@@ -27,11 +27,7 @@ A single-user, local web app (bound to 127.0.0.1). It reads my MangaDex library 
 
 ## Environment findings (this machine, 2026-10-03)
 - Windows 11. `uv`, Python and git are **not installed**. They must be installed before Phase 6.
-- The project folder is inside **OneDrive**. Two consequences:
-  - `.env` (secrets) would be uploaded to OneDrive.
-  - SQLite files under OneDrive sync can get locked or corrupted.
-
-  Decision: the database defaults to `%LOCALAPPDATA%\mangadex-anilist-sync\sync.db` (configurable). The user reports that the `DEV` folder has been removed from OneDrive sync (2026-10-03).
+- The database defaults to `%LOCALAPPDATA%\mangadex-anilist-sync\sync.db` (configurable).
 
 ## Key risks
 See `api-notes.md` → "Risks found". User decisions (2026-10-03):

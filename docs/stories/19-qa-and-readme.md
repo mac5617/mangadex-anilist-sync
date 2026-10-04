@@ -23,7 +23,7 @@
 
 2. Run `uv run pytest --cov=mdal`. Report coverage, and that each `sync/` and `clients/` module is ≥ 90%.
 3. `README.md`:
-   - prerequisites (uv, git; Windows notes; OneDrive warning);
+   - prerequisites (uv, git; Windows notes);
    - MangaDex personal API client registration (settings → API Clients; may be pending staff approval);
    - AniList app registration (Settings → Developer → Create New Application; redirect `http://127.0.0.1:8765/auth/anilist/callback`, or the pin URL; apps cannot be deleted);
    - filling `.env`;
@@ -41,7 +41,7 @@
 - Done 2026-10-03; 376 tests pass with outbound network blocked.
 - Coverage (`uv run pytest --cov=mdal`): 96% total. `clients/`: anilist 93%, anilist_oauth 95%, mangadex 90%, ratelimit 97%. `sync/`: add_entry 96%, estimate 100%, orchestrator 92%, rules 100%, writer 94%.
 - Added in this story: `test_web_settings.py::test_no_secret_values_on_any_page` (every screen, with a stored token).
-- README rewritten as the setup and usage guide (prerequisites, OneDrive warning, both client registrations, `.env`, live check, first-run walkthrough with the one-entry first write, rate settings, troubleshooting).
+- README rewritten as the setup and usage guide (prerequisites, both client registrations, `.env`, live check, first-run walkthrough with the one-entry first write, rate settings, troubleshooting).
 - **Real dry run on the user's accounts (read-only), 2026-10-03:** 1,929 series, 1,778 AniList entries; 1,797 matched by `links.al`, 27 by `links.mal`, 24 by title, 13 to review, 68 unmatched; 104 writes, 1 implausible flag, 7 completions proposed. Cost: AniList 53, MangaDex 377 (33,425 chapter ids), about 7 minutes. Second run: AniList 1, MangaDex 60 (one retry of 1,876 unresolved chapter ids, now permanent). Pages render in under 0.1 s with the full library.
 - Found by the real run and fixed: starting a new sync now cancels older `diffed` runs ("superseded by sync #N"), and the run summary shows overall match totals plus how many were newly matched (it read "matched 0 auto" on cached runs).
 - 1,876 of 33,425 read chapter ids (5.6%) could not be resolved, more than the 1% live sample; the diff shows them per row as "unresolved".
