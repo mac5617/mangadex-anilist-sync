@@ -15,14 +15,16 @@ from mdal.db.repo import Repo, now_iso
 
 MEDIA_FIELDS = (
     "id idMal type format status chapters countryOfOrigin startDate { year } "
-    "title { romaji english native } synonyms coverImage { medium } siteUrl"
+    "title { romaji english native } synonyms coverImage { medium } siteUrl genres"
 )
 STAFF_FIELDS = "staff(perPage: 3) { nodes { name { full native } } }"
 
 VIEWER_QUERY = "query { Viewer { id name } }"
 LIST_QUERY = (
     "query ($userId: Int) { MediaListCollection(userId: $userId, type: MANGA) { "
-    f"lists {{ name isCustomList entries {{ id status progress media {{ {MEDIA_FIELDS} }} }} }} }} }}"
+    "lists { name isCustomList entries { id status progress progressVolumes score(format: POINT_100) updatedAt "
+    "startedAt { year month day } completedAt { year month day } "
+    f"media {{ {MEDIA_FIELDS} }} }} }} }} }}"
 )
 BY_IDS_QUERY = (
     "query ($ids: [Int], $perPage: Int) { Page(page: 1, perPage: $perPage) { "
@@ -38,6 +40,18 @@ BY_MAL_QUERY = (
 class ListSummary:
     entries: int
     custom_only: int
+
+
+def fuzzy_date(d: dict[str, Any] | None) -> str | None:
+    """AniList FuzzyDate -> 'YYYY', 'YYYY-MM' or 'YYYY-MM-DD'; None without a year."""
+    if not d or not d.get("year"):
+        return None
+    parts = [f"{d['year']:04d}"]
+    for key in ("month", "day"):
+        if not d.get(key):
+            break
+        parts.append(f"{d[key]:02d}")
+    return "-".join(parts)
 
 
 def media_row(media: dict[str, Any], fetched_at: str) -> dict[str, Any]:
@@ -63,6 +77,7 @@ def media_row(media: dict[str, Any], fetched_at: str) -> dict[str, Any]:
         "native": title.get("native"),
         "synonyms": json.dumps(media.get("synonyms") or [], ensure_ascii=False),
         "staff": None if staff_names is None else json.dumps(staff_names, ensure_ascii=False),
+        "genres": json.dumps(media.get("genres") or [], ensure_ascii=False),
         "cover_url": (media.get("coverImage") or {}).get("medium"),
         "site_url": media.get("siteUrl"),
         "fetched_at": fetched_at,
@@ -90,7 +105,11 @@ async def fetch_list(client: AniListClient, repo: Repo, user_id: int) -> ListSum
     repo.upsert_media([media_row(m, fetched_at) for m in media.values()])
     repo.replace_al_entries([
         {"entry_id": e["id"], "media_id": e["media"]["id"], "status": e["status"],
-         "progress": e.get("progress") or 0, "fetched_at": fetched_at}
+         "progress": e.get("progress") or 0, "fetched_at": fetched_at,
+         "score": e.get("score") or None,  # AniList reports 0 for "no score"
+         "progress_volumes": e.get("progressVolumes"),
+         "started_at": fuzzy_date(e.get("startedAt")), "completed_at": fuzzy_date(e.get("completedAt")),
+         "updated_at": e.get("updatedAt")}
         for e in entries.values()
     ])
     return ListSummary(entries=len(entries), custom_only=len(set(entries) - in_status_list))

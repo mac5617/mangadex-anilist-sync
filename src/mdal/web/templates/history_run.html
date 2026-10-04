@@ -11,6 +11,7 @@
   <div class="page-actions">
     {% if run.state == "diffed" %}<a class="button" href="/sync/{{ run.run_id }}">Open the diff to approve</a>{% endif %}
     {% if restorable %}<form method="post" action="/sync/{{ run.run_id }}/restore"><button>Restore this sync</button></form>{% endif %}
+    {% if run.approved_at %}<a class="button secondary" href="/stats/syncs?run={{ run.run_id }}">Stats for this sync</a>{% endif %}
     <a class="button secondary" href="/history">All syncs</a>
   </div>
 </div>

@@ -1,0 +1,52 @@
+{# Chart macros. Marks: one series colour (--viz-1), <=24px thick, 4px rounded data-end, 2px gaps,
+   hairline grid, value labels in text ink. Every mark has a tooltip (hover + keyboard focus) and every
+   chart has a table view. Import with: {% import "_charts.html" as charts %} #}
+
+{% macro table(c, label_head, value_head) -%}
+  <details class="chart-table"><summary>Show table</summary>
+    <table class="data compact">
+      <thead><tr><th>{{ label_head }}</th><th class="num">{{ value_head }}</th><th>Detail</th></tr></thead>
+      <tbody>{% for b in c.bars %}<tr><td>{{ b.label }}</td><td class="num">{{ b.value | num }}</td><td class="muted">{{ b.tip }}</td></tr>{% endfor %}</tbody>
+    </table>
+  </details>
+{%- endmacro %}
+
+{# Horizontal bars: categories, value at the tip. #}
+{% macro hbars(c, label_head="Category", value_head="Count", empty="No data yet.") -%}
+  {% if c.empty %}<p class="muted chart-empty">{{ empty }}</p>{% else %}
+  <div class="hbars">
+    {% for b in c.bars %}
+      <div class="hbar" tabindex="0" data-tip="{{ b.label }} · {{ b.tip }}">
+        <span class="hbar-label">{{ b.label }}</span>
+        <span class="hbar-track"><span class="hbar-fill" style="width: {{ '%.2f' | format(b.rel) }}%"></span></span>
+        <span class="hbar-value">{{ b.value | num }}</span>
+      </div>
+    {% endfor %}
+  </div>
+  {{ table(c, label_head, value_head) }}
+  {% endif %}
+{%- endmacro %}
+
+{# Columns: ordered x (years, score buckets, syncs). Labels thinned to stay readable. #}
+{% macro columns(c, label_head="Year", value_head="Count", empty="No data yet.") -%}
+  {% if c.empty %}<p class="muted chart-empty">{{ empty }}</p>{% else %}
+  <div class="cols-chart">
+    <div class="cols-axis">{% for t in c.ticks %}<span>{{ t | num }}</span>{% endfor %}</div>
+    <div class="cols-plot">
+      <div class="cols-grid"><span></span><span></span><span></span></div>
+      <div class="cols">
+        {% for b in c.bars %}
+          <div class="col" tabindex="0" data-tip="{{ b.tip }}"><span class="col-fill" style="height: {{ '%.2f' | format(b.pct) }}%"></span></div>
+        {% endfor %}
+      </div>
+      <div class="cols-x">{% for b in c.bars %}<span>{% if b.show_label %}{{ b.label }}{% endif %}</span>{% endfor %}</div>
+    </div>
+  </div>
+  {{ table(c, label_head, value_head) }}
+  {% endif %}
+{%- endmacro %}
+
+{% macro tile(value, label, sub=None) -%}
+  <div class="stat"><span class="stat-value">{{ value }}</span><span class="stat-label">{{ label }}</span>
+    {% if sub %}<span class="stat-sub">{{ sub }}</span>{% endif %}</div>
+{%- endmacro %}

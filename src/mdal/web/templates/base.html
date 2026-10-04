@@ -25,6 +25,7 @@
         {{ navlink("/review", "Review", path.startswith("/review"), nav.review if nav else 0) }}
         {{ navlink("/not-listed", "Not on my list", path.startswith("/not-listed"), nav.not_on_list if nav else 0) }}
         {{ navlink("/history", "History", path.startswith("/history")) }}
+        {{ navlink("/stats", "Stats", path.startswith("/stats")) }}
         {{ navlink("/settings", "Settings", path.startswith("/settings")) }}
       </nav>
       <button type="button" class="theme-toggle" id="theme-toggle" title="Switch theme">Theme: Auto</button>

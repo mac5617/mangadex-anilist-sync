@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% import "_charts.html" as charts %}
+{% block title %}Stats{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Stats</h1>
+    <p class="lede">Your AniList manga list as of the last sync, and your MangaDex library beside it.</p>
+  </div>
+</div>
+{% with active = "list" %}{% include "_stats_tabs.html" %}{% endwith %}
+
+{% if not s.total %}
+  <div class="panel empty">No AniList list yet. Run a sync and your stats appear here.</div>
+{% else %}
+<div class="stats">
+  {{ charts.tile(s.total | num, "manga on your list") }}
+  {{ charts.tile(s.chapters | num, "chapters read") }}
+  {{ charts.tile(s.volumes | num, "volumes read") }}
+  {% if s.mean_score is not none %}
+    {{ charts.tile("%.1f" | format(s.mean_score), "mean score", "SD %.1f · %s scored" | format(s.score_sd, s.scored | num)) }}
+  {% else %}
+    {{ charts.tile("—", "mean score", "no scores yet") }}
+  {% endif %}
+</div>
+{% if not s.has_genres %}
+  <p class="notice warn">Genres, scores, volumes and completion dates arrive with your next sync. They come with the list request a sync already makes, so it costs nothing extra.</p>
+{% endif %}
+
+<div class="grid two">
+  <section class="panel chart-panel">
+    <h2>Status</h2>
+    {{ charts.hbars(c.status, "Status", "Entries") }}
+  </section>
+  <section class="panel chart-panel">
+    <h2>Format</h2>
+    {{ charts.hbars(c.formats, "Format", "Entries") }}
+  </section>
+  <section class="panel chart-panel">
+    <h2>Country of origin</h2>
+    {{ charts.hbars(c.countries, "Country", "Entries") }}
+  </section>
+  <section class="panel chart-panel">
+    <h2>Score distribution</h2>
+    <p class="chart-sub">Entries per score band (100-point scale)</p>
+    {{ charts.columns(c.scores, "Score", "Entries", empty="No scored entries yet.") }}
+  </section>
+</div>
+
+<section class="panel chart-panel">
+  <h2>Release years</h2>
+  <p class="chart-sub">Series on your list by the year they started publishing</p>
+  {{ charts.columns(c.years, "Year", "Series") }}
+</section>
+
+<section class="panel chart-panel">
+  <h2>Completed per year</h2>
+  <p class="chart-sub">Entries by the completion date on AniList</p>
+  {{ charts.columns(c.completed, "Year", "Completed", empty="No completion dates yet.") }}
+</section>
+
+<section class="panel chart-panel">
+  <h2>Genres</h2>
+  <p class="chart-sub">Your ten most common genres</p>
+  {{ charts.hbars(c.genres, "Genre", "Entries", empty="No genres yet: they arrive with your next sync.") }}
+  {% if s.genres %}
+  <details class="chart-table"><summary>All {{ s.genres | length }} genres with chapters and mean score</summary>
+    <table class="data compact">
+      <thead><tr><th>Genre</th><th class="num">Entries</th><th class="num">Chapters read</th><th class="num">Mean score</th></tr></thead>
+      <tbody>{% for g in s.genres %}<tr><td>{{ g.name }}</td><td class="num">{{ g.count | num }}</td><td class="num">{{ g.chapters | num }}</td>
+        <td class="num">{{ "%.0f" | format(g.mean_score) if g.mean_score is not none else "—" }}</td></tr>{% endfor %}</tbody>
+    </table>
+  </details>
+  {% endif %}
+</section>
+{% endif %}
+
+<h2 class="section-title">MangaDex</h2>
+<div class="stats">
+  {{ charts.tile(s.md.library | num, "series in your library") }}
+  {{ charts.tile(s.md.read_markers | num, "chapters marked read") }}
+  {{ charts.tile(s.md.matched | num, "matched to AniList", "%s to review · %s unmatched" | format(s.md.review | num, s.md.unmatched | num)) }}
+  {{ charts.tile(s.md.not_on_list | num, "matched, not on your list") }}
+  {{ charts.tile(s.md.unresolved | num, "read chapters MangaDex no longer has") }}
+</div>
+<script src="/static/charts.js" defer></script>
+{% endblock %}

@@ -33,6 +33,18 @@ templates.env.globals["md_cover"] = md_cover_url
 templates.env.filters["when"] = when
 
 
+def num(value: float | int | None) -> str:
+    """1234 -> '1,234'; whole floats lose their '.0'."""
+    if value is None:
+        return "—"
+    if isinstance(value, float) and not value.is_integer():
+        return f"{value:,.1f}"
+    return f"{int(value):,}"
+
+
+templates.env.filters["num"] = num
+
+
 def get_services(request: Request) -> Services:
     return request.app.state.services
 
@@ -56,7 +68,7 @@ def create_app(services: Services) -> FastAPI:
     app.state.oauth_states = {}
     app.mount("/static", StaticFiles(directory=WEB_DIR / "static"), name="static")
 
-    from mdal.web.routes import auth, dashboard, history, notlisted, review, settings, sync
+    from mdal.web.routes import auth, dashboard, history, notlisted, review, settings, stats, sync
 
     app.include_router(auth.router)
     app.include_router(settings.router)
@@ -65,5 +77,6 @@ def create_app(services: Services) -> FastAPI:
     app.include_router(review.router)
     app.include_router(notlisted.router)
     app.include_router(history.router)
+    app.include_router(stats.router)
 
     return app

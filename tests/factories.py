@@ -113,13 +113,14 @@ class FakeMangaDex:
 def al_media(media_id: int, romaji: str, *, english: str | None = None, native: str | None = None,
              id_mal: int | None = None, fmt: str = "MANGA", status: str = "RELEASING", chapters: int | None = None,
              country: str = "JP", year: int | None = 2020, synonyms: list[str] | None = None,
-             staff: list[str] | None = None, type_: str = "MANGA") -> dict:
+             staff: list[str] | None = None, type_: str = "MANGA", genres: list[str] | None = None) -> dict:
     """An AniList Media object as the API returns it."""
     return {
         "id": media_id, "idMal": id_mal, "type": type_, "format": fmt, "status": status, "chapters": chapters,
         "countryOfOrigin": country, "startDate": {"year": year},
         "title": {"romaji": romaji, "english": english, "native": native},
         "synonyms": synonyms or [], "coverImage": {"medium": f"https://img.example/{media_id}.jpg"},
+        "genres": genres or [],
         "siteUrl": f"https://anilist.co/manga/{media_id}",
         "_staff": staff or [],
     }
