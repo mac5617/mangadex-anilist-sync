@@ -8,6 +8,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
+from mdal.sync.orchestrator import SITE_NAMES
 from mdal.web.app import get_services, render
 from mdal.web.routes.sync import diff_rows
 
@@ -34,7 +35,7 @@ def history(request: Request) -> HTMLResponse:
         c = counts.get(r["run_id"], {})
         runs.append({**dict(r), "counts": c, "duration": _duration(r["started_at"], r["finished_at"]),
                      "restorable": svc.orchestrator.can_restore(r["run_id"])})
-    return render(request, "history.html", {"runs": runs})
+    return render(request, "history.html", {"runs": runs, "sites": SITE_NAMES})
 
 
 @router.get("/history/{run_id}", response_class=HTMLResponse)
@@ -48,5 +49,5 @@ def history_run(request: Request, run_id: int) -> HTMLResponse:
     rows = [(row, states[row.md_id]) for row in diff_rows(repo, run_id)]
     return render(request, "history_run.html", {
         "run": run, "rows": rows, "duration": _duration(run["started_at"], run["finished_at"]),
-        "restorable": svc.orchestrator.can_restore(run_id),
+        "restorable": svc.orchestrator.can_restore(run_id), "site": SITE_NAMES[run["target"]],
     })

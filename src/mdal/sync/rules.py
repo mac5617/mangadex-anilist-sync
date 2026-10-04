@@ -29,8 +29,10 @@ class AlEntry:
 
 @dataclass(frozen=True)
 class AlMediaInfo:
+    """Total and publication status (AniList's words), and the site they came from."""
     chapters: int | None
     status: str | None
+    source: str = "AniList"
 
 
 @dataclass(frozen=True)
@@ -57,8 +59,8 @@ class DiffItem:
 @dataclass(frozen=True)
 class Completion:
     total: int | None            # best known total, whatever the AniList status
-    source: str | None           # "AniList" | "MangaDex"
-    known_complete: bool         # AniList says FINISHED and a total is known
+    source: str | None           # media.source ("AniList" | "MyAnimeList") | "MangaDex"
+    known_complete: bool         # the site says FINISHED and a total is known
 
 
 def parse_chapter(value: str | None) -> Decimal | None:
@@ -74,7 +76,7 @@ def parse_chapter(value: str | None) -> Decimal | None:
 def completion_info(media: AlMediaInfo, md: MdInfo) -> Completion:
     """§8 step 5. A wrong completion is worse than a missing one."""
     if media.chapters is not None:
-        total, source = media.chapters, "AniList"
+        total, source = media.chapters, media.source
     else:
         last = parse_chapter(md.last_chapter) if md.pub_status == "completed" else None
         total, source = (math.floor(last), "MangaDex") if last is not None else (None, None)
@@ -112,7 +114,9 @@ def evaluate(
     media: AlMediaInfo,
     md: MdInfo,
     jump_limit: int,
+    site: str = "AniList",
 ) -> DiffItem:
+    """`site` is the sync target named in reasons ("AniList" or "MyAnimeList")."""
     # 1. Parse
     numbers: list[Decimal] = []
     for raw in read_chapters:
@@ -133,7 +137,7 @@ def evaluate(
 
     hints: list[str] = []
     if c.total is not None and md_progress == c.total and not c.known_complete:
-        hints.append(f"at last known chapter, but AniList lists the series as {media.status or 'unknown'}; status unchanged")
+        hints.append(f"at last known chapter, but {media.source} lists the series as {media.status or 'unknown'}; status unchanged")
     if entry is not None and entry.status == "PLANNING" and not complete:
         hints.append("status is Planning; will remain Planning")
 
@@ -149,24 +153,25 @@ def evaluate(
     # 4. Not on the user's list: an "add" row (created only after approval, re-checked before writing)
     if entry is None:
         if media.chapters is not None and md_progress > media.chapters:
-            return item("flag", f"MangaDex {md_progress} exceeds AniList's total of {media.chapters} chapters "
-                        "(not on your list; add it by hand from Not on my list)", "exceeds_total", completing=False)
+            where = "; add it by hand from Unlisted" if site == "AniList" else f"; add it by hand on {site}"
+            return item("flag", f"MangaDex {md_progress} exceeds {media.source}'s total of {media.chapters} chapters "
+                        f"(not on your list{where})", "exceeds_total", completing=False)
         if media.chapters is None and c.total is not None and md_progress > c.total:
             hints.append(f"reads go beyond MangaDex's last chapter {c.total}")
         problems = _implausible(numbers, md, None, md_progress, jump_limit)
         if problems:
             return item("flag", "not on your list; " + "; ".join(problems), "implausible")
-        return item("add", f"not on your AniList list; add as {'Completed' if complete else 'Reading'} at {md_progress}")
+        return item("add", f"not on your {site} list; add as {'Completed' if complete else 'Reading'} at {md_progress}")
 
     # 6. Never lower; status-only completion
     if md_progress <= al:
         if complete and al == md_progress:
             return item("write", "at final chapter; mark completed")
-        return item("skip", "AniList at/ahead", completing=False)
+        return item("skip", f"{site} at/ahead", completing=False)
 
     # 7. Totals
     if media.chapters is not None and md_progress > media.chapters:
-        return item("flag", f"MangaDex {md_progress} exceeds AniList's total of {media.chapters} chapters",
+        return item("flag", f"MangaDex {md_progress} exceeds {media.source}'s total of {media.chapters} chapters",
                     "exceeds_total", completing=False)
     if media.chapters is None and c.total is not None and md_progress > c.total:
         hints.append(f"reads go beyond MangaDex's last chapter {c.total}")
@@ -177,12 +182,12 @@ def evaluate(
         return item("flag", "; ".join(problems), "implausible")
 
     # 9. Write
-    return item("write", f"read to {md_progress} on MangaDex; AniList has {al}")
+    return item("write", f"read to {md_progress} on MangaDex; {site} has {al}")
 
 
-def completion_label(entry_status: str | None, status_source: str | None, total: int | None) -> str:
+def completion_label(entry_status: str | None, status_source: str | None, total: int | None, site: str = "AniList") -> str:
     """e.g. "Reading → Completed (AniList: finished, 120 ch)" for the diff screen."""
-    source = "AniList: finished" if status_source == "AniList" else "AniList: finished, total from MangaDex"
+    source = f"{site}: finished, total from MangaDex" if status_source == "MangaDex" else f"{status_source or site}: finished"
     return f"{_label(entry_status)} → Completed ({source}, {total} ch)"
 
 

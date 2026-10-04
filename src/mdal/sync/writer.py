@@ -60,6 +60,62 @@ def op_for(item: Any) -> WriteOp:
     )
 
 
+def recheck(item: Any, adding: bool, entry: Any, site: str = "AniList") -> dict[str, Any]:
+    """Pre-write re-read for one pending item (shared by both writers). Returns the item fields to update.
+
+    `entry` is the series' list entry as just re-read (None = not on the list). For an add, any entry
+    means the series was listed meanwhile: drop it, since saving would update that entry instead.
+    Anything that would lower progress, or a status-only change that no longer applies, is dropped.
+    """
+    if adding:
+        if entry is None:
+            return {}
+        return {"write_state": "dropped", "verify_note":
+                f"dropped: already on your {site} list now ({entry['status']}, progress {entry['progress']}); not added"}
+    if entry is None:
+        return {"write_state": "dropped", "verify_note": f"dropped: the entry is no longer on your {site} list"}
+    now, status = entry["progress"], entry["status"]
+    fields: dict[str, Any] = {"al_status_before": status, "al_progress": now}
+    completing = sends_completion(item) and status != "COMPLETED"
+    if status == "COMPLETED" and sends_completion(item):
+        fields["status_approved"] = 0  # already completed: nothing to change
+    if is_status_only(item):
+        if status == "COMPLETED":
+            fields.update(write_state="dropped", verify_note=f"dropped: already COMPLETED on {site}")
+        elif now != item["md_progress"]:
+            fields.update(write_state="dropped", verify_note=f"dropped: {site} progress moved to {now}")
+    elif now >= item["md_progress"]:
+        if completing and now == item["md_progress"]:
+            fields["verify_note"] = f"{site} already at {now}; only marking completed"
+        else:
+            fields.update(write_state="dropped", verify_note=f"dropped: {site} is now at {now} (≥ {item['md_progress']})")
+    return fields
+
+
+def verify_note(item: Any, entry: Any, site: str = "AniList") -> tuple[str, bool]:
+    """Compare one written item with its re-read entry. Returns (note, has_problems)."""
+    problems: list[str] = []
+    if entry is None:
+        problems.append("entry missing after write")
+    else:
+        expected_progress = item["al_progress"] if is_status_only(item) else item["md_progress"]
+        if entry["progress"] != expected_progress:
+            problems.append(f"progress is {entry['progress']}, expected {expected_progress}")
+        if item["al_status_before"] is None:  # added by this run
+            expected_status = "COMPLETED" if sends_completion(item) else "CURRENT"
+            if entry["status"] != expected_status:
+                problems.append(f"{site} stored status {entry['status']}, expected {expected_status}")
+        else:
+            expected_status = "COMPLETED" if sends_completion(item) else item["al_status_before"]
+            if entry["status"] != expected_status:
+                problems.append(f"status changed by {site}: {item['al_status_before']}→{entry['status']}")
+    return ("; ".join(problems) if problems else "verified"), bool(problems)
+
+
+def with_note(previous: str | None, note: str) -> str:
+    return f"{previous}; {note}" if previous else note
+
+
 def mutation_document(ops: list[WriteOp]) -> tuple[str, dict[str, Any]]:
     """One aliased SaveMediaListEntry per op. The status is a literal, never a variable."""
     params: list[str] = []
@@ -143,34 +199,10 @@ class Writer:
         entries = {r["entry_id"]: r for r in by_media.values()}
         updates: list[tuple[str, dict[str, Any]]] = []
         for item in pending:
-            if is_add(item):
-                existing = by_media.get(item["al_media_id"])
-                if existing is not None:
-                    # Saving by mediaId would update this entry (and could change its status): never.
-                    updates.append((item["md_id"], {"write_state": "dropped", "verify_note":
-                        f"dropped: already on your AniList list now ({existing['status']}, progress {existing['progress']}); not added"}))
-                continue
-            entry = entries.get(item["al_entry_id"])
-            if entry is None:
-                updates.append((item["md_id"], {"write_state": "dropped", "verify_note": "dropped: the entry is no longer on your AniList list"}))
-                continue
-            now, status = entry["progress"], entry["status"]
-            fields: dict[str, Any] = {"al_status_before": status, "al_progress": now}
-            was_status_only = is_status_only(item)
-            completing = sends_completion(item) and status != "COMPLETED"
-            if status == "COMPLETED" and sends_completion(item):
-                fields["status_approved"] = 0  # already completed on AniList: nothing to change
-            if was_status_only:
-                if status == "COMPLETED":
-                    fields.update(write_state="dropped", verify_note="dropped: already COMPLETED on AniList")
-                elif now != item["md_progress"]:
-                    fields.update(write_state="dropped", verify_note=f"dropped: AniList progress moved to {now}")
-            elif now >= item["md_progress"]:
-                if completing and now == item["md_progress"]:
-                    fields["verify_note"] = f"AniList already at {now}; only marking completed"
-                else:
-                    fields.update(write_state="dropped", verify_note=f"dropped: AniList is now at {now} (≥ {item['md_progress']})")
-            updates.append((item["md_id"], fields))
+            adding = is_add(item)
+            # An add is checked by media id: saving by mediaId would update an existing entry (never).
+            entry = by_media.get(item["al_media_id"]) if adding else entries.get(item["al_entry_id"])
+            updates.append((item["md_id"], recheck(item, adding, entry)))
         self.repo.update_items(run_id, updates)
 
     # ---- steps 2–6: batches ----------------------------------------------
@@ -221,26 +253,9 @@ class Writer:
         notes: list[str] = []
         updates: list[tuple[str, dict[str, Any]]] = []
         for item in done:
-            entry = entries.get(item["al_entry_id"])
-            problems: list[str] = []
-            if entry is None:
-                problems.append("entry missing after write")
-            else:
-                expected_progress = item["al_progress"] if is_status_only(item) else item["md_progress"]
-                if entry["progress"] != expected_progress:
-                    problems.append(f"progress is {entry['progress']}, expected {expected_progress}")
-                if item["al_status_before"] is None:  # added by this run
-                    expected_status = "COMPLETED" if sends_completion(item) else "CURRENT"
-                    if entry["status"] != expected_status:
-                        problems.append(f"AniList stored status {entry['status']}, expected {expected_status}")
-                else:
-                    expected_status = "COMPLETED" if sends_completion(item) else item["al_status_before"]
-                    if entry["status"] != expected_status:
-                        problems.append(f"status changed by AniList: {item['al_status_before']}→{entry['status']}")
-            note = "; ".join(problems) if problems else "verified"
-            if problems:
+            note, problem = verify_note(item, entries.get(item["al_entry_id"]))
+            if problem:
                 notes.append(f"{item['md_id']}: {note}")
-            previous = item["verify_note"]
-            updates.append((item["md_id"], {"verify_note": f"{previous}; {note}" if previous else note}))
+            updates.append((item["md_id"], {"verify_note": with_note(item["verify_note"], note)}))
         self.repo.update_items(run_id, updates)
         return notes

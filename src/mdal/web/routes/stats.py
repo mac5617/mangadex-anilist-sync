@@ -25,6 +25,7 @@ from mdal.stats import (
     runs_with_writes,
     sync_stats,
 )
+from mdal.sync.orchestrator import SITE_NAMES
 from mdal.sync.rules import STATUS_LABELS
 from mdal.web.app import get_services, md_cover_url, render
 
@@ -145,16 +146,18 @@ def stats_entries(request: Request, sort: str = "title", dir: str = "", page: in
 
 
 @router.get("/stats/syncs", response_class=HTMLResponse)
-def stats_syncs(request: Request, run: int | None = None) -> HTMLResponse:
+def stats_syncs(request: Request, run: int | None = None, site: str = "") -> HTMLResponse:
     repo = get_services(request).repo
-    runs = runs_with_writes(repo)
+    target = site if site in SITE_NAMES else None
+    runs = runs_with_writes(repo, target)
     if run is not None and run not in runs:
         run = None
-    s = sync_stats(repo, run)
+    s = sync_stats(repo, run, target)
     for row in s.biggest + s.problems:
         row["cover"] = md_cover_url(row["md_id"], row["cover_file"])
         row["md_url"] = f"https://mangadex.org/title/{row['md_id']}"
     return render(request, "stats_syncs.html", {
-        "s": s, "runs": runs, "selected": run,
+        "s": s, "runs": runs, "selected": run, "site": target or "", "sites": SITE_NAMES,
+        "has_mal": bool(runs_with_writes(repo, "mal")),
         "c": {"per_run": chart(s.per_run), "jumps": chart(s.jumps), "transitions": chart(s.transitions)},
     })

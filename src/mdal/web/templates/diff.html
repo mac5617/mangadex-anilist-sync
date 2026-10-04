@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% block title %}Sync #{{ run.run_id }}{% endblock %}
+{% block title %}Sync #{{ run.run_id }} · {{ site }}{% endblock %}
 {% block content %}
 {% with section = "sync" %}{% include "_subnav.html" %}{% endwith %}
 <div class="page-head">
   <div>
-    <h1>Sync #{{ run.run_id }} <span class="badge state-{{ run.state }}">{{ run.state }}</span></h1>
+    <h1>Sync #{{ run.run_id }} <span class="site-tag">{{ site }}</span> <span class="badge state-{{ run.state }}">{{ run.state }}</span></h1>
     {% if run.phase_detail %}<p class="lede">{{ run.phase_detail }}</p>{% endif %}
   </div>
   <div class="page-actions">
@@ -16,7 +16,7 @@
   </div>
 </div>
 {% if restorable %}
-  <p class="notice warn">This sync was {{ run.error or "discarded" }}. Restoring it makes its rows approvable again. AniList is
+  <p class="notice warn">This sync was {{ run.error or "discarded" }}. Restoring it makes its rows approvable again. {{ site }} is
     re-checked before anything is written, but the MangaDex progress is from {{ run.started_at | when }}.</p>
 {% endif %}
 
@@ -48,7 +48,7 @@
 
   {% if approvable %}
   <div class="actions-bar">
-    <button type="submit" id="approve" formaction="/sync/{{ run.run_id }}/approve" formmethod="post">Write selected to AniList</button>
+    <button type="submit" id="approve" formaction="/sync/{{ run.run_id }}/approve" formmethod="post">Write selected to {{ site }}</button>
     <span class="muted small">Updates and new entries start selected; flagged rows need a tick and an override.</span>
   </div>
   {% elif run.approved_at %}

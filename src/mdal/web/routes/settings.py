@@ -32,6 +32,8 @@ TUNABLES = (
     Tunable("anilist_search_batch", "Title searches per AniList request", int, 1, 10),
     Tunable("anilist_page_size", "AniList ids per lookup page", int, 1, 50, "50 was confirmed live."),
     Tunable("mangadex_rps", "MangaDex requests per second", float, 0.2, 4, "MangaDex allows about 5/s; stay below."),
+    Tunable("mal_rpm", "MyAnimeList requests per minute", int, 1, 60,
+            "MyAnimeList publishes no limit; one request per entry written."),
     Tunable("match_auto", "Auto-accept score", float, 0, 1),
     Tunable("match_review", "Review score", float, 0, 1, "Below this, a series is unmatched."),
     Tunable("match_margin", "Auto-accept margin over the runner-up", float, 0, 0.5),
@@ -40,6 +42,7 @@ TUNABLES = (
 ENV_KEYS = (
     "MANGADEX_USERNAME", "MANGADEX_PASSWORD", "MANGADEX_CLIENT_ID", "MANGADEX_CLIENT_SECRET",
     "ANILIST_CLIENT_ID", "ANILIST_CLIENT_SECRET", "ANILIST_REDIRECT_URI", "ANILIST_ACCESS_TOKEN",
+    "MAL_CLIENT_ID", "MAL_CLIENT_SECRET", "MAL_REDIRECT_URI",
 )
 
 
@@ -66,6 +69,7 @@ def apply_rates(svc: Services) -> None:
     """Live PacedQueues follow the stored budgets immediately."""
     svc.anilist_queue.set_interval(60.0 / svc.repo.get_setting("anilist_rpm"))
     svc.mangadex_queue.set_interval(1.0 / svc.repo.get_setting("mangadex_rps"))
+    svc.mal_queue.set_interval(60.0 / svc.repo.get_setting("mal_rpm"))
 
 
 def _env_status(svc: Services) -> list[tuple[str, bool]]:
@@ -75,6 +79,8 @@ def _env_status(svc: Services) -> list[tuple[str, bool]]:
         "MANGADEX_CLIENT_ID": s.mangadex_client_id, "MANGADEX_CLIENT_SECRET": s.mangadex_client_secret.get_secret_value(),
         "ANILIST_CLIENT_ID": s.anilist_client_id, "ANILIST_CLIENT_SECRET": s.anilist_client_secret.get_secret_value(),
         "ANILIST_REDIRECT_URI": s.anilist_redirect_uri, "ANILIST_ACCESS_TOKEN": s.anilist_access_token.get_secret_value(),
+        "MAL_CLIENT_ID": s.mal_client_id, "MAL_CLIENT_SECRET": s.mal_client_secret.get_secret_value(),
+        "MAL_REDIRECT_URI": s.mal_redirect_uri,
     }
     return [(k, bool(present[k])) for k in ENV_KEYS]
 
@@ -103,6 +109,12 @@ def render_settings(
                  s.mangadex_client_secret.get_secret_value()]
             ),
             "username": s.mangadex_username,
+        },
+        "mal": {
+            "client_configured": bool(s.mal_client_id),
+            "connected": svc.mal.connected,
+            "user_name": svc.repo.get_setting("mal_user_name"),
+            "redirect_uri": s.mal_redirect_uri,
         },
         "tunables": [(t, (form_values or {}).get(t.key, stored[t.key])) for t in TUNABLES],
         "db_path": str(s.db_path),

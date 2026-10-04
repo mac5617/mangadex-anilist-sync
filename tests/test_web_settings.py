@@ -7,7 +7,7 @@ from tests.conftest import FAKE_ENV
 
 VALID = {
     "anilist_rpm": "20", "anilist_write_batch": "10", "anilist_search_batch": "5", "anilist_page_size": "50",
-    "mangadex_rps": "3", "match_auto": "0.92", "match_review": "0.6", "match_margin": "0.05", "jump_limit": "200",
+    "mangadex_rps": "3", "mal_rpm": "30", "match_auto": "0.92", "match_review": "0.6", "match_margin": "0.05", "jump_limit": "200",
 }
 
 

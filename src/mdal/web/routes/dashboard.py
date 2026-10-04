@@ -21,6 +21,8 @@ def dashboard(request: Request) -> HTMLResponse:
             "mangadex": all([s.mangadex_username, s.mangadex_password.get_secret_value(), s.mangadex_client_id,
                              s.mangadex_client_secret.get_secret_value()]),
             "mangadex_user": s.mangadex_username,
+            "mal": svc.mal.connected,
+            "mal_user": svc.repo.get_setting("mal_user_name"),
         },
         **status_context(svc),
         "mismatches": mismatch_count(svc.repo),

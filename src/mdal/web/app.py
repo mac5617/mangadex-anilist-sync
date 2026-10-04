@@ -78,9 +78,10 @@ def create_app(services: Services) -> FastAPI:
         yield
         await services.aclose()
 
-    app = FastAPI(title="MangaDex → AniList sync", version=__version__, docs_url=None, redoc_url=None, lifespan=lifespan)
+    app = FastAPI(title="Shiori", version=__version__, docs_url=None, redoc_url=None, lifespan=lifespan)
     app.state.services = services
     app.state.oauth_states = {}
+    app.state.mal_states = {}
     app.mount("/static", StaticFiles(directory=WEB_DIR / "static"), name="static")
 
     from mdal.web.routes import auth, dashboard, history, notlisted, review, settings, stats, sync

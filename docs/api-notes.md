@@ -117,3 +117,29 @@ Changes in response (`clients/mangadex.py`):
 4. **Server-side side effects of SaveMediaListEntry** (status/date changes) and **activity-feed posts.** Unverified. Detect them in the verify step and raise them before bulk writes.
 5. **Complexity cap unknown.** Mitigated by halve-on-complexity-error, and by a read-only aliased-query test before any write.
 6. **Cover images.** These are loaded by your browser from `uploads.mangadex.org` (a `*.mangadex.org` host). Load them lazily, only on the review screen, with `referrerpolicy="no-referrer"`. Never prefetch them in bulk.
+
+---
+
+## MyAnimeList
+
+Base: `https://api.myanimelist.net/v2`. OAuth host: `https://myanimelist.net/v1/oauth2/`. Read 2026-10-03 from the
+official authorization guide (`myanimelist.net/blog.php?eid=835707`) and the v2 reference as mirrored by the
+`go-myanimelist` client. Nothing here has been tried live yet: the first connect and first sync are the live check.
+
+### Auth
+- Create the client at `myanimelist.net/apiconfig`. App type **web** gets a client secret; **android/iOS/other** get none.
+- Authorization code with **PKCE, `plain` only**: `GET /v1/oauth2/authorize?response_type=code&client_id&state&redirect_uri&code_challenge&code_challenge_method=plain` (challenge = verifier, 43–128 unreserved characters).
+- Token: `POST /v1/oauth2/token`, **form-encoded**: `client_id`, `client_secret` (web apps only), `grant_type=authorization_code`, `code`, `code_verifier`, `redirect_uri`. Response: `token_type`, `expires_in`, `access_token`, `refresh_token`.
+- Access and refresh tokens currently both last **31 days** (the docs also say one hour; always use `expires_in`). Refresh with `grant_type=refresh_token`. Shiori refreshes a day before expiry and once on a 401; the session is kept in the database's settings table and redacted from logs.
+
+### Rate limits
+- **Not documented.** Shiori paces at 30 requests per minute (tunable 1–60), never retries a 429 or 403, and halts the run instead. 5xx and network failures are retried up to 3 times (every write is an absolute PATCH, so a repeat is harmless).
+
+### Endpoints we use
+- `GET /users/@me` → `{id, name, ...}` (shows who is connected).
+- `GET /users/@me/mangalist?fields=list_status,num_chapters,status&limit=1000&offset=N&nsfw=true` → `data[].node {id, title, main_picture, num_chapters, status}` and `data[].list_status {status, is_rereading, num_chapters_read, num_volumes_read, score, updated_at, ...}`; `paging.next` while more remain. 1,000 is the maximum page size.
+- `node.num_chapters` is **0 when unknown**; stored as NULL. Publication `status`: `finished`, `currently_publishing`, `not_yet_published`, `on_hiatus`, `discontinued` (stored as AniList's FINISHED, RELEASING, NOT_YET_RELEASED, HIATUS, CANCELLED).
+- List statuses `reading`, `completed`, `on_hold`, `dropped`, `plan_to_read` are stored as CURRENT, COMPLETED, PAUSED, DROPPED, PLANNING; `is_rereading` becomes REPEATING.
+- `PATCH /manga/{id}/my_list_status`, form-encoded, any of `status`, `is_rereading`, `score`, `num_volumes_read`, `num_chapters_read`, `priority`, `num_times_reread`, `reread_value`, `tags`, `comments`, `start_date`, `finish_date`. **Creates the entry if it is not on the list** (an upsert, like AniList's save-by-`mediaId`), so adds are re-checked against a fresh list read first.
+- **Decision.** Shiori sends only `num_chapters_read`, plus `status=completed` for approved completions or `status=reading` for new entries. Fields left out keep their values.
+- **Unverified.** Whether MyAnimeList rejects or clamps `num_chapters_read` above its own total, and whether it changes status or dates as a side effect. The verify step reports any difference.

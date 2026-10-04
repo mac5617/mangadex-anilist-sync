@@ -19,10 +19,13 @@ from mdal.sync.estimate import estimate
 from mdal.sync.orchestrator import (
     ACTIVE_STATES,
     DISMISSED_PREFIX,
+    SITE_NAMES,
+    TARGETS,
     ApprovalError,
     SyncAlreadyRunning,
     SyncCoolingDown,
     SyncStateError,
+    open_diff,
 )
 from mdal.sync.rules import AlMediaInfo, MdInfo, completion_info, completion_label
 from mdal.web.app import get_services, md_cover_url, render, templates
@@ -30,6 +33,7 @@ from mdal.web.app import get_services, md_cover_url, render, templates
 router = APIRouter()
 
 MANGADEX_TITLE_URL = "https://mangadex.org/title/{}"
+MAL_MANGA_URL = "https://myanimelist.net/manga/{}"
 FILTERS = ("write", "add", "flag", "skip", "all")
 
 
@@ -49,9 +53,13 @@ def status_context(svc: Services, message: str | None = None) -> dict[str, Any]:
     return {
         "cooldown": cooldown_info(svc),
         "run": run,
+        "site": SITE_NAMES[run["target"]] if run else None,
         "active": bool(run and run["state"] in ACTIVE_STATES),
         "status_message": message,
         "resumable": svc.orchestrator.resumable_run(),
+        "open_diffs": [(SITE_NAMES[t], d["run_id"]) for t in TARGETS if (d := open_diff(svc.repo, t))],
+        "mal_connected": svc.mal.connected,
+        "md_fresh": svc.orchestrator.md_snapshot_fresh(),
     }
 
 
@@ -63,11 +71,12 @@ def _status_fragment(request: Request, message: str | None = None, status_code: 
 
 @router.post("/sync", response_class=HTMLResponse)
 async def start_sync(request: Request) -> HTMLResponse:
+    target = str((await request.form()).get("target") or "anilist")
     try:
-        await get_services(request).orchestrator.start_run()
+        await get_services(request).orchestrator.start_run(target)
     except SyncAlreadyRunning:
         return _status_fragment(request, "A sync is already running.", status_code=409)
-    except SyncCoolingDown as exc:
+    except (SyncCoolingDown, SyncStateError) as exc:
         return _status_fragment(request, str(exc), status_code=409)
     return _status_fragment(request)
 
@@ -86,8 +95,9 @@ class DiffRow:
     md_title: str
     md_url: str
     cover: str | None
-    al_title: str | None
+    al_title: str | None   # the series on the run's site (AniList or MyAnimeList)
     al_url: str | None
+    site: str
     al_progress: int | None
     md_progress: int | None
     action: str
@@ -107,13 +117,19 @@ def diff_rows(repo: Repo, run_id: int) -> list[DiffRow]:
     """Writes and adds are pre-selected; flagged rows wait for an explicit tick (and override)."""
     rows = []
     for r in repo.diff_rows(run_id):
+        site = SITE_NAMES[r["target"]]
+        if r["target"] == "mal":
+            title = r["mal_title"] or r["romaji"] or r["english"] or r["native"]
+            url = MAL_MANGA_URL.format(r["mal_id"]) if r["mal_id"] else None
+        else:
+            title, url = r["romaji"] or r["english"] or r["native"], r["site_url"]
         status_label = None
         is_new = r["al_entry_id"] is None and r["action"] in ("add", "flag")
         if r["set_status"] == "COMPLETED":
             total = completion_info(
                 AlMediaInfo(r["al_chapters"], r["al_media_status"]), MdInfo(r["pub_status"], r["last_chapter"])
             ).total
-            status_label = completion_label(r["al_status"], r["status_source"], total)
+            status_label = completion_label(r["al_status"], r["status_source"], total, site)
             if is_new:
                 status_label = "New entry → " + status_label.split(" → ", 1)[1] + "; untick to add as Reading"
         elif is_new:
@@ -124,8 +140,9 @@ def diff_rows(repo: Repo, run_id: int) -> list[DiffRow]:
             md_title=r["md_title"] or r["md_id"],
             md_url=MANGADEX_TITLE_URL.format(r["md_id"]),
             cover=md_cover_url(r["md_id"], r["cover_file"]),
-            al_title=r["romaji"] or r["english"] or r["native"],
-            al_url=r["site_url"],
+            al_title=title,
+            al_url=url,
+            site=site,
             al_progress=r["al_progress"],
             md_progress=r["md_progress"],
             action=r["action"],
@@ -149,9 +166,11 @@ class Estimate:
     to_complete: int
     requests: int
     seconds: int
+    site: str = "AniList"
 
 
-def compute_estimate(repo: Repo, rows: list[DiffRow], selected: Iterable[str], completing: Iterable[str]) -> Estimate:
+def compute_estimate(repo: Repo, rows: list[DiffRow], selected: Iterable[str], completing: Iterable[str],
+                     target: str = "anilist") -> Estimate:
     """Pure DB/maths: the write-phase cost of the current selection."""
     chosen, marks = set(selected), set(completing)
     n = to_complete = 0
@@ -163,13 +182,16 @@ def compute_estimate(repo: Repo, rows: list[DiffRow], selected: Iterable[str], c
             continue  # nothing left to send
         n += 1
         to_complete += completes
-    req, sec = estimate(n, repo.get_setting("anilist_write_batch"), repo.get_setting("anilist_rpm"))
-    return Estimate(n, to_complete, req, sec)
+    if target == "mal":  # one request per entry
+        req, sec = estimate(n, 1, repo.get_setting("mal_rpm"))
+    else:
+        req, sec = estimate(n, repo.get_setting("anilist_write_batch"), repo.get_setting("anilist_rpm"))
+    return Estimate(n, to_complete, req, sec, SITE_NAMES[target])
 
 
-def default_estimate(repo: Repo, rows: list[DiffRow]) -> Estimate:
+def default_estimate(repo: Repo, rows: list[DiffRow], target: str = "anilist") -> Estimate:
     return compute_estimate(
-        repo, rows, [r.md_id for r in rows if r.checked], [r.md_id for r in rows if r.complete_checked]
+        repo, rows, [r.md_id for r in rows if r.checked], [r.md_id for r in rows if r.complete_checked], target
     )
 
 
@@ -199,7 +221,8 @@ def _diff_page(request: Request, run_id: int, f: str = "write", error: str | Non
     run = _run_or_404(repo, run_id)
     rows = diff_rows(repo, run_id)
     return render(request, "diff.html", {
-        "run": run, "rows": rows, "counts": _counts(rows), "est": default_estimate(repo, rows),
+        "run": run, "rows": rows, "counts": _counts(rows), "est": default_estimate(repo, rows, run["target"]),
+        "site": SITE_NAMES[run["target"]],
         "filter": f if f in FILTERS else "write",
         "approvable": run["state"] == "diffed",
         "restorable": svc.orchestrator.can_restore(run_id),
@@ -292,9 +315,9 @@ async def resume(request: Request, run_id: int) -> HTMLResponse:
 @router.post("/sync/{run_id}/estimate", response_class=HTMLResponse)
 async def diff_estimate(request: Request, run_id: int) -> HTMLResponse:
     repo = get_services(request).repo
-    _run_or_404(repo, run_id)
+    run = _run_or_404(repo, run_id)
     form = await request.form()
-    est = compute_estimate(repo, diff_rows(repo, run_id), form.getlist("sel"), form.getlist("mc"))
+    est = compute_estimate(repo, diff_rows(repo, run_id), form.getlist("sel"), form.getlist("mc"), run["target"])
     return templates.TemplateResponse(request, "_estimate.html", {"est": est})
 
 

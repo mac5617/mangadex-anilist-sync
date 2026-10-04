@@ -56,3 +56,21 @@ def test_pure_modules_do_no_io():
     assert present, "at least matching/normalize.py and matching/score.py exist from story 10"
     offenders = [str(p.relative_to(ROOT)) for p in present if IMPURE_IMPORT.search(p.read_text(encoding="utf-8"))]
     assert offenders == []
+
+
+def test_mal_writes_only_from_mal_writer():
+    """`update_list_status` is the client's one write; only sync/mal_writer.py may call it."""
+    allowed = {SRC / "sync" / "mal_writer.py", SRC / "clients" / "myanimelist.py"}
+    offenders = [
+        str(p.relative_to(ROOT))
+        for p in python_files()
+        if p not in allowed and re.search(r"update_list_status|my_list_status|\"PATCH\"", p.read_text(encoding="utf-8"))
+    ]
+    assert offenders == []
+
+
+def test_mal_writer_status_literals():
+    text = (SRC / "sync" / "mal_writer.py").read_text(encoding="utf-8")
+    # "completed" for approved completions; "reading" only for brand-new entries.
+    sent = set(re.findall(r'status\s*=\s*"(\w+)"', text))
+    assert sent == {"reading", "completed"}

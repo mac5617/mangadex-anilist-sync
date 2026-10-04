@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 {% import "_macros.html" as ui %}
-{% block title %}Sync #{{ run.run_id }} results{% endblock %}
+{% block title %}Sync #{{ run.run_id }} results · {{ site }}{% endblock %}
 {% block content %}
 {% with section = "sync" %}{% include "_subnav.html" %}{% endwith %}
 <div class="page-head">
   <div>
-    <h1>Sync #{{ run.run_id }} <span class="badge state-{{ run.state }}">{{ run.state }}</span></h1>
+    <h1>Sync #{{ run.run_id }} <span class="site-tag">{{ site }}</span> <span class="badge state-{{ run.state }}">{{ run.state }}</span></h1>
     <p class="lede">Started {{ run.started_at | when }}{% if run.finished_at %} · finished {{ run.finished_at | when }}{% endif %}{% if duration %} · {{ duration }}{% endif %}
-      · requests: AniList {{ run.req_anilist }}, MangaDex {{ run.req_mangadex }}</p>
+      · requests: {% if run.target == "mal" %}MyAnimeList {{ run.req_mal }}, {% endif %}AniList {{ run.req_anilist }}, MangaDex {{ run.req_mangadex }}</p>
   </div>
   <div class="page-actions">
     {% if run.state == "diffed" %}<a class="button" href="/sync/{{ run.run_id }}">Changes in sync #{{ run.run_id }}</a>{% endif %}
@@ -24,7 +24,7 @@
   <tbody>
   {% for r, item in rows %}
     <tr class="r-{{ r.action }} w-{{ item.write_state }}">
-      <td>{{ ui.series(r.md_title, r.md_url, r.cover, r.al_title, r.al_url) }}</td>
+      <td>{{ ui.series(r.md_title, r.md_url, r.cover, r.al_title, r.al_url, site=r.site) }}</td>
       <td class="num">{% if r.md_progress is not none %}{{ r.al_progress if r.al_progress is not none else "new" }} → {{ r.md_progress }}{% else %}—{% endif %}
         {% if r.unresolved %}<span class="sub">{{ r.unresolved }} unresolved</span>{% endif %}</td>
       <td><span class="badge a-{{ r.action }}">{{ change_labels.get(r.flag_kind or r.action, r.action) }}</span></td>

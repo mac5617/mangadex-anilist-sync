@@ -31,6 +31,10 @@ SETTING_DEFAULTS: dict[str, Any] = {
     # Cached from AniList `Viewer` when connecting (story 06); not user-editable.
     "anilist_user_id": None,
     "anilist_user_name": None,
+    # MyAnimeList: request pacing (user-editable), the saved login (tokens: never render it) and the user name.
+    "mal_rpm": 30,
+    "mal_session": None,
+    "mal_user_name": None,
 }
 
 
@@ -228,10 +232,10 @@ class Repo:
         return {r["md_id"]: r for r in self.conn.execute("SELECT * FROM dismissed_flag")}
 
     # ---- sync runs ------------------------------------------------------
-    def create_run(self, state: str = "fetching") -> int:
+    def create_run(self, state: str = "fetching", target: str = "anilist") -> int:
         with self.conn:
             cur = self.conn.execute(
-                "INSERT INTO sync_run(started_at, state) VALUES (?, ?)", (now_iso(), state)
+                "INSERT INTO sync_run(started_at, state, target) VALUES (?, ?, ?)", (now_iso(), state, target)
             )
         return int(cur.lastrowid)
 
@@ -245,7 +249,7 @@ class Repo:
             )
 
     def add_request(self, run_id: int, api: str, n: int = 1) -> None:
-        column = {"anilist": "req_anilist", "mangadex": "req_mangadex"}[api]
+        column = {"anilist": "req_anilist", "mangadex": "req_mangadex", "mal": "req_mal"}[api]
         with self.conn:
             self.conn.execute(f"UPDATE sync_run SET {column}={column}+? WHERE run_id=?", (n, run_id))
 
@@ -262,8 +266,10 @@ class Repo:
             for row in rows:
                 _upsert(self.conn, "sync_item", row, ["run_id", "md_id"])
 
-    def latest_run(self) -> sqlite3.Row | None:
-        return self.conn.execute("SELECT * FROM sync_run ORDER BY run_id DESC LIMIT 1").fetchone()
+    def latest_run(self, target: str | None = None) -> sqlite3.Row | None:
+        if target is None:
+            return self.conn.execute("SELECT * FROM sync_run ORDER BY run_id DESC LIMIT 1").fetchone()
+        return self.conn.execute("SELECT * FROM sync_run WHERE target=? ORDER BY run_id DESC LIMIT 1", (target,)).fetchone()
 
     def runs(self, limit: int = 50) -> list[sqlite3.Row]:
         return self.conn.execute("SELECT * FROM sync_run ORDER BY run_id DESC LIMIT ?", (limit,)).fetchall()
@@ -277,15 +283,26 @@ class Repo:
         return counts
 
     def diff_rows(self, run_id: int) -> list[sqlite3.Row]:
-        """Items with display data: MangaDex title, AniList title/link/total, current AniList status."""
+        """Items with display data: MangaDex title, target title/link/total, current status on the target.
+
+        For MyAnimeList runs the list entry, its total and its publication status come from mal_entry,
+        falling back to the AniList match's total while the series is not on the MAL list.
+        """
         return self.conn.execute(
-            "SELECT i.*, m.title AS md_title, m.pub_status, m.last_chapter, m.cover_file, "
-            "a.romaji, a.english, a.native, a.site_url, a.chapters AS al_chapters, a.status AS al_media_status, "
-            "e.status AS al_status "
+            "SELECT i.*, r.target, m.title AS md_title, m.pub_status, m.last_chapter, m.cover_file, "
+            "a.romaji, a.english, a.native, a.site_url, "
+            "CASE WHEN r.target='mal' THEN COALESCE(me.chapters, CASE WHEN me.mal_id IS NULL THEN a.chapters END) "
+            "     ELSE a.chapters END AS al_chapters, "
+            "CASE WHEN r.target='mal' THEN COALESCE(me.media_status, CASE WHEN me.mal_id IS NULL THEN a.status END) "
+            "     ELSE a.status END AS al_media_status, "
+            "CASE WHEN r.target='mal' THEN me.status ELSE e.status END AS al_status, "
+            "me.title AS mal_title "
             "FROM sync_item i "
+            "JOIN sync_run r ON r.run_id = i.run_id "
             "LEFT JOIN md_manga m ON m.md_id = i.md_id "
             "LEFT JOIN al_media a ON a.media_id = i.al_media_id "
-            "LEFT JOIN al_entry e ON e.entry_id = i.al_entry_id "
+            "LEFT JOIN al_entry e ON e.entry_id = i.al_entry_id AND r.target='anilist' "
+            "LEFT JOIN mal_entry me ON me.mal_id = i.mal_id AND r.target='mal' "
             "WHERE i.run_id=? ORDER BY COALESCE(m.title, i.md_id) COLLATE NOCASE",
             (run_id,),
         ).fetchall()
@@ -301,6 +318,17 @@ class Repo:
             "WHERE p.state IN ('auto','confirmed') AND p.al_media_id IS NOT NULL "
             "AND p.al_media_id NOT IN (SELECT media_id FROM al_entry) ORDER BY m.title COLLATE NOCASE"
         ).fetchall()
+
+    # ---- MyAnimeList ------------------------------------------------------
+    def replace_mal_entries(self, rows: list[dict[str, Any]]) -> None:
+        with self.conn:
+            self.conn.execute("DELETE FROM mal_entry")
+            for row in rows:
+                _upsert(self.conn, "mal_entry", row, ["mal_id"])
+
+    def mal_entries(self) -> dict[int, sqlite3.Row]:
+        """mal_id -> entry."""
+        return {r["mal_id"]: r for r in self.conn.execute("SELECT * FROM mal_entry")}
 
     def items_in_state(self, run_id: int, write_state: str) -> list[sqlite3.Row]:
         return self.conn.execute(

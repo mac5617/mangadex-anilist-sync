@@ -337,3 +337,6 @@ a.heat-cell:hover { text-decoration: none; filter: brightness(1.1); }
 table.env { width: auto; min-width: 26rem; }
 td.md-col { white-space: nowrap; }
 table.env { align-self: flex-start; }
+.site-tag { display: inline-block; padding: .02rem .45rem; border: 1px solid var(--line-strong); border-radius: 3px;
+  font-size: .78rem; font-weight: 600; color: var(--muted); vertical-align: middle; white-space: nowrap; }
+h1 .site-tag, h1 .badge { font-size: .8rem; }

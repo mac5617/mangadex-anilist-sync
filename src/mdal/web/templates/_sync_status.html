@@ -1,13 +1,15 @@
 <div id="sync-status" class="stack"{% if active %} hx-get="/sync/status" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
   {% if status_message %}<p class="notice err" role="alert">{{ status_message }}</p>{% endif %}
   {% if run %}
-    <p class="row"><strong>Sync #{{ run.run_id }}</strong> <span class="badge state-{{ run.state }}">{{ run.state }}</span>
+    <p class="row"><strong>Sync #{{ run.run_id }}</strong> <span class="site-tag">{{ site }}</span>
+      <span class="badge state-{{ run.state }}">{{ run.state }}</span>
       <span class="muted small">{{ run.started_at | when }}</span></p>
     {% if run.phase_detail %}<p>{{ run.phase_detail }}</p>{% endif %}
     {% if run.error %}<p class="notice err">{{ run.error }}</p>{% endif %}
-    <p class="muted small">Requests: AniList {{ run.req_anilist }}, MangaDex {{ run.req_mangadex }}</p>
+    <p class="muted small">Requests: {% if run.target == "mal" %}MyAnimeList {{ run.req_mal }}{% if run.req_anilist %}, AniList {{ run.req_anilist }}{% endif %}{% else %}AniList {{ run.req_anilist }}{% endif %}, MangaDex {{ run.req_mangadex }}</p>
   {% else %}
-    <p class="muted">No syncs yet. A sync reads both sites and lists the changes; nothing is written to AniList until you approve them.</p>
+    <p class="muted">No syncs yet. A sync reads your MangaDex library and one of your lists, then shows what would change.
+      Nothing is written until you approve it.</p>
   {% endif %}
   {% if cooldown and not active %}
     <p class="notice warn">MangaDex is paused until {{ cooldown.until }} (about {{ cooldown.minutes }} min){% if cooldown.reason %}
@@ -17,12 +19,20 @@
     <p class="notice warn">Sync #{{ resumable }} stopped while writing. Resuming sends only the rows not yet written.</p>
   {% endif %}
   <div class="row">
-    {% if run and run.state == "diffed" %}<a class="button" href="/sync/{{ run.run_id }}">Changes in sync #{{ run.run_id }}</a>{% endif %}
+    {% for site_name, diff_id in open_diffs %}
+      <a class="button" href="/sync/{{ diff_id }}">{{ site_name }} changes (sync #{{ diff_id }})</a>
+    {% endfor %}
     {% if resumable and not active %}
       <button hx-post="/sync/{{ resumable }}/resume" hx-target="#sync-status" hx-swap="outerHTML">Resume</button>
     {% endif %}
-    {% if not active and not cooldown %}
-      <button class="{{ 'secondary' if run and run.state == 'diffed' else '' }}" hx-post="/sync" hx-target="#sync-status" hx-swap="outerHTML">Start sync</button>
+    {% if not active %}
+      {% set style = "secondary" if open_diffs else "" %}
+      {% if not cooldown %}
+        <button class="{{ style }}" hx-post="/sync" hx-vals='{"target": "anilist"}' hx-target="#sync-status" hx-swap="outerHTML">Sync AniList</button>
+      {% endif %}
+      {% if mal_connected and (not cooldown or md_fresh) %}
+        <button class="{{ style }}" hx-post="/sync" hx-vals='{"target": "mal"}' hx-target="#sync-status" hx-swap="outerHTML">Sync MyAnimeList</button>
+      {% endif %}
     {% endif %}
   </div>
 </div>

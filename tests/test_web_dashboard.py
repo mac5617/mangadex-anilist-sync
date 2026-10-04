@@ -42,7 +42,7 @@ def test_dashboard_with_active_run_polls(client, services, mock):
 def test_dashboard_with_diffed_run(client, services, mock):
     run_id = seed_diffed_run(services.repo)
     html = client.get("/").text
-    assert f'href="/sync/{run_id}"' in html and f"Changes in sync #{run_id}" in html
+    assert f'href="/sync/{run_id}"' in html and f"AniList changes (sync #{run_id})" in html
     assert 'hx-trigger="every 2s"' not in html
     assert len(mock.calls) == 0
 
@@ -81,7 +81,7 @@ def test_post_sync_starts_run_and_returns_fragment(client, services, mock):
 
 
 def test_second_post_while_running(client, services, monkeypatch):
-    async def busy():
+    async def busy(target="anilist"):
         raise SyncAlreadyRunning("busy")
 
     monkeypatch.setattr(services.orchestrator, "start_run", busy)

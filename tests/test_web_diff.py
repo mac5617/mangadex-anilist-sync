@@ -175,7 +175,7 @@ def test_rows_show_mangadex_cover(client, run_id):
 
 def test_page_chrome(client, run_id):
     html = client.get(f"/sync/{run_id}").text
-    assert f"<title>Sync #{run_id} · Shiori</title>" in html
+    assert f"<title>Sync #{run_id} · AniList · Shiori</title>" in html
     assert '<a href="/sync/latest" aria-current="page">Sync</a>' in html
     assert 'id="theme-toggle"' in html and 'localStorage.getItem("theme")' in html
     assert "prefers-color-scheme: dark" in client.get("/static/app.css").text

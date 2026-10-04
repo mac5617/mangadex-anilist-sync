@@ -370,6 +370,7 @@ class SyncStats:
     runs_with_writes: int = 0
     requests_anilist: int = 0
     requests_mangadex: int = 0
+    requests_mal: int = 0
     per_run: list[Bar] = field(default_factory=list)
     jumps: list[Bar] = field(default_factory=list)
     transitions: list[Bar] = field(default_factory=list)
@@ -381,12 +382,23 @@ def _is_problem(note: str | None) -> bool:
     return bool(note) and note != "verified" and not note.endswith("; verified")
 
 
-def sync_stats(repo: Repo, run_id: int | None = None) -> SyncStats:
-    where, args = ("AND i.run_id=?", (run_id,)) if run_id is not None else ("", ())
+def sync_stats(repo: Repo, run_id: int | None = None, target: str | None = None) -> SyncStats:
+    """Everything written by syncs; one run, or one site ("anilist" / "mal"), or all."""
+    clauses, params = [], []
+    if run_id is not None:
+        clauses.append("r.run_id=?")
+        params.append(run_id)
+    if target is not None:
+        clauses.append("r.target=?")
+        params.append(target)
+    run_where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    item_where = "".join(f" AND {c}" for c in clauses)
+    args = tuple(params)
     items = repo.conn.execute(
         "SELECT i.*, m.title AS md_title, m.cover_file, a.romaji, a.english, a.site_url "
-        "FROM sync_item i LEFT JOIN md_manga m ON m.md_id = i.md_id LEFT JOIN al_media a ON a.media_id = i.al_media_id "
-        f"WHERE i.write_state != 'none' {where} ORDER BY i.run_id, i.md_id",
+        "FROM sync_item i JOIN sync_run r ON r.run_id = i.run_id "
+        "LEFT JOIN md_manga m ON m.md_id = i.md_id LEFT JOIN al_media a ON a.media_id = i.al_media_id "
+        f"WHERE i.write_state != 'none'{item_where} ORDER BY i.run_id, i.md_id",
         args,
     ).fetchall()
     s = SyncStats(run_id)
@@ -433,21 +445,21 @@ def sync_stats(repo: Repo, run_id: int | None = None) -> SyncStats:
     s.jumps = [Bar(label, jumps.get(label, 0), f"{jumps.get(label, 0):,} entries moved {label} chapters")
                for _, _, label in JUMP_BUCKETS] if jumps else []
     s.transitions = [Bar(k, v, f"{v:,} entries: {k} → Completed") for k, v in transitions.most_common()]
-    runs = repo.conn.execute(
-        "SELECT run_id, req_anilist, req_mangadex FROM sync_run" + (" WHERE run_id=?" if run_id is not None else ""),
-        args,
-    ).fetchall()
+    runs = repo.conn.execute("SELECT run_id, req_anilist, req_mangadex, req_mal FROM sync_run r" + run_where, args).fetchall()
     s.requests_anilist = sum(r["req_anilist"] for r in runs)
     s.requests_mangadex = sum(r["req_mangadex"] for r in runs)
+    s.requests_mal = sum(r["req_mal"] for r in runs)
     written_runs = sorted({i["run_id"] for i in items if i["write_state"] == "done"})
     s.runs_with_writes = len(written_runs)
     s.per_run = [Bar(f"#{r}", per_run.get(r, 0), f"sync #{r}: {per_run.get(r, 0):,} chapters") for r in written_runs]
     return s
 
 
-def runs_with_writes(repo: Repo) -> list[int]:
+def runs_with_writes(repo: Repo, target: str | None = None) -> list[int]:
     return [r[0] for r in repo.conn.execute(
-        "SELECT DISTINCT run_id FROM sync_item WHERE write_state != 'none' ORDER BY run_id DESC")]
+        "SELECT DISTINCT i.run_id FROM sync_item i JOIN sync_run r ON r.run_id = i.run_id "
+        "WHERE i.write_state != 'none'" + (" AND r.target=?" if target else "") + " ORDER BY i.run_id DESC",
+        (target,) if target else ())]
 
 
 def nice_max(value: float) -> float:

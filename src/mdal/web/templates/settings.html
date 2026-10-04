@@ -3,7 +3,7 @@
 {% block content %}
 <div class="page-head"><h1>Settings</h1></div>
 
-<div class="grid two">
+<div class="grid three">
 <section class="panel stack" id="anilist">
   <h2>AniList</h2>
   {% if not anilist.client_configured %}
@@ -44,6 +44,23 @@
   {% else %}
     <p>Set <code>MANGADEX_USERNAME</code>, <code>MANGADEX_PASSWORD</code>, <code>MANGADEX_CLIENT_ID</code> and
        <code>MANGADEX_CLIENT_SECRET</code> in <code>.env</code>, then restart.</p>
+  {% endif %}
+</section>
+
+<section class="panel stack" id="myanimelist">
+  <h2>MyAnimeList</h2>
+  {% if not mal.client_configured %}
+    <p>Create an API client at <a href="https://myanimelist.net/apiconfig" target="_blank" rel="noopener noreferrer">myanimelist.net/apiconfig</a>
+       with the redirect URL <code>{{ mal.redirect_uri }}</code>. Put its id in <code>MAL_CLIENT_ID</code>
+       (and its secret, if it has one, in <code>MAL_CLIENT_SECRET</code>) in <code>.env</code>, then restart.</p>
+  {% elif mal.connected %}
+    <p><span class="badge ok">connected</span>{% if mal.user_name %} as <strong>{{ mal.user_name }}</strong>{% endif %}</p>
+    <p class="muted">The sign-in renews itself; reconnect if MyAnimeList starts rejecting it.</p>
+    <form method="post" action="/auth/mal/disconnect"><button class="secondary">Disconnect</button></form>
+  {% else %}
+    <p><span class="badge err">not connected</span></p>
+    <p><a class="button" href="/auth/mal/start">Connect MyAnimeList</a></p>
+    <p class="muted">The redirect URL registered on MyAnimeList must be <code>{{ mal.redirect_uri }}</code>.</p>
   {% endif %}
 </section>
 </div>

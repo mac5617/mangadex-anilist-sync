@@ -373,3 +373,67 @@ def seed_diffed_run(repo, *, evil_title: str = "<script>alert(1)</script> Evil")
     ])
     repo.update_run(run_id, phase_detail="6 series", est_requests=3, est_seconds=9)
     return run_id
+
+
+# ---- MyAnimeList -------------------------------------------------------------
+
+@dataclass
+class FakeMal:
+    """Answers api.myanimelist.net v2 list reads and my_list_status PATCHes from memory."""
+    catalogue: dict[int, dict] = field(default_factory=dict)   # mal_id -> {title, num_chapters, status}
+    entries: dict[int, dict] = field(default_factory=dict)     # mal_id -> list_status
+    patches: list[tuple[int, dict]] = field(default_factory=list)
+    routes: dict[str, respx.Route] = field(default_factory=dict)
+    fail_ids: dict[int, int] = field(default_factory=dict)     # mal_id -> HTTP status to answer a PATCH with
+
+    def add(self, mal_id: int, title: str, chapters: int = 0, status: str = "currently_publishing") -> None:
+        self.catalogue[mal_id] = {"title": title, "num_chapters": chapters, "status": status}
+
+    def listed(self, mal_id: int, status: str, read: int, rereading: bool = False) -> None:
+        self.entries[mal_id] = {"status": status, "num_chapters_read": read, "is_rereading": rereading,
+                                "num_volumes_read": 0, "score": 0, "updated_at": "2026-10-01T00:00:00+00:00"}
+
+    def _list(self, request: httpx.Request) -> httpx.Response:
+        params = request.url.params
+        limit, offset = int(params.get("limit", 10)), int(params.get("offset", 0))
+        ids = sorted(self.entries)
+        page = ids[offset:offset + limit]
+        data = [{"node": {"id": i, "title": self.catalogue.get(i, {}).get("title", f"MAL {i}"),
+                          "main_picture": {"medium": f"https://cdn.example/{i}.jpg"},
+                          "num_chapters": self.catalogue.get(i, {}).get("num_chapters", 0),
+                          "status": self.catalogue.get(i, {}).get("status", "currently_publishing")},
+                 "list_status": dict(self.entries[i])} for i in page]
+        paging = {"next": "https://api.myanimelist.net/v2/next"} if offset + limit < len(ids) else {}
+        return httpx.Response(200, json={"data": data, "paging": paging})
+
+    def _patch(self, request: httpx.Request, mal_id: str) -> httpx.Response:
+        mal_id = int(mal_id)
+        form = dict(httpx.QueryParams(request.content.decode()))
+        self.patches.append((mal_id, form))
+        if mal_id in self.fail_ids:
+            return httpx.Response(self.fail_ids[mal_id], json={"error": "invalid_content", "message": "bad value"})
+        entry = self.entries.setdefault(mal_id, {"status": "plan_to_read", "num_chapters_read": 0, "is_rereading": False,
+                                                 "num_volumes_read": 0, "score": 0, "updated_at": None})
+        if "status" in form:
+            entry["status"] = form["status"]
+        if "num_chapters_read" in form:
+            entry["num_chapters_read"] = int(form["num_chapters_read"])
+        return httpx.Response(200, json=entry)
+
+    def install(self, router: respx.MockRouter) -> "FakeMal":
+        from mdal.clients.myanimelist import API_URL as MAL_API, TOKEN_URL as MAL_TOKEN
+        self.routes["token"] = router.post(MAL_TOKEN).respond(
+            200, json={"token_type": "Bearer", "expires_in": 2678400,
+                       "access_token": "mal-access-2222", "refresh_token": "mal-refresh-2222"})
+        self.routes["me"] = router.get(f"{MAL_API}/users/@me").respond(200, json={"id": 7, "name": "MalReader"})
+        self.routes["list"] = router.get(f"{MAL_API}/users/@me/mangalist").mock(side_effect=self._list)
+        self.routes["patch"] = router.patch(url__regex=rf"{re.escape(MAL_API)}/manga/(?P<mal_id>\d+)/my_list_status").mock(
+            side_effect=self._patch)
+        return self
+
+
+def connect_mal(services, expires_in: float = 2678400) -> None:
+    """Pretend the user connected MyAnimeList."""
+    import time as _time
+    services.mal_store.save_session({"access": "mal-access-1111", "refresh": "mal-refresh-1111",
+                                     "expires_at": _time.time() + expires_in})

@@ -1,14 +1,16 @@
 # Shiori
 
-Shiori keeps your AniList manga list in step with what you read on MangaDex. It runs on your own computer,
-reads both sites, and lists every change it would make. Nothing is written to AniList until you approve it.
+Shiori keeps your AniList and MyAnimeList manga lists in step with what you read on MangaDex. It runs on your
+own computer, reads MangaDex and one list at a time, and lists every change it would make. Nothing is written
+until you approve it.
 
 ## Key features
 
 - **Local only.** Runs at `http://127.0.0.1:8765` and can't be reached from other devices.
+- **AniList and MyAnimeList.** Each sync targets one site; both use the same rules, review screen and history.
 - **Conservative progress rules.** Progress only ever goes up. The only status Shiori sets is **Completed**,
-  and only when AniList lists the series as finished and you've read its final chapter.
-- **New entries on request.** Matched series that aren't on your AniList list appear as new entries
+  and only when the site lists the series as finished and you've read its final chapter.
+- **New entries on request.** Matched series that aren't on your list appear as new entries
   (Reading, or Completed when finished). Your list is re-read right before writing, so an entry that
   already exists is never added again or changed.
 - **Careful with both APIs.** Requests are paced below each site's limit. After any sign of a MangaDex block
@@ -74,6 +76,14 @@ AniList applications can't be deleted, so avoid creating spares. If AniList reje
 register `https://anilist.co/api/v2/oauth/pin` instead and set `ANILIST_REDIRECT_URI` to the same value;
 Settings then shows a box to paste the token AniList gives you.
 
+**MyAnimeList API client** (optional; only for syncing to MyAnimeList)
+
+1. Sign in at [myanimelist.net](https://myanimelist.net) and open [myanimelist.net/apiconfig](https://myanimelist.net/apiconfig) → **Create ID**.
+2. Choose app type **web** (it gets a client secret) or **other** (no secret), and set the App Redirect URL to
+   `http://127.0.0.1:8765/auth/mal/callback`.
+3. Fill in the required name, description and homepage fields (for a personal tool, your profile URL is fine),
+   then note the client id and, for a web app, the client secret.
+
 ### 2. Fill in `.env`
 
 ```powershell
@@ -88,20 +98,23 @@ notepad .env
 | `ANILIST_CLIENT_ID`, `ANILIST_CLIENT_SECRET` | From the AniList application |
 | `ANILIST_REDIRECT_URI` | Exactly the redirect URL you registered |
 | `ANILIST_ACCESS_TOKEN` | Leave empty; Shiori fills it in when you connect |
+| `MAL_CLIENT_ID`, `MAL_CLIENT_SECRET` | Optional: from the MyAnimeList API client (leave the secret empty for app type **other**) |
+| `MAL_REDIRECT_URI` | Optional: default `http://127.0.0.1:8765/auth/mal/callback`; must match the registered URL |
 | `MDAL_DB_PATH` | Optional: full path for the database file |
-| `MDAL_PORT` | Optional: default `8765` (change the AniList redirect URL to match) |
+| `MDAL_PORT` | Optional: default `8765` (change the redirect URLs to match) |
 
 `.env` is git-ignored. Never commit or share it; if a secret leaks, regenerate it on the site and update `.env`.
 
-### 3. Start Shiori and connect AniList
+### 3. Start Shiori and connect your lists
 
 ```powershell
 uv run mdal
 ```
 
 Open [http://127.0.0.1:8765](http://127.0.0.1:8765), go to **Settings** and choose **Connect AniList**. AniList asks
-you to approve, then sends you back with the token saved. Tokens last a year. **Check login** under MangaDex
-confirms your MangaDex credentials with one request. Stop Shiori with `Ctrl+C`.
+you to approve, then sends you back with the token saved. Tokens last a year. For MyAnimeList, choose
+**Connect MyAnimeList** the same way; its sign-in lasts about a month and renews itself while Shiori is used.
+**Check login** under MangaDex confirms your MangaDex credentials with one request. Stop Shiori with `Ctrl+C`.
 
 ### 4. Optional: the read-only live check
 
@@ -120,14 +133,14 @@ The header has four sections:
 
 | Section | Pages |
 |---|---|
-| **Home** | Latest sync, open items, accounts |
-| **Sync** | **Changes** for the latest sync, and **History** of every sync and single add |
+| **Home** | Latest sync, open items, accounts, and a start button per site |
+| **Sync** | **Changes** for the latest sync, and **History** of every sync and single add, for both sites |
 | **Matches** | **To review** (uncertain or missing matches) and **Unlisted** (matched series not on your AniList list) |
-| **Stats** | **Library** (your AniList list) and **Activity** (what syncs have written) |
+| **Stats** | **Library** (your AniList list) and **Activity** (what syncs have written, per site or both) |
 
 ### First sync
 
-1. **Home → Start sync.** Shiori reads your MangaDex library and read markers, your AniList list, and matches
+1. **Home → Sync AniList.** Shiori reads your MangaDex library and read markers, your AniList list, and matches
    series. The first sync is the slowest: every read chapter is looked up once (about 100 per request at
    3 requests a second, so around 2 minutes for 500 series). Later syncs only look up new chapters.
 2. **Matches → To review.** Pick the right AniList entry, paste an AniList URL or id, or mark the series as not
@@ -146,6 +159,23 @@ The header has four sections:
    against AniList afterwards, are under **Sync → History**.
 
 A discarded sync can be brought back with **Restore** from its page or from History.
+
+### Syncing to MyAnimeList
+
+**Home → Sync MyAnimeList** follows the same steps against your MyAnimeList list, and its changes are approved
+on the same kind of page (**Write selected to MyAnimeList**). The two sites are independent: an AniList diff
+waiting for approval stays open while you run a MyAnimeList sync, and the other way round.
+
+- **Which MyAnimeList entry.** Shiori uses the MyAnimeList id that AniList stores for the matched series, and
+  MangaDex's own MyAnimeList link for series without an AniList match. Series whose AniList match is waiting
+  for review wait here too, and a series whose two ids disagree is skipped. With AniList connected, new
+  series are matched first, so most of your library links without any extra MyAnimeList requests.
+- **Totals.** For series on your MyAnimeList list, the chapter total and finished status come from
+  MyAnimeList. For new entries they come from AniList until the series is on your list.
+- **What is sent.** One request per entry: the chapters read, plus `completed` for approved completions or
+  `reading` for new entries. Score, dates, volumes and other statuses are never touched.
+- **MangaDex reuse.** A MyAnimeList sync started within 10 minutes of the last MangaDex read uses that read
+  instead of asking MangaDex again, so syncing both sites back to back costs MangaDex nothing extra.
 
 **Matches → Unlisted** lists the same not-yet-listed series one at a time, for adding with a status and progress
 of your choice. Each add re-checks your AniList list first.
@@ -175,6 +205,7 @@ for newly added series.
 | AniList entries per write request | 10 | Halved automatically if AniList rejects a batch as too complex; **Reset write batch size to 10** restores it. |
 | Title searches per AniList request | 5 | |
 | AniList ids per lookup page | 50 | AniList's maximum. |
+| MyAnimeList requests per minute | 30 | MyAnimeList publishes no limit. One request per entry written, so 300 entries take about 10 minutes. |
 | Auto-accept score / review score / margin | 0.92 / 0.60 / 0.05 | A lower auto-accept score accepts more matches without review, including wrong ones. |
 | Largest believable jump in chapters | 200 | Bigger jumps over an existing AniList value are flagged. |
 
@@ -190,6 +221,9 @@ Rate changes apply immediately, even during a sync; the others apply from the ne
 | AniList 429 | Handled automatically: AniList requests pause for as long as AniList asks (or 60 s). After 3 retries on one request the sync halts; try again later. |
 | "AniList rejected the token: reconnect AniList" | The token expired (they last a year) or was revoked. **Settings → Disconnect**, then **Connect AniList**. |
 | "Client authentication failed" when connecting | `ANILIST_CLIENT_ID` and `ANILIST_CLIENT_SECRET` don't match. Copy both again from AniList → Settings → Developer, and check the redirect URL matches exactly. |
+| Sync halted: "MyAnimeList answered 429" or "refused the request (403)" | MyAnimeList is limiting requests or down for maintenance. Nothing more is sent; wait a few minutes, then **Resume**. Lower MyAnimeList requests per minute if it repeats. |
+| "MyAnimeList sign-in expired; reconnect MyAnimeList" | The sign-in wasn't renewed within about a month. **Settings → MyAnimeList → Connect MyAnimeList** again. |
+| MyAnimeList connect fails or returns to Settings with an error | Check `MAL_CLIENT_ID` (and `MAL_CLIENT_SECRET` for a web app) and that the App Redirect URL matches `MAL_REDIRECT_URI` exactly. |
 | "MangaDex refused the login (403)" | The personal API client is still pending approval, or the credentials are wrong. |
 | Home shows **Resume** | A write stopped part-way (Shiori closed, crashed or halted). Resume re-reads AniList and sends only the rows not yet written. |
 | A series' progress looks too low | Some read chapters were deleted on MangaDex, so their numbers can't be recovered; the row shows "N unresolved". AniList progress is never lowered. |
@@ -199,12 +233,13 @@ Rate changes apply immediately, even during a sync; the others apply from the ne
 ## How it works
 
 1. **Fetch.** Reads the MangaDex library, read markers and chapter numbers (cached for good), and the AniList
-   list in one request.
+   list in one request (or the MyAnimeList list, 1,000 entries per request).
 2. **Match.** Uses MangaDex's AniList and MyAnimeList links first, then scored title searches; anything
    uncertain goes to review.
 3. **Diff.** Applies the progress rules to each series and lists the changes.
-4. **Approve and write.** Re-reads AniList, drops anything that would lower progress or touch an entry that
-   appeared meanwhile, writes in batches, then checks each row against AniList.
+4. **Approve and write.** Re-reads the list, drops anything that would lower progress or touch an entry that
+   appeared meanwhile, writes (in batches on AniList, one entry per request on MyAnimeList), then checks each
+   row against the site.
 
 ## Project structure
 
@@ -214,13 +249,13 @@ mangadex-anilist-sync/
 │   ├── main.py                  # entry point (`uv run mdal`), binds to 127.0.0.1
 │   ├── config.py, logsetup.py   # settings from .env; logging with secret redaction
 │   ├── db/                      # SQLite connection, repository, migrations/
-│   ├── clients/                 # rate-limited AniList and MangaDex clients, OAuth, request pacing
-│   ├── fetch/                   # MangaDex library and AniList list, lookups, searches, staff
+│   ├── clients/                 # rate-limited AniList, MangaDex and MyAnimeList clients, OAuth, pacing
+│   ├── fetch/                   # MangaDex library, AniList and MyAnimeList lists, lookups, searches, staff
 │   ├── matching/                # title normalisation, scoring, matching pipeline
-│   ├── sync/                    # progress rules, sync state machine, writer, single adds, estimates
+│   ├── sync/                    # progress rules, sync state machine, writers, single adds, estimates
 │   ├── stats.py                 # numbers for the stats pages (database reads only)
 │   └── web/                     # FastAPI app, routes/, templates/, static/
-├── tests/                       # 33 test modules plus factories and fakes
+├── tests/                       # 34 test modules plus factories and fakes
 ├── docs/                        # brief, PRD, architecture, API notes, stories/
 ├── scripts/live_check.py        # read-only API probe
 ├── pyproject.toml, uv.lock
@@ -236,9 +271,10 @@ uv run pytest tests/test_orchestrator.py -v     # one file
 ```
 
 Migrations in `src/mdal/db/migrations/` run on startup. Only `src/mdal/sync/writer.py` and
-`src/mdal/sync/add_entry.py` may contain AniList mutations; a test enforces it. Design notes and the build
+`src/mdal/sync/add_entry.py` may contain AniList mutations, and only `src/mdal/sync/mal_writer.py` may write to
+MyAnimeList; tests enforce both. Design notes and the build
 stories are in `docs/`.
 
 ## License
 
-For personal use. Respect the MangaDex and AniList terms of service.
+For personal use. Respect the MangaDex, AniList and MyAnimeList terms of service.

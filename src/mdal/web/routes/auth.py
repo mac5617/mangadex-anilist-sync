@@ -13,6 +13,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from mdal.clients.anilist import AniListAuthError, AniListError
 from mdal.clients.anilist_oauth import AniListOAuthError
 from mdal.clients.mangadex import MangaDexAuthError, MangaDexError
+from mdal.clients.myanimelist import MalAuthError, MalError
 from mdal.fetch.anilist_list import viewer
 from mdal.web.app import get_services
 from mdal.web.routes.settings import render_settings
@@ -91,3 +92,55 @@ async def mangadex_check(request: Request) -> HTMLResponse:
     except MangaDexError as exc:
         return render_settings(request, error=f"MangaDex check failed: {exc}", status_code=502)
     return render_settings(request, message="MangaDex login works.")
+
+
+# ---- MyAnimeList ------------------------------------------------------------
+
+
+def _mal_states(request: Request) -> dict[str, tuple[float, str]]:
+    """state -> (expiry, PKCE verifier). The verifier never leaves the server except in the token request."""
+    states: dict[str, tuple[float, str]] = request.app.state.mal_states
+    now = time.monotonic()
+    for key in [k for k, (expiry, _) in states.items() if expiry < now]:
+        del states[key]
+    return states
+
+
+@router.get("/auth/mal/start")
+def mal_start(request: Request) -> Response:
+    svc = get_services(request)
+    if not svc.settings.mal_client_id:
+        return render_settings(request, error="MAL_CLIENT_ID is not set in .env.", status_code=400)
+    state = secrets.token_urlsafe(24)
+    verifier = secrets.token_urlsafe(96)[:128]  # 43-128 unreserved characters; MAL only supports "plain"
+    _mal_states(request)[state] = (time.monotonic() + STATE_TTL, verifier)
+    return RedirectResponse(svc.mal.authorize_url(state, verifier), status_code=303)
+
+
+@router.get("/auth/mal/callback", response_class=HTMLResponse)
+async def mal_callback(request: Request, code: str = "", state: str = "", error: str = "") -> HTMLResponse:
+    pending = _mal_states(request).pop(state, None) if state else None
+    if error:
+        return render_settings(request, error="MyAnimeList sign-in was cancelled or refused.", status_code=400)
+    if pending is None or not code:
+        return render_settings(request, error="The MyAnimeList sign-in link expired or was not started here. Try Connect again.",
+                               status_code=400)
+    svc = get_services(request)
+    try:
+        await svc.mal.exchange_code(code, pending[1])
+        user = await svc.mal.me()
+    except MalAuthError as exc:
+        svc.mal.disconnect()
+        return render_settings(request, error=f"{exc}. Nothing was saved.", status_code=400)
+    except MalError as exc:
+        log.warning("MyAnimeList connected but the user could not be read: %s", exc)
+        return render_settings(request, error=f"Connected, but MyAnimeList could not be reached to confirm it: {exc}",
+                               status_code=502)
+    svc.repo.set_setting("mal_user_name", user.get("name"))
+    return render_settings(request, message=f"Connected to MyAnimeList as {user.get('name')}.")
+
+
+@router.post("/auth/mal/disconnect", response_class=HTMLResponse)
+def mal_disconnect(request: Request) -> HTMLResponse:
+    get_services(request).mal.disconnect()
+    return render_settings(request, message="MyAnimeList disconnected. The saved sign-in was removed.")

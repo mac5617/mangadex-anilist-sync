@@ -37,6 +37,11 @@ class Settings(BaseSettings):
     anilist_redirect_uri: str = "http://127.0.0.1:8765/auth/anilist/callback"
     anilist_access_token: SecretStr = SecretStr("")
 
+    # MyAnimeList API client (myanimelist.net/apiconfig). App type "web" has a secret; "other" has none.
+    mal_client_id: str = ""
+    mal_client_secret: SecretStr = SecretStr("")
+    mal_redirect_uri: str = "http://127.0.0.1:8765/auth/mal/callback"
+
     mdal_db_path: Path | None = None
     mdal_port: int = 8765
 
@@ -56,6 +61,7 @@ class Settings(BaseSettings):
             self.mangadex_client_secret.get_secret_value(),
             self.anilist_client_secret.get_secret_value(),
             self.anilist_access_token.get_secret_value(),
+            self.mal_client_secret.get_secret_value(),
         ]
         return [v for v in values if v]
 

@@ -7,11 +7,17 @@
 <div class="page-head">
   <div>
     <h1>Activity</h1>
-    <p class="lede">What syncs have written to AniList.</p>
+    <p class="lede">What syncs have written to {{ sites[site] if site else ("AniList and MyAnimeList" if has_mal else "AniList") }}.</p>
   </div>
 </div>
 
 <form method="get" action="/stats/syncs" class="filter-row">
+  <label>Site
+    <select name="site" onchange="this.form.run.value='';this.form.submit()">
+      <option value="">All</option>
+      {% for key, name in sites.items() %}<option value="{{ key }}"{% if site == key %} selected{% endif %}>{{ name }}</option>{% endfor %}
+    </select>
+  </label>
   <label>Sync
     <select id="run-select" name="run" onchange="this.form.submit()">
       <option value="">All</option>
@@ -33,8 +39,9 @@
   {{ charts.figure((s.failed + s.dropped + s.needs_look) | num, "Problems",
                    "%s failed · %s dropped · %s notes" | format(s.failed, s.dropped, s.needs_look),
                    None, "warn" if (s.failed + s.dropped + s.needs_look) else None) }}
-  {{ charts.figure((s.requests_anilist + s.requests_mangadex) | num, "API requests",
-                   "AniList %s · MangaDex %s" | format(s.requests_anilist | num, s.requests_mangadex | num)) }}
+  {{ charts.figure((s.requests_anilist + s.requests_mangadex + s.requests_mal) | num, "API requests",
+                   ("AniList %s · MyAnimeList %s · MangaDex %s" | format(s.requests_anilist | num, s.requests_mal | num, s.requests_mangadex | num))
+                   if s.requests_mal else ("AniList %s · MangaDex %s" | format(s.requests_anilist | num, s.requests_mangadex | num))) }}
 </div>
 
 <div class="grid {{ 'three' if not selected else 'two' }}">

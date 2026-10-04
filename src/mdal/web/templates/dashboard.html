@@ -29,6 +29,9 @@
       <dt>AniList</dt>
       <dd>{% if auth.anilist %}<span class="badge ok">connected</span>{% if auth.anilist_user %} as {{ auth.anilist_user }}{% endif %}
         {% else %}<span class="badge err">not connected</span> · <a href="/settings#anilist">AniList settings</a>{% endif %}</dd>
+      <dt>MyAnimeList</dt>
+      <dd>{% if auth.mal %}<span class="badge ok">connected</span>{% if auth.mal_user %} as {{ auth.mal_user }}{% endif %}
+        {% else %}<span class="badge">not connected</span> · <a href="/settings#myanimelist">MyAnimeList settings</a>{% endif %}</dd>
       <dt>MangaDex</dt>
       <dd>{% if auth.mangadex %}<span class="badge ok">configured</span> for {{ auth.mangadex_user }}
         {% else %}<span class="badge err">missing credentials</span> · <a href="/settings#mangadex">MangaDex settings</a>{% endif %}</dd>
