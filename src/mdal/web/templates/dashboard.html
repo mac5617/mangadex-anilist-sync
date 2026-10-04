@@ -1,40 +1,38 @@
 {% extends "base.html" %}
-{% block title %}Dashboard{% endblock %}
+{% block title %}Home{% endblock %}
 {% block content %}
 <div class="page-head">
-  <div>
-    <h1>Dashboard</h1>
-    <p class="lede">Sync reads both services and shows you a diff. Nothing is written to AniList until you approve it.</p>
-  </div>
+  <h1>Home</h1>
 </div>
 
-<div class="stats">
-  <a class="stat{% if nav.review %} tone-warn{% endif %}" href="/review">
-    <span class="stat-value">{{ nav.review }}</span><span class="stat-label">series to review</span></a>
-  <a class="stat{% if nav.not_on_list %} tone-info{% endif %}" href="/not-listed">
-    <span class="stat-value">{{ nav.not_on_list }}</span><span class="stat-label">matched, not on your list</span></a>
-  {% if run %}
-  <a class="stat" href="/history/{{ run.run_id }}">
-    <span class="stat-value">#{{ run.run_id }}</span><span class="stat-label">last sync · {{ run.state }}</span></a>
-  {% endif %}
-</div>
+<section class="block">
+  <div class="block-head"><h2>Latest sync</h2>{% if run %}<a class="small" href="/history">Sync history</a>{% endif %}</div>
+  <div class="panel">{% include "_sync_status.html" %}</div>
+</section>
 
-<div class="grid two">
-  <section class="panel">
-    <h2>Sync</h2>
-    {% include "_sync_status.html" %}
-  </section>
+<section class="block">
+  <h2>Open items</h2>
+  <ul class="items">
+    <li><span class="item-label">Matches to review</span>
+      {% if nav.review %}<a href="/review">{{ nav.review | num }} series</a>{% else %}<span class="muted">None</span>{% endif %}</li>
+    <li><span class="item-label">Matched series missing from your AniList list</span>
+      {% if nav.not_on_list %}<a href="/not-listed">{{ nav.not_on_list | num }} series</a>{% else %}<span class="muted">None</span>{% endif %}</li>
+    <li><span class="item-label">Different status on MangaDex and AniList</span>
+      {% if mismatches %}<a href="/stats/entries?mismatch=1">{{ mismatches | num }} series</a>{% else %}<span class="muted">None</span>{% endif %}</li>
+  </ul>
+</section>
 
-  <section class="panel">
-    <h2>Accounts</h2>
+<section class="block">
+  <h2>Accounts</h2>
+  <div class="panel">
     <dl class="facts">
       <dt>AniList</dt>
       <dd>{% if auth.anilist %}<span class="badge ok">connected</span>{% if auth.anilist_user %} as {{ auth.anilist_user }}{% endif %}
-        {% else %}<span class="badge err">not connected</span> · <a href="/settings#anilist">Connect</a>{% endif %}</dd>
+        {% else %}<span class="badge err">not connected</span> · <a href="/settings#anilist">AniList settings</a>{% endif %}</dd>
       <dt>MangaDex</dt>
       <dd>{% if auth.mangadex %}<span class="badge ok">configured</span> for {{ auth.mangadex_user }}
-        {% else %}<span class="badge err">missing credentials</span> · <a href="/settings#mangadex">Details</a>{% endif %}</dd>
+        {% else %}<span class="badge err">missing credentials</span> · <a href="/settings#mangadex">MangaDex settings</a>{% endif %}</dd>
     </dl>
-  </section>
-</div>
+  </div>
+</section>
 {% endblock %}

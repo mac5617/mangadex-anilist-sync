@@ -1,7 +1,7 @@
-<div class="stats" id="diff-stats"{% if oob %} hx-swap-oob="true"{% endif %}>
-  <div class="stat tone-ok"><span class="stat-value">{{ counts.write }}</span><span class="stat-label">to write</span></div>
-  <div class="stat tone-info"><span class="stat-value">{{ counts.add }}</span><span class="stat-label">to add</span></div>
-  <div class="stat{% if counts.flag %} tone-err{% endif %}"><span class="stat-value">{{ counts.flag }}</span><span class="stat-label">flagged</span></div>
-  <div class="stat"><span class="stat-value">{{ counts.skip }}</span><span class="stat-label">skipped</span></div>
-  {% if counts.complete %}<div class="stat tone-ok"><span class="stat-value">{{ counts.complete }}</span><span class="stat-label">to mark completed</span></div>{% endif %}
+<div class="figures" id="diff-stats"{% if oob %} hx-swap-oob="true"{% endif %}>
+  <div class="figure"><span class="figure-value">{{ counts.write | num }}</span><span class="figure-label">Updates</span></div>
+  <div class="figure"><span class="figure-value">{{ counts.add | num }}</span><span class="figure-label">New entries</span></div>
+  <div class="figure{% if counts.flag %} tone-warn{% endif %}"><span class="figure-value">{{ counts.flag | num }}</span><span class="figure-label">Flagged</span></div>
+  <div class="figure"><span class="figure-value">{{ counts.skip | num }}</span><span class="figure-label">Skipped</span></div>
+  <div class="figure"><span class="figure-value">{{ counts.complete | num }}</span><span class="figure-label">Completions</span></div>
 </div>

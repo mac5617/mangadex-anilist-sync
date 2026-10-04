@@ -212,7 +212,7 @@ def test_dashboard_shows_cooldown_and_hides_start(services):
     services.mangadex_guard.start_cooldown(time.time() + 1800, "MangaDex dropped the connection (RemoteProtocolError)")
     with TestClient(create_app(services)) as c:
         html = c.get("/").text
-        assert "MangaDex cooldown: syncing is paused until" in html and 'hx-post="/sync"' not in html
+        assert "MangaDex is paused until" in html and 'hx-post="/sync"' not in html
         response = c.post("/sync")
         assert response.status_code == 409 and "cooldown" in response.text
         settings = c.get("/settings").text

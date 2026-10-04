@@ -358,9 +358,9 @@ def seed_diffed_run(repo, *, evil_title: str = "<script>alert(1)</script> Evil")
     base = {"run_id": run_id}
     repo.replace_items(run_id, [
         {**base, "md_id": "w", "al_media_id": 1, "al_entry_id": 101, "al_progress": 5, "md_progress": 12,
-         "action": "write", "reason": "MangaDex 12 > AniList 5", "unresolved_reads": 2},
+         "action": "write", "reason": "read to 12 on MangaDex; AniList has 5", "unresolved_reads": 2},
         {**base, "md_id": "c", "al_media_id": 2, "al_entry_id": 102, "al_progress": 110, "md_progress": 120,
-         "action": "write", "reason": "MangaDex 120 > AniList 110", "set_status": "COMPLETED",
+         "action": "write", "reason": "read to 120 on MangaDex; AniList has 110", "set_status": "COMPLETED",
          "status_source": "AniList", "status_approved": 1},
         {**base, "md_id": "s", "al_media_id": 3, "al_entry_id": 103, "al_progress": 50, "md_progress": 50,
          "action": "write", "reason": "at final chapter; mark completed", "set_status": "COMPLETED",

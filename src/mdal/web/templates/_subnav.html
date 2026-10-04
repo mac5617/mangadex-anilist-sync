@@ -1,0 +1,14 @@
+{#- Second-level tabs for the grouped sections. Include with `section` set to "sync", "matches" or "stats". -#}
+{%- set path = request.url.path if request else "" -%}
+<nav class="subnav" aria-label="{{ section | capitalize }}">
+{%- if section == "sync" %}
+  <a href="/sync/latest"{% if path.startswith("/sync") %} aria-current="page"{% endif %}>Changes</a>
+  <a href="/history"{% if path.startswith("/history") %} aria-current="page"{% endif %}>History</a>
+{%- elif section == "matches" %}
+  <a href="/review"{% if path.startswith("/review") %} aria-current="page"{% endif %}>To review{% if nav %}<span class="count">{{ nav.review }}</span>{% endif %}</a>
+  <a href="/not-listed"{% if path.startswith("/not-listed") %} aria-current="page"{% endif %}>Unlisted{% if nav %}<span class="count">{{ nav.not_on_list }}</span>{% endif %}</a>
+{%- elif section == "stats" %}
+  <a href="/stats"{% if path == "/stats" or path.startswith("/stats/entries") %} aria-current="page"{% endif %}>Library</a>
+  <a href="/stats/syncs"{% if path.startswith("/stats/syncs") %} aria-current="page"{% endif %}>Activity</a>
+{%- endif %}
+</nav>

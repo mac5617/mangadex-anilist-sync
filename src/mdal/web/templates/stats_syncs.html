@@ -3,92 +3,99 @@
 {% import "_macros.html" as ui %}
 {% block title %}Sync activity{% endblock %}
 {% block content %}
+{% with section = "stats" %}{% include "_subnav.html" %}{% endwith %}
 <div class="page-head">
   <div>
-    <h1>Stats</h1>
-    <p class="lede">What syncs have written to AniList: updates, new entries, chapters and completions.</p>
+    <h1>Activity</h1>
+    <p class="lede">What syncs have written to AniList.</p>
   </div>
 </div>
-{% with active = "syncs" %}{% include "_stats_tabs.html" %}{% endwith %}
 
 <form method="get" action="/stats/syncs" class="filter-row">
-  <label for="run-select">Showing</label>
-  <select id="run-select" name="run" onchange="this.form.submit()">
-    <option value="">All syncs</option>
-    {% for r in runs %}<option value="{{ r }}"{% if selected == r %} selected{% endif %}>Sync #{{ r }}</option>{% endfor %}
-  </select>
+  <label>Sync
+    <select id="run-select" name="run" onchange="this.form.submit()">
+      <option value="">All</option>
+      {% for r in runs %}<option value="{{ r }}"{% if selected == r %} selected{% endif %}>#{{ r }}</option>{% endfor %}
+    </select>
+  </label>
   <noscript><button class="secondary">Show</button></noscript>
-  {% if selected %}<a href="/history/{{ selected }}">Open sync #{{ selected }}</a>{% endif %}
+  {% if selected %}<a href="/history/{{ selected }}">Sync #{{ selected }} results</a>{% endif %}
 </form>
 
 {% if not runs %}
-  <div class="panel empty">Nothing has been written yet. Approve a sync and its results show up here.</div>
+  <div class="panel empty">Nothing has been written yet. Approved syncs appear here.</div>
 {% else %}
-<div class="stats">
-  {{ charts.tile(s.chapters | num, "chapters added to AniList") }}
-  {{ charts.tile(s.updated | num, "entries updated") }}
-  {{ charts.tile(s.added | num, "entries added") }}
-  {{ charts.tile(s.completed | num, "marked completed") }}
-  {{ charts.tile((s.failed + s.dropped + s.needs_look) | num, "need a look",
-                 "%s failed · %s dropped · %s verify notes" | format(s.failed, s.dropped, s.needs_look)) }}
-  {{ charts.tile((s.requests_anilist + s.requests_mangadex) | num, "API requests",
-                 "AniList %s · MangaDex %s" | format(s.requests_anilist | num, s.requests_mangadex | num)) }}
+<div class="figures">
+  {{ charts.figure(s.chapters | num, "Chapters added") }}
+  {{ charts.figure(s.updated | num, "Entries updated") }}
+  {{ charts.figure(s.added | num, "Entries added") }}
+  {{ charts.figure(s.completed | num, "Completions") }}
+  {{ charts.figure((s.failed + s.dropped + s.needs_look) | num, "Problems",
+                   "%s failed · %s dropped · %s notes" | format(s.failed, s.dropped, s.needs_look),
+                   None, "warn" if (s.failed + s.dropped + s.needs_look) else None) }}
+  {{ charts.figure((s.requests_anilist + s.requests_mangadex) | num, "API requests",
+                   "AniList %s · MangaDex %s" | format(s.requests_anilist | num, s.requests_mangadex | num)) }}
 </div>
 
-<div class="grid two">
+<div class="grid {{ 'three' if not selected else 'two' }}">
   {% if not selected %}
   <section class="panel chart-panel">
-    <h2>Chapters added per sync</h2>
+    <h2>Chapters per sync</h2>
+    <p class="chart-sub">Chapters added to AniList by each sync</p>
     {{ charts.columns(c.per_run, "Sync", "Chapters") }}
   </section>
   {% endif %}
   <section class="panel chart-panel">
-    <h2>Size of each update</h2>
+    <h2>Update size</h2>
     <p class="chart-sub">Entries by how many chapters they moved forward</p>
     {{ charts.hbars(c.jumps, "Chapters", "Entries", empty="No progress written yet.") }}
   </section>
   <section class="panel chart-panel">
     <h2>Completions</h2>
-    <p class="chart-sub">Entries set to Completed, by their status before (“New entry” = added as Completed)</p>
-    {{ charts.hbars(c.transitions, "Change", "Entries", empty="No completions written yet.") }}
+    <p class="chart-sub">Entries set to Completed, by their status before; new entries were added as Completed</p>
+    {{ charts.hbars(c.transitions, "Before", "Entries", empty="No completions written yet.") }}
   </section>
 </div>
 
-<h2 class="section-title">Biggest updates</h2>
-<div class="table-wrap">
-<table class="data">
-  <thead><tr><th>Series</th><th class="num">Progress</th><th class="num">Chapters</th><th>Sync</th></tr></thead>
-  <tbody>
-  {% for g in s.biggest %}
-    <tr>
-      <td>{{ ui.series(g.title, g.md_url, g.cover, g.al_title, g.al_url) }}</td>
-      <td class="num">{{ g.before if g.before is not none else "new" }} → {{ g.after }}{% if g.completed %}<span class="sub">→ Completed</span>{% endif %}</td>
-      <td class="num"><strong>+{{ g.gain | num }}</strong></td>
-      <td><a href="/history/{{ g.run_id }}">#{{ g.run_id }}</a></td>
-    </tr>
-  {% else %}
-    <tr><td colspan="4" class="empty">Nothing written yet.</td></tr>
-  {% endfor %}
-  </tbody>
-</table>
-</div>
+<section class="block">
+  <h2>Largest updates</h2>
+  <div class="table-wrap">
+  <table class="data">
+    <thead><tr><th>Series</th><th class="num">Progress</th><th class="num">Chapters</th><th>Sync</th></tr></thead>
+    <tbody>
+    {% for g in s.biggest %}
+      <tr>
+        <td>{{ ui.series(g.title, g.md_url, g.cover, g.al_title, g.al_url) }}</td>
+        <td class="num">{{ g.before if g.before is not none else "new" }} → {{ g.after }}{% if g.completed %}<span class="sub">→ Completed</span>{% endif %}</td>
+        <td class="num"><strong>+{{ g.gain | num }}</strong></td>
+        <td><a href="/history/{{ g.run_id }}">#{{ g.run_id }}</a></td>
+      </tr>
+    {% else %}
+      <tr><td colspan="4" class="empty">Nothing written yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
 
 {% if s.problems %}
-<h2 class="section-title">Need a look ({{ s.problems | length }})</h2>
-<div class="table-wrap">
-<table class="data">
-  <thead><tr><th>Series</th><th>Note</th><th>Sync</th></tr></thead>
-  <tbody>
-  {% for p in s.problems %}
-    <tr>
-      <td>{{ ui.series(p.title, p.md_url, p.cover) }}</td>
-      <td class="reason">{{ p.note }}</td>
-      <td><a href="/history/{{ p.run_id }}">#{{ p.run_id }}</a></td>
-    </tr>
-  {% endfor %}
-  </tbody>
-</table>
-</div>
+<section class="block">
+  <h2>Problems ({{ s.problems | length }})</h2>
+  <div class="table-wrap">
+  <table class="data">
+    <thead><tr><th>Series</th><th>Note</th><th>Sync</th></tr></thead>
+    <tbody>
+    {% for p in s.problems %}
+      <tr>
+        <td>{{ ui.series(p.title, p.md_url, p.cover) }}</td>
+        <td class="reason">{{ p.note }}</td>
+        <td><a href="/history/{{ p.run_id }}">#{{ p.run_id }}</a></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
 {% endif %}
 {% endif %}
 <script src="/static/charts.js" defer></script>

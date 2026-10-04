@@ -21,7 +21,7 @@ from mdal.clients.mangadex import (
     MangaDexUnreachable,
 )
 from mdal.db.repo import Repo, now_iso
-from mdal.fetch.anilist_list import fetch_list, viewer
+from mdal.fetch.anilist_list import fetch_list, fetch_staff, viewer
 from mdal.fetch.mangadex_library import fetch_library
 from mdal.matching.pipeline import AniListFetch, resolve_all
 from mdal.sync.estimate import estimate
@@ -47,6 +47,7 @@ MAPPING_SKIPS = {
 
 
 DISMISSED_PREFIX = "dismissed by you: "
+STAFF_REQUESTS_PER_SYNC = 20  # 25 series each; about 1 minute of AniList pacing
 
 
 class SyncAlreadyRunning(Exception):
@@ -391,6 +392,9 @@ class SyncOrchestrator:
         md = await fetch_library(s.mangadex, repo, lambda msg: self._phase(run_id, detail=msg))
         self._phase(run_id, detail="reading your AniList list")
         al = await fetch_list(s.anilist, repo, await self.user_id())
+
+        # Staff for the stats page: a few lookups per sync until every list entry has it (cached for good).
+        await fetch_staff(s.anilist, repo, STAFF_REQUESTS_PER_SYNC, lambda msg: self._phase(run_id, detail=msg))
 
         self._phase(run_id, "resolving", f"matching {md.series} series")
         match = await resolve_all(repo, AniListFetch(s.anilist, repo))

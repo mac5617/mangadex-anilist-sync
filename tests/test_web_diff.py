@@ -34,8 +34,8 @@ def row(html: str, md_id: str) -> str:
 
 def test_diff_page_summary_and_estimate(client, run_id, mock):
     html = client.get(f"/sync/{run_id}").text
-    stats = {label: value for value, label in re.findall(r'<span class="stat-value">(\d+)</span><span class="stat-label">([^<]+)</span>', html)}
-    assert stats == {"to write": "3", "to add": "0", "flagged": "2", "skipped": "1", "to mark completed": "2"}
+    stats = {label: value for value, label in re.findall(r'<span class="figure-value">(\d+)</span><span class="figure-label">([^<]+)</span>', html)}
+    assert stats == {"Updates": "3", "New entries": "0", "Flagged": "2", "Skipped": "1", "Completions": "2"}
     # Default selection: the 3 writes (status-only counts because its completion is checked).
     assert "3 selected, 2 to mark completed" in html
     assert "≈ 3 AniList requests, ≈ 9 s" in html
@@ -79,9 +79,10 @@ def test_approve_button_enabled_for_diffed_run(client, run_id):
 
 
 def test_approve_button_disabled_for_other_states(client, services, run_id):
-    services.repo.update_run(run_id, state="done")
+    services.repo.update_run(run_id, state="done", approved_at="2026-10-03T00:00:00+00:00")
     html = client.get(f"/sync/{run_id}").text
-    assert '<button type="button" id="approve" disabled>' in html
+    assert 'id="approve"' not in html and 'name="sel"' not in html and 'id="estimate"' not in html
+    assert f'href="/history/{run_id}">Sync #{run_id} results</a>' in html
 
 
 def test_writes_and_adds_preselected_flags_not(client, services, run_id):
@@ -154,7 +155,7 @@ def test_add_rows(client, services, run_id):
                       "md_progress": 120, "action": "add", "reason": "add as Completed", "set_status": "COMPLETED",
                       "status_source": "AniList", "status_approved": 1})
     html = client.get(f"/sync/{run_id}?f=add").text
-    assert "To add (2)" in html
+    assert "New entries (2)" in html
     a = row(html, "w2")
     assert "new → 7" in a and "New entry: Reading" in a
     assert re.search(r'name="sel" value="w2"[^>]*checked', a)
@@ -174,7 +175,7 @@ def test_rows_show_mangadex_cover(client, run_id):
 
 def test_page_chrome(client, run_id):
     html = client.get(f"/sync/{run_id}").text
-    assert f"<title>Sync #{run_id} · MangaDex → AniList</title>" in html
+    assert f"<title>Sync #{run_id} · Shiori</title>" in html
     assert '<a href="/sync/latest" aria-current="page">Sync</a>' in html
     assert 'id="theme-toggle"' in html and 'localStorage.getItem("theme")' in html
     assert "prefers-color-scheme: dark" in client.get("/static/app.css").text

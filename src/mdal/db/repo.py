@@ -110,13 +110,18 @@ class Repo:
 
     # ---- AniList ----------------------------------------------------------
     def upsert_media(self, rows: list[dict[str, Any]]) -> None:
-        """Rows with `staff=None` (queries that did not ask for staff) keep the cached staff list."""
+        """Columns a query did not ask for (`staff`, `tags` = None) keep their cached values."""
         with self.conn:
             for row in rows:
-                if row.get("staff") is None:
-                    _upsert(self.conn, "al_media", {**row, "staff": "[]"}, ["media_id"], preserve=["staff"])
-                else:
-                    _upsert(self.conn, "al_media", row, ["media_id"])
+                keep = [c for c in ("staff", "tags") if c in row and row[c] is None]
+                if "staff" in keep:
+                    row = {**row, "staff": "[]"}  # NOT NULL column: insert placeholder, never overwrite
+                _upsert(self.conn, "al_media", row, ["media_id"], preserve=keep)
+
+    def set_staff_roles(self, roles: dict[int, list[dict[str, Any]]]) -> None:
+        with self.conn:
+            self.conn.executemany("UPDATE al_media SET staff_roles=? WHERE media_id=?",
+                                  [(json.dumps(v, ensure_ascii=False), k) for k, v in roles.items()])
 
     def replace_al_entries(self, rows: list[dict[str, Any]]) -> None:
         with self.conn:

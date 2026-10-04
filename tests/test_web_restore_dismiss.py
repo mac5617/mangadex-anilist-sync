@@ -47,9 +47,9 @@ def test_discard_offers_undo_and_restore_brings_it_back(client, services, run_id
 def test_discarded_diff_page_and_history_offer_restore(client, services, run_id):
     services.orchestrator.discard(run_id)
     page = client.get(f"/sync/{run_id}").text
-    assert "Restore this sync" in page and "This sync was discarded by you." in page
+    assert f'action="/sync/{run_id}/restore"' in page and "This sync was discarded by you." in page
     assert f'action="/sync/{run_id}/restore"' in client.get("/history").text
-    assert "Restore this sync" in client.get(f"/history/{run_id}").text
+    assert f'action="/sync/{run_id}/restore"' in client.get(f"/history/{run_id}").text
 
 
 def test_restoring_closes_the_other_open_diff(client, services, run_id):

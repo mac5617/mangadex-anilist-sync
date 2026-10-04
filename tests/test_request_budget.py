@@ -31,7 +31,9 @@ async def test_500_series_budget(fast, mock):
     assert r1["state"] == "diffed", r1["error"]
     md_first = sum(md.data_calls().values())
     al_first = al.call_count
-    assert al_first <= 24
+    # §11 dry-run budget (24) plus the one-time staff backfill for the 450 list entries (25 per request).
+    staff_lookups = -(-450 // 25)
+    assert al_first <= 24 + staff_lookups
     assert md_first <= 312
     assert (r1["req_anilist"], r1["req_mangadex"]) == (al_first, md_first)
 

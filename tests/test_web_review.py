@@ -64,7 +64,7 @@ async def rematch(services, fake):
 
 def test_page_lists_review_and_unmatched(client, seeded, fake):
     html = client.get("/review").text
-    assert "Needs review (1)" in html and "No match found (1)" in html
+    assert "Uncertain matches (1)" in html and "No match found (1)" in html
     assert "Kusuriya no Hitorigoto" in html and "score 0.80" in html
     assert "The Apothecary Diaries" in html
     assert fake.call_count == 0
@@ -83,7 +83,7 @@ async def test_accept_confirms_and_is_never_rematched(client, services, seeded, 
     assert response.status_code == 200 and 'id="card-k"' in response.text and "Confirmed" in response.text
     m = seeded.get_mapping("k")
     assert (m["state"], m["tier"], m["al_media_id"]) == ("confirmed", 1, 7)
-    assert "Needs review (0)" in client.get("/review").text
+    assert "Uncertain matches (0)" in client.get("/review").text
     # Next sync: the confirmed series is not looked at again (u is unchanged and cached too).
     assert await rematch(services, fake) == 0
     assert seeded.get_mapping("k")["state"] == "confirmed"

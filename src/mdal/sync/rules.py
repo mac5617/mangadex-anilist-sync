@@ -177,7 +177,7 @@ def evaluate(
         return item("flag", "; ".join(problems), "implausible")
 
     # 9. Write
-    return item("write", f"MangaDex {md_progress} > AniList {al}")
+    return item("write", f"read to {md_progress} on MangaDex; AniList has {al}")
 
 
 def completion_label(entry_status: str | None, status_source: str | None, total: int | None) -> str:

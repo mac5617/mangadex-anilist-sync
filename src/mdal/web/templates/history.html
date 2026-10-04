@@ -1,15 +1,11 @@
 {% extends "base.html" %}
-{% block title %}History{% endblock %}
+{% block title %}Sync history{% endblock %}
 {% block content %}
-<div class="page-head">
-  <div>
-    <h1>Sync history</h1>
-    <p class="lede">Every sync and every single add, newest first. Open one to see each row's result.</p>
-  </div>
-</div>
+{% with section = "sync" %}{% include "_subnav.html" %}{% endwith %}
+<div class="page-head"><h1>Sync history</h1></div>
 <div class="table-wrap">
 <table class="data">
-  <thead><tr><th>#</th><th>Started</th><th>State</th><th>Items</th><th>Written</th><th>Requests</th><th>Duration</th><th>Notes</th></tr></thead>
+  <thead><tr><th>Sync</th><th>Started</th><th>State</th><th>Rows</th><th>Written</th><th>Requests</th><th>Duration</th><th>Notes</th></tr></thead>
   <tbody>
   {% for r in runs %}
     <tr>

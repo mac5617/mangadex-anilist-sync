@@ -1,4 +1,4 @@
-"""Stats pages: your list (AniList-style), the entries drill-down, and sync activity. DB reads only."""
+"""Stats pages: library (AniList-style), the entries drill-down, and sync activity. DB reads only."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from fastapi.responses import HTMLResponse
 
 from mdal.stats import (
     COUNTRY_LABELS,
+    ENTRY_SORTS,
     FILTER_LABELS,
     FORMAT_LABELS,
     GLOBAL_FILTERS,
@@ -30,14 +31,18 @@ from mdal.web.app import get_services, md_cover_url, render
 router = APIRouter()
 
 PAGE_SIZE = 100
-GENRE_SORTS = {"count": "Entries", "score": "Mean score", "chapters": "Chapters read"}
+RANK_SORTS = {"count": "Entries", "score": "Mean score", "chapters": "Chapters read"}
+ENTRY_COLUMNS = (  # (sort key or None, header)
+    ("title", "Series"), ("status", "AniList"), ("progress", "Progress"), ("through", "Read"),
+    ("score", "Score"), (None, "Genres"), ("md", "MangaDex"), ("updated", "Updated"),
+)
 
 
 def _filters(request: Request, keys: tuple[str, ...] = tuple(FILTER_LABELS)) -> dict[str, str]:
     return {k: v for k in keys if (v := request.query_params.get(k, "").strip())}
 
 
-def entries_url(filters: dict[str, str], **extra: str | None) -> str:
+def entries_url(filters: dict[str, str], **extra: Any) -> str:
     merged = {**filters, **{k: v for k, v in extra.items() if v is not None}}
     return "/stats/entries?" + urlencode(merged)
 
@@ -49,10 +54,23 @@ def _linked(c: dict[str, Any], filters: dict[str, str], dim: str, **fixed: str) 
     return c
 
 
+def _ranked_bars(items: list[dict], sort: str, unit: str = "entries") -> list[Bar]:
+    top = [g for g in items if sort != "score" or g["scored"] >= 3][:10]
+
+    def detail(g: dict) -> str:
+        score = f" · mean score {g['mean_score']:.0f} ({g['scored']} scored)" if g["mean_score"] is not None else ""
+        roles = f" · {', '.join(g['roles'])}" if g.get("roles") else ""
+        return f"{g['count']:,} {unit} · {g['chapters']:,} chapters read{score}{roles}"
+
+    value = {"count": lambda g: g["count"], "chapters": lambda g: g["chapters"],
+             "score": lambda g: round(g["mean_score"] or 0, 1)}[sort]
+    return [Bar(g["name"], value(g), detail(g), key=str(g.get("key", g["name"]))) for g in top]
+
+
 @router.get("/stats", response_class=HTMLResponse)
 def stats_list(request: Request, gsort: str = "count") -> HTMLResponse:
     filters = _filters(request, GLOBAL_FILTERS)
-    gsort = gsort if gsort in GENRE_SORTS else "count"
+    gsort = gsort if gsort in RANK_SORTS else "count"
     s = list_stats(get_services(request).repo, filters, gsort)
     timeline = chart(s.timeline)
     for b in timeline["bars"]:
@@ -62,7 +80,7 @@ def stats_list(request: Request, gsort: str = "count") -> HTMLResponse:
         for cell in row["cells"]:
             cell["href"] = entries_url(filters, md_status=row["key"], status=cell["key"])
     return render(request, "stats_list.html", {
-        "s": s, "filters": filters, "gsort": gsort, "genre_sorts": GENRE_SORTS,
+        "s": s, "filters": filters, "gsort": gsort, "rank_sorts": RANK_SORTS,
         "options": {
             "status": [(k, STATUS_LABELS[k]) for k in STATUS_ORDER],
             "format": list(FORMAT_LABELS.items()),
@@ -78,41 +96,50 @@ def stats_list(request: Request, gsort: str = "count") -> HTMLResponse:
             "length": _linked(chart(s.length), filters, "length"),
             "through": _linked(chart(s.through), filters, "through", status="CURRENT"),
             "pub": _linked(chart(s.pub), filters, "pub", status="CURRENT"),
-            "genres": _linked(chart(_genre_bars(s.genres, gsort)), filters, "genre"),
+            "genres": _linked(chart(_ranked_bars(s.genres, gsort)), filters, "genre"),
+            "tags": _linked(chart(_ranked_bars(s.tags, gsort)), filters, "tag"),
+            "staff": _linked(chart(_ranked_bars(s.staff, gsort, "series")), filters, "staff"),
         },
+        "entries_url": entries_url(filters),
         "mismatch_url": entries_url(filters, mismatch="1"),
         "nearly_url": entries_url(filters, status="CURRENT", through="90–99%", sort="through"),
+        "rank_url": lambda key: "/stats?" + urlencode({**filters, "gsort": key}),
+        "genre_url": lambda name: entries_url(filters, genre=name),
+        "tag_url": lambda name: entries_url(filters, tag=name),
+        "staff_url": lambda key: entries_url(filters, staff=key),
     })
 
 
-def _genre_bars(genres: list[dict], gsort: str) -> list[Bar]:
-    top = [g for g in genres if gsort != "score" or g["scored"] >= 3][:10]
-    def detail(g: dict) -> str:
-        score = f" · mean score {g['mean_score']:.0f} ({g['scored']} scored)" if g["mean_score"] is not None else ""
-        return f"{g['count']:,} entries · {g['chapters']:,} chapters read{score}"
-    value = {"count": lambda g: g["count"], "chapters": lambda g: g["chapters"],
-             "score": lambda g: round(g["mean_score"] or 0, 1)}[gsort]
-    return [Bar(g["name"], value(g), detail(g), key=g["name"]) for g in top]
-
-
 @router.get("/stats/entries", response_class=HTMLResponse)
-def stats_entries(request: Request, sort: str = "title", page: int = 1) -> HTMLResponse:
+def stats_entries(request: Request, sort: str = "title", dir: str = "", page: int = 1) -> HTMLResponse:
     filters = _filters(request)
     repo = get_services(request).repo
-    rows = entries(repo, filters, sort)
+    sort = sort if sort in ENTRY_SORTS else "title"
+    desc = {"asc": False, "desc": True}.get(dir)  # None: the column's natural order
+    rows = entries(repo, filters, sort, desc)
+    current_desc = ENTRY_SORTS[sort][1] if desc is None else desc
     page = max(1, page)
     shown = rows[(page - 1) * PAGE_SIZE: page * PAGE_SIZE]
     for r in shown:
         r["cover"] = md_cover_url(r["md_id"], r["md_cover_file"]) if r["md_id"] else r["cover_url"]
         r["md_url"] = f"https://mangadex.org/title/{r['md_id']}" if r["md_id"] else None
-    chips = [{"label": f"{FILTER_LABELS[k]}: {filter_label(k, v)}",
+    staff_names = {str(p["id"]): p["name"] for r in rows for p in r["staff"]}
+    chips = [{"label": f"{FILTER_LABELS[k]}: {staff_names.get(v, v) if k == 'staff' else filter_label(k, v)}",
               "remove": entries_url({x: y for x, y in filters.items() if x != k}, sort=sort)} for k, v in filters.items()]
+    columns = []
+    for key, label in ENTRY_COLUMNS:
+        if key is None:
+            columns.append({"label": label})
+            continue
+        active = key == sort
+        next_desc = (not current_desc) if active else ENTRY_SORTS[key][1]
+        columns.append({"label": label, "active": active, "desc": current_desc if active else None,
+                        "href": entries_url(filters, sort=key, dir="desc" if next_desc else "asc")})
     return render(request, "stats_entries.html", {
         "rows": shown, "total": len(rows), "page": page, "pages": max(1, -(-len(rows) // PAGE_SIZE)),
-        "filters": filters, "chips": chips, "sort": sort,
-        "sorts": {"title": "Title", "progress": "Chapters read", "score": "Score", "updated": "Last updated",
-                  "year": "Release year", "through": "Read so far"},
-        "url": lambda **kw: entries_url(filters, **{"sort": sort, **kw}),
+        "filters": filters, "chips": chips, "sort": sort, "columns": columns,
+        "url": lambda **kw: entries_url(filters, **{"sort": sort, "dir": dir or None, **kw}),
+        "library_url": "/stats?" + urlencode({k: v for k, v in filters.items() if k in GLOBAL_FILTERS}),
         "status_labels": STATUS_LABELS, "md_labels": MD_STATUS_LABELS, "pub_labels": PUB_LABELS,
     })
 

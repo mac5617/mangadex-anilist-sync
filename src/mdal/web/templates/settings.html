@@ -1,15 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Settings{% endblock %}
 {% block content %}
-<div class="page-head">
-  <div>
-    <h1>Settings</h1>
-    <p class="lede">Accounts, rate limits and matching thresholds. Secrets stay in <code>.env</code> and are never shown here.</p>
-  </div>
-</div>
+<div class="page-head"><h1>Settings</h1></div>
 
 <div class="grid two">
-<section class="panel" id="anilist">
+<section class="panel stack" id="anilist">
   <h2>AniList</h2>
   {% if not anilist.client_configured %}
     <p>Set <code>ANILIST_CLIENT_ID</code> and <code>ANILIST_CLIENT_SECRET</code> in <code>.env</code>, then restart.</p>
@@ -35,7 +30,7 @@
   {% endif %}
 </section>
 
-<section class="panel" id="mangadex">
+<section class="panel stack" id="mangadex">
   <h2>MangaDex</h2>
   {% if mangadex.configured %}
     <p><span class="badge ok">configured</span> for <strong>{{ mangadex.username }}</strong></p>
@@ -53,26 +48,27 @@
 </section>
 </div>
 
-<section class="panel" id="tunables">
-  <h2>Sync settings</h2>
+<section class="panel stack" id="tunables">
+  <h2>Limits and thresholds</h2>
   <form method="post" action="/settings" class="settings-form">
     {% for t, value in tunables %}
       <label for="t-{{ t.key }}">{{ t.label }}</label>
       <span>
         <input id="t-{{ t.key }}" type="number" name="{{ t.key }}" value="{{ value }}" min="{{ t.low }}" max="{{ t.high }}"
           step="{{ 1 if t.kind.__name__ == 'int' else 'any' }}" required>
-        <span class="hint">{{ t.low | float | round(2) }}–{{ t.high | float | round(2) }}{% if t.help %} · {{ t.help }}{% endif %}</span>
+        <span class="hint">{{ t.low | num }}–{{ t.high | num }}{% if t.help %} · {{ t.help }}{% endif %}</span>
       </span>
     {% endfor %}
-    <span></span><span><button>Save settings</button></span>
+    <span></span><span><button>Save</button></span>
   </form>
   <div class="row">
     <form method="post" action="/settings/reset-batch"><button class="secondary">Reset write batch size to 10</button></form>
   </div>
 </section>
 
-<section class="panel" id="storage">
-  <h2>Storage and secrets</h2>
+<section class="panel stack" id="storage">
+  <h2>Storage</h2>
+  <p class="muted small">Secrets live in <code>.env</code>; this page only shows whether each one is set.</p>
   <dl class="facts">
     <dt>Database</dt><dd><code>{{ db_path }}</code> <span class="muted">(change with <code>MDAL_DB_PATH</code> in <code>.env</code>)</span></dd>
   </dl>

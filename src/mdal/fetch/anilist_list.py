@@ -6,12 +6,15 @@ Everything here is read-only. Query text is constant; user input only travels as
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
-from mdal.clients.anilist import AniListClient
+from mdal.clients.anilist import AniListClient, AniListComplexityError
 from mdal.db.repo import Repo, now_iso
+
+log = logging.getLogger(__name__)
 
 MEDIA_FIELDS = (
     "id idMal type format status chapters countryOfOrigin startDate { year } "
@@ -19,12 +22,29 @@ MEDIA_FIELDS = (
 )
 STAFF_FIELDS = "staff(perPage: 3) { nodes { name { full native } } }"
 
+TAG_FIELDS = "tags { name rank category isMediaSpoiler isGeneralSpoiler }"
+TAG_MIN_RANK = 50  # AniList's own stats count a tag only at 50%+ relevance
+STAFF_ROLE_FIELDS = "staff(perPage: 6, sort: [RELEVANCE, ID]) { edges { role node { id name { full } } } }"
+STAFF_PAGE = 25
+CREATOR_ROLES = ("story", "art", "original creator", "original story")
+
 VIEWER_QUERY = "query { Viewer { id name } }"
-LIST_QUERY = (
-    "query ($userId: Int) { MediaListCollection(userId: $userId, type: MANGA) { "
-    "lists { name isCustomList entries { id status progress progressVolumes score(format: POINT_100) updatedAt "
-    "startedAt { year month day } completedAt { year month day } "
-    f"media {{ {MEDIA_FIELDS} }} }} }} }} }}"
+
+
+def list_query(with_tags: bool) -> str:
+    tags = f" {TAG_FIELDS}" if with_tags else ""
+    return (
+        "query ($userId: Int) { MediaListCollection(userId: $userId, type: MANGA) { "
+        "lists { name isCustomList entries { id status progress progressVolumes score(format: POINT_100) updatedAt "
+        "startedAt { year month day } completedAt { year month day } "
+        f"media {{ {MEDIA_FIELDS}{tags} }} }} }} }} }}"
+    )
+
+
+LIST_QUERY = list_query(with_tags=True)
+STAFF_QUERY = (
+    "query ($ids: [Int], $perPage: Int) { Page(page: 1, perPage: $perPage) { "
+    f"media(id_in: $ids, type: MANGA) {{ id {STAFF_ROLE_FIELDS} }} }} }}"
 )
 BY_IDS_QUERY = (
     "query ($ids: [Int], $perPage: Int) { Page(page: 1, perPage: $perPage) { "
@@ -78,10 +98,29 @@ def media_row(media: dict[str, Any], fetched_at: str) -> dict[str, Any]:
         "synonyms": json.dumps(media.get("synonyms") or [], ensure_ascii=False),
         "staff": None if staff_names is None else json.dumps(staff_names, ensure_ascii=False),
         "genres": json.dumps(media.get("genres") or [], ensure_ascii=False),
+        # None = not part of this request: the repo keeps what it already has
+        "tags": json.dumps(clean_tags(media["tags"]), ensure_ascii=False) if "tags" in media else None,
         "cover_url": (media.get("coverImage") or {}).get("medium"),
         "site_url": media.get("siteUrl"),
         "fetched_at": fetched_at,
     }
+
+
+def clean_tags(tags: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+    """Relevant, non-spoiler tags only."""
+    return [{"name": t["name"], "rank": t.get("rank") or 0, "category": t.get("category")}
+            for t in tags or []
+            if (t.get("rank") or 0) >= TAG_MIN_RANK and not t.get("isMediaSpoiler") and not t.get("isGeneralSpoiler")]
+
+
+def creator_roles(staff: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """Story/art creators (translators, letterers and editors left out)."""
+    out = []
+    for edge in (staff or {}).get("edges") or []:
+        role, node = edge.get("role") or "", edge.get("node") or {}
+        if node.get("id") and any(r in role.lower() for r in CREATOR_ROLES):
+            out.append({"id": node["id"], "name": (node.get("name") or {}).get("full") or f"#{node['id']}", "role": role})
+    return out
 
 
 async def viewer(client: AniListClient) -> dict[str, Any]:
@@ -91,7 +130,12 @@ async def viewer(client: AniListClient) -> dict[str, Any]:
 async def fetch_list(client: AniListClient, repo: Repo, user_id: int) -> ListSummary:
     """One request. Replaces the al_entry snapshot; every list, custom ones included, de-duplicated by entry id."""
     fetched_at = now_iso()
-    data = await client.graphql(LIST_QUERY, {"userId": user_id})
+    try:
+        data = await client.graphql(LIST_QUERY, {"userId": user_id})
+    except AniListComplexityError:
+        # Tags make the one list request much bigger; without them the sync still works.
+        log.warning("AniList rejected the list request with tags as too complex; fetching without tags")
+        data = await client.graphql(list_query(with_tags=False), {"userId": user_id})
     lists = (data.get("MediaListCollection") or {}).get("lists") or []
     entries: dict[int, dict[str, Any]] = {}
     media: dict[int, dict[str, Any]] = {}
@@ -109,7 +153,7 @@ async def fetch_list(client: AniListClient, repo: Repo, user_id: int) -> ListSum
          "score": e.get("score") or None,  # AniList reports 0 for "no score"
          "progress_volumes": e.get("progressVolumes"),
          "started_at": fuzzy_date(e.get("startedAt")), "completed_at": fuzzy_date(e.get("completedAt")),
-         "updated_at": e.get("updatedAt")}
+         "updated_at": e.get("updatedAt") or None}
         for e in entries.values()
     ])
     return ListSummary(entries=len(entries), custom_only=len(set(entries) - in_status_list))
@@ -169,3 +213,20 @@ async def search_batch(client: AniListClient, repo: Repo, titles: list[str], bat
             repo.upsert_media([media_row(m, fetched_at) for m in media])
             results.append(media)
     return results
+
+
+async def fetch_staff(client: AniListClient, repo: Repo, max_requests: int, progress=lambda _msg: None) -> int:
+    """Backfill story/art staff for list media that have none yet, at most `max_requests` requests.
+
+    Results are kept for good; later syncs only look up newly added series. Returns media left to fetch.
+    """
+    missing = [r[0] for r in repo.conn.execute(
+        "SELECT m.media_id FROM al_media m JOIN al_entry e ON e.media_id = m.media_id "
+        "WHERE m.staff_roles IS NULL ORDER BY m.media_id")]
+    batches = [missing[i:i + STAFF_PAGE] for i in range(0, len(missing), STAFF_PAGE)][:max_requests]
+    for n, ids in enumerate(batches, start=1):
+        progress(f"fetching staff ({n}/{len(batches)})")
+        page = (await client.graphql(STAFF_QUERY, {"ids": ids, "perPage": STAFF_PAGE}))["Page"]
+        found = {m["id"]: creator_roles(m.get("staff")) for m in page.get("media") or []}
+        repo.set_staff_roles({i: found.get(i, []) for i in ids})
+    return max(0, len(missing) - sum(len(b) for b in batches))

@@ -1,7 +1,8 @@
 {% extends "base.html" %}
 {% import "_macros.html" as ui %}
-{% block title %}Sync #{{ run.run_id }} details{% endblock %}
+{% block title %}Sync #{{ run.run_id }} results{% endblock %}
 {% block content %}
+{% with section = "sync" %}{% include "_subnav.html" %}{% endwith %}
 <div class="page-head">
   <div>
     <h1>Sync #{{ run.run_id }} <span class="badge state-{{ run.state }}">{{ run.state }}</span></h1>
@@ -9,10 +10,9 @@
       · requests: AniList {{ run.req_anilist }}, MangaDex {{ run.req_mangadex }}</p>
   </div>
   <div class="page-actions">
-    {% if run.state == "diffed" %}<a class="button" href="/sync/{{ run.run_id }}">Open the diff to approve</a>{% endif %}
-    {% if restorable %}<form method="post" action="/sync/{{ run.run_id }}/restore"><button>Restore this sync</button></form>{% endif %}
-    {% if run.approved_at %}<a class="button secondary" href="/stats/syncs?run={{ run.run_id }}">Stats for this sync</a>{% endif %}
-    <a class="button secondary" href="/history">All syncs</a>
+    {% if run.state == "diffed" %}<a class="button" href="/sync/{{ run.run_id }}">Changes in sync #{{ run.run_id }}</a>{% endif %}
+    {% if restorable %}<form method="post" action="/sync/{{ run.run_id }}/restore"><button>Restore</button></form>{% endif %}
+    {% if run.approved_at %}<a class="button secondary" href="/stats/syncs?run={{ run.run_id }}">Activity for sync #{{ run.run_id }}</a>{% endif %}
   </div>
 </div>
 {% if run.phase_detail %}<p>{{ run.phase_detail }}</p>{% endif %}
@@ -20,20 +20,20 @@
 
 <div class="table-wrap">
 <table class="data diff">
-  <thead><tr><th>Series</th><th>Progress</th><th>Action</th><th>Status</th><th>Write</th><th>Notes</th></tr></thead>
+  <thead><tr><th>Series</th><th>Progress</th><th>Change</th><th>Status</th><th>Result</th><th>Notes</th></tr></thead>
   <tbody>
   {% for r, item in rows %}
     <tr class="r-{{ r.action }} w-{{ item.write_state }}">
       <td>{{ ui.series(r.md_title, r.md_url, r.cover, r.al_title, r.al_url) }}</td>
       <td class="num">{% if r.md_progress is not none %}{{ r.al_progress if r.al_progress is not none else "new" }} → {{ r.md_progress }}{% else %}—{% endif %}
         {% if r.unresolved %}<span class="sub">{{ r.unresolved }} unresolved</span>{% endif %}</td>
-      <td><span class="badge a-{{ r.action }}">{{ r.flag_kind | replace("_", " ") if r.flag_kind else r.action }}</span></td>
+      <td><span class="badge a-{{ r.action }}">{{ change_labels.get(r.flag_kind or r.action, r.action) }}</span></td>
       <td>{% if r.set_status %}{{ "→ Completed" if item.status_approved else "completion not approved" }}{% if item.al_status_before %}<span class="sub">was {{ item.al_status_before }}</span>{% endif %}{% endif %}</td>
       <td>{% if item.write_state != "none" %}<span class="badge ws-{{ item.write_state }}">{{ item.write_state }}</span>{% if item.written_at %}<span class="sub">{{ item.written_at | when }}</span>{% endif %}{% else %}<span class="muted">not approved</span>{% endif %}</td>
       <td class="reason">{{ r.reason }}{% if item.verify_note %}<span class="sub"><strong>{{ item.verify_note }}</strong></span>{% endif %}</td>
     </tr>
   {% else %}
-    <tr><td colspan="6" class="empty">No rows in this run.</td></tr>
+    <tr><td colspan="6" class="empty">No rows in this sync.</td></tr>
   {% endfor %}
   </tbody>
 </table>

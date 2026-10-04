@@ -23,7 +23,7 @@ def client(services, mock):
 
 def test_dashboard_with_no_runs(client, mock):
     html = client.get("/").text
-    assert "No sync yet." in html
+    assert "No syncs yet." in html
     assert 'hx-post="/sync"' in html
     assert 'hx-trigger="every 2s"' not in html
     assert len(mock.calls) == 0
@@ -42,7 +42,7 @@ def test_dashboard_with_active_run_polls(client, services, mock):
 def test_dashboard_with_diffed_run(client, services, mock):
     run_id = seed_diffed_run(services.repo)
     html = client.get("/").text
-    assert f'href="/sync/{run_id}"' in html and "Review the diff" in html
+    assert f'href="/sync/{run_id}"' in html and f"Changes in sync #{run_id}" in html
     assert 'hx-trigger="every 2s"' not in html
     assert len(mock.calls) == 0
 
@@ -56,7 +56,7 @@ def test_dashboard_auth_status(client):
 def test_status_fragment_stops_polling_when_idle(client, services):
     services.repo.create_run("diffed")
     html = client.get("/sync/status").text
-    assert html.startswith('<div id="sync-status">')
+    assert html.startswith('<div id="sync-status" class="stack">')
 
 
 def test_nav_counts(client, services):
@@ -64,7 +64,7 @@ def test_nav_counts(client, services):
     services.repo.upsert_mapping({"md_id": "k", "al_media_id": None, "state": "review", "tier": 4,
                                   "confidence": 0.7, "reasons": [], "links_hash": "h"})
     html = client.get("/").text
-    assert '<a href="/review">Review <span class="count">1</span></a>' in html
+    assert '<a href="/review">Matches <span class="count">1</span></a>' in html
 
 
 def test_post_sync_starts_run_and_returns_fragment(client, services, mock):

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Sync{% endblock %} · MangaDex → AniList</title>
+  <title>{% block title %}Home{% endblock %} · Shiori</title>
   <script>
     /* Apply the saved theme before first paint (auto = follow the system). */
     (function () { try { var t = localStorage.getItem("theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) {} })();
@@ -18,17 +18,17 @@
   {%- endmacro %}
   <header class="topbar">
     <div class="topbar-inner">
-      <a class="brand" href="/"><span class="brand-mark">MD</span>MangaDex → AniList</a>
+      <a class="brand" href="/"><span class="brand-mark" aria-hidden="true"></span>Shiori</a>
       <nav class="main" aria-label="Main">
-        {{ navlink("/", "Dashboard", path == "/") }}
-        {{ navlink("/sync/latest", "Sync", path.startswith("/sync")) }}
-        {{ navlink("/review", "Review", path.startswith("/review"), nav.review if nav else 0) }}
-        {{ navlink("/not-listed", "Not on my list", path.startswith("/not-listed"), nav.not_on_list if nav else 0) }}
-        {{ navlink("/history", "History", path.startswith("/history")) }}
+        {{ navlink("/", "Home", path == "/") }}
+        {{ navlink("/sync/latest", "Sync", path.startswith("/sync") or path.startswith("/history")) }}
+        {{ navlink("/review", "Matches", path.startswith("/review") or path.startswith("/not-listed"), nav.review if nav else 0) }}
         {{ navlink("/stats", "Stats", path.startswith("/stats")) }}
-        {{ navlink("/settings", "Settings", path.startswith("/settings")) }}
       </nav>
-      <button type="button" class="theme-toggle" id="theme-toggle" title="Switch theme">Theme: Auto</button>
+      <div class="topbar-end">
+        {{ navlink("/settings", "Settings", path.startswith("/settings")) }}
+        <button type="button" class="theme-toggle" id="theme-toggle" title="Switch between automatic, dark and light">Auto</button>
+      </div>
     </div>
   </header>
   <main class="container">
@@ -41,7 +41,7 @@
       var order = ["auto", "dark", "light"], names = { auto: "Auto", dark: "Dark", light: "Light" };
       var btn = document.getElementById("theme-toggle"), root = document.documentElement;
       function current() { return root.dataset.theme || "auto"; }
-      function show() { btn.textContent = "Theme: " + names[current()]; }
+      function show() { btn.textContent = names[current()]; }
       btn.addEventListener("click", function () {
         var next = order[(order.indexOf(current()) + 1) % order.length];
         if (next === "auto") delete root.dataset.theme; else root.dataset.theme = next;

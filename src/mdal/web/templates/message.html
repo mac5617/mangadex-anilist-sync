@@ -3,6 +3,6 @@
 {% block content %}
 <div class="row">
   {% if restore %}<form method="post" action="/sync/{{ restore }}/restore"><button>Undo: restore sync #{{ restore }}</button></form>{% endif %}
-  {% if back %}<a class="button secondary" href="{{ back }}">Back</a>{% endif %}
+  {% if back %}<a class="button secondary" href="{{ back }}">{{ back_label or "Back" }}</a>{% endif %}
 </div>
 {% endblock %}

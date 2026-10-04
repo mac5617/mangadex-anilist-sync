@@ -2,12 +2,10 @@
 {% import "_macros.html" as ui %}
 {% block title %}Entries{% endblock %}
 {% block content %}
+{% with section = "stats" %}{% include "_subnav.html" %}{% endwith %}
 <div class="page-head">
-  <div>
-    <h1>Entries <span class="muted">({{ total | num }})</span></h1>
-    <p class="lede">The series behind a chart. Remove a filter to widen the list, or sort it.</p>
-  </div>
-  <div class="page-actions"><a class="button secondary" href="/stats?{{ (filters | dictsort | selectattr(0, 'in', ['status', 'format', 'country']) | list) | urlencode }}">Back to stats</a></div>
+  <h1>Entries <span class="muted">({{ total | num }})</span></h1>
+  <div class="page-actions"><a class="button secondary" href="{{ library_url }}">Library stats</a></div>
 </div>
 
 <div class="filter-row">
@@ -15,16 +13,19 @@
   <form method="get" action="/stats/entries" class="inline-form filter-row-end">
     {% for k, v in filters.items() if k != "q" %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
     <input type="hidden" name="sort" value="{{ sort }}">
-    <input type="text" name="q" value="{{ filters.get('q', '') }}" placeholder="Search titles" aria-label="Search titles">
-    <label class="muted">Sort
-      <select name="sort" onchange="this.form.submit()">{% for key, label in sorts.items() %}<option value="{{ key }}"{% if key == sort %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
-    </label>
+    <input type="text" id="entry-search" name="q" value="{{ filters.get('q', '') }}" placeholder="Search titles" aria-label="Search titles">
   </form>
 </div>
 
 <div class="table-wrap">
 <table class="data">
-  <thead><tr><th>Series</th><th>AniList</th><th class="num">Progress</th><th class="num">Score</th><th>Genres</th><th>MangaDex</th></tr></thead>
+  <thead><tr>
+    {% for col in columns %}
+      {% if col.href %}<th{% if col.active %} aria-sort="{{ 'descending' if col.desc else 'ascending' }}"{% endif %}>
+        <a href="{{ col.href }}">{{ col.label }}{% if col.active %}<span class="sort-dir" aria-hidden="true">{{ "↓" if col.desc else "↑" }}</span>{% endif %}</a></th>
+      {% else %}<th>{{ col.label }}</th>{% endif %}
+    {% endfor %}
+  </tr></thead>
   <tbody>
   {% for r in rows %}
     <tr>
@@ -38,14 +39,16 @@
         </div>
       </td>
       <td class="al-col"><span class="badge">{{ status_labels.get(r.status, r.status) }}</span>{% if r.completed_at %}<span class="sub">completed {{ r.completed_at }}</span>{% elif r.started_at %}<span class="sub">started {{ r.started_at }}</span>{% endif %}</td>
-      <td class="num">{{ r.progress | num }}{% if r.chapters %} / {{ r.chapters | num }}{% endif %}
-        {% if r.chapters %}<span class="meter" title="{{ (100 * (r.progress or 0) / r.chapters) | round | int }}% read"><span style="width: {{ [100, 100 * (r.progress or 0) / r.chapters] | min }}%"></span></span>{% endif %}</td>
+      <td class="num">{{ r.progress | num }}{% if r.chapters %} / {{ r.chapters | num }}{% endif %}</td>
+      <td class="num">{% if r.chapters %}{{ [100, (100 * (r.progress or 0) / r.chapters) | round | int] | min }}%
+        <span class="meter"><span style="width: {{ [100, 100 * (r.progress or 0) / r.chapters] | min }}%"></span></span>{% else %}<span class="muted">—</span>{% endif %}</td>
       <td class="num">{{ r.score | num if r.score else "—" }}</td>
       <td class="genres">{{ r.genres[:3] | join(", ") }}{% if r.genres | length > 3 %} +{{ r.genres | length - 3 }}{% endif %}</td>
-      <td>{% if r.md_url %}<a href="{{ r.md_url }}" target="_blank" rel="noopener noreferrer">{{ md_labels.get(r.md_status, r.md_status) }}</a>{% else %}<span class="muted">not in library</span>{% endif %}</td>
+      <td class="md-col">{% if r.md_url %}<a href="{{ r.md_url }}" target="_blank" rel="noopener noreferrer">{{ md_labels.get(r.md_status, r.md_status) }}</a>{% else %}<span class="muted">not in library</span>{% endif %}</td>
+      <td class="num">{{ r.updated_at | date_from_unix }}</td>
     </tr>
   {% else %}
-    <tr><td colspan="6" class="empty">No entries match.</td></tr>
+    <tr><td colspan="8" class="empty">No entries match.</td></tr>
   {% endfor %}
   </tbody>
 </table>
@@ -53,9 +56,9 @@
 
 {% if pages > 1 %}
 <div class="pager">
-  {% if page > 1 %}<a class="button secondary" href="{{ url(page=page - 1) }}">← Previous</a>{% endif %}
+  {% if page > 1 %}<a class="button secondary" href="{{ url(page=page - 1) }}">Previous</a>{% endif %}
   <span class="muted">Page {{ page }} of {{ pages }}</span>
-  {% if page < pages %}<a class="button secondary" href="{{ url(page=page + 1) }}">Next →</a>{% endif %}
+  {% if page < pages %}<a class="button secondary" href="{{ url(page=page + 1) }}">Next</a>{% endif %}
 </div>
 {% endif %}
 {% endblock %}

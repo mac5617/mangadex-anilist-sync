@@ -1,11 +1,12 @@
 {% extends "base.html" %}
-{% block title %}Not on my list{% endblock %}
+{% block title %}Unlisted series{% endblock %}
 {% block content %}
+{% with section = "matches" %}{% include "_subnav.html" %}{% endwith %}
 <div class="page-head">
   <div>
-    <h1>Not on my list ({{ rows | length }})</h1>
-    <p class="lede">Matched series that aren't on your AniList list. They also appear as “add” rows in each sync's diff;
-      here you can add one at a time with your own status and progress. Each add first re-checks your list.</p>
+    <h1>Unlisted series ({{ rows | length }})</h1>
+    <p class="lede">Series matched to AniList that aren't on your AniList list. Syncs list them as new entries; here each one can be
+      added on its own with a status and progress of your choice. Your AniList list is checked again before each add.</p>
   </div>
 </div>
 <div class="table-wrap">
@@ -13,7 +14,7 @@
   <thead><tr><th>Series</th><th>Read</th><th>Add as</th></tr></thead>
   <tbody>
   {% for r in rows %}{% with md_id = r.md_id %}{% include "_notlisted_row.html" %}{% endwith %}{% else %}
-    <tr><td colspan="3" class="empty">Nothing here: every matched series is on your list.</td></tr>
+    <tr><td colspan="3" class="empty">Every matched series is on your list.</td></tr>
   {% endfor %}
   </tbody>
 </table>

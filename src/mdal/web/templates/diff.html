@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Sync #{{ run.run_id }}{% endblock %}
 {% block content %}
+{% with section = "sync" %}{% include "_subnav.html" %}{% endwith %}
 <div class="page-head">
   <div>
     <h1>Sync #{{ run.run_id }} <span class="badge state-{{ run.state }}">{{ run.state }}</span></h1>
@@ -8,15 +9,15 @@
   </div>
   <div class="page-actions">
     {% if run.state == "diffed" %}
-      <form method="post" action="/sync/{{ run.run_id }}/discard"><button class="danger">Discard this sync</button></form>
+      <form method="post" action="/sync/{{ run.run_id }}/discard"><button class="danger">Discard</button></form>
     {% elif restorable %}
-      <form method="post" action="/sync/{{ run.run_id }}/restore"><button>Restore this sync</button></form>
+      <form method="post" action="/sync/{{ run.run_id }}/restore"><button>Restore</button></form>
     {% endif %}
   </div>
 </div>
 {% if restorable %}
-  <p class="notice warn">This sync was {{ run.error or "discarded" }}. Restore it to approve rows from it again; AniList is
-    re-checked before anything is written, but its MangaDex progress is from {{ run.started_at | when }}.</p>
+  <p class="notice warn">This sync was {{ run.error or "discarded" }}. Restoring it makes its rows approvable again. AniList is
+    re-checked before anything is written, but the MangaDex progress is from {{ run.started_at | when }}.</p>
 {% endif %}
 
 {% include "_diff_stats.html" %}
@@ -27,13 +28,13 @@
   {% endfor %}
   <div class="toolbar">
     {% include "_diff_tabs.html" %}
-    {% include "_estimate.html" %}
+    {% if approvable %}{% include "_estimate.html" %}{% endif %}
   </div>
 
   <div class="table-wrap">
   <table class="data diff">
     <thead><tr>
-      <th class="check"></th><th>Series</th><th>Progress</th><th>Action</th><th>Status</th><th>Why</th>
+      {% if approvable %}<th class="check"></th>{% endif %}<th>Series</th><th>Progress</th><th>Change</th><th>Status</th><th>Reason</th>
     </tr></thead>
     <tbody>
     {% for r in rows %}
@@ -45,14 +46,13 @@
   </table>
   </div>
 
+  {% if approvable %}
   <div class="actions-bar">
-    {% if approvable %}
-      <button type="submit" id="approve" formaction="/sync/{{ run.run_id }}/approve" formmethod="post">Approve and write</button>
-      <span class="muted">Writes and adds are ticked for you; untick anything you want to leave out.</span>
-    {% else %}
-      <button type="button" id="approve" disabled>Approve and write</button>
-      <span class="muted">This sync is {{ run.state }}; only a sync waiting for approval can be written.</span>
-    {% endif %}
+    <button type="submit" id="approve" formaction="/sync/{{ run.run_id }}/approve" formmethod="post">Write selected to AniList</button>
+    <span class="muted small">Updates and new entries start selected; flagged rows need a tick and an override.</span>
   </div>
+  {% elif run.approved_at %}
+  <p class="muted">This sync has been written. <a href="/history/{{ run.run_id }}">Sync #{{ run.run_id }} results</a></p>
+  {% endif %}
 </form>
 {% endblock %}

@@ -188,15 +188,15 @@ def test_pages_render_empty(client, mock):
 def test_list_page(client, services, mock):
     seed_list(services.repo)
     html = client.get("/stats").text
-    assert "<title>Stats · MangaDex → AniList</title>" in html
+    assert "<title>Library stats · Shiori</title>" in html
     assert '<a href="/stats" aria-current="page">Stats</a>' in html
     assert 'class="hbar drill" href="/stats/entries?status=COMPLETED"' in html
-    assert "Show table" in html and "/static/charts.js" in html and "All 2 genres" in html
-    assert 'class="legend"' in html and "Reading timeline" in html
+    assert "<summary>Table</summary>" in html and "/static/charts.js" in html and "<summary>All 2</summary>" in html
+    assert 'class="legend"' in html and "Started and completed" in html
     assert 'href="/stats/entries?started=2021"' in html and 'href="/stats/entries?completed=2024"' in html
     assert re.search(r'class="heat-cell h\d" href="/stats/entries\?md_status=completed&amp;status=CURRENT"', html)
     assert 'href="/stats/entries?mismatch=1"' in html
-    assert "1 nearly finished" in html
+    assert "Nearly finished: 1 series" in html
     assert len(mock.calls) == 0
 
 
@@ -205,8 +205,8 @@ def test_list_page_filters_carry_into_links(client, services):
     html = client.get("/stats?country=JP&gsort=chapters").text
     assert '<option value="JP" selected>' in html and "Clear filters" in html
     assert 'href="/stats/entries?country=JP&amp;status=CURRENT"' in html
-    assert "Your top ten by chapters read" in html
-    assert "Browse these 2 entries" in html
+    assert "Top ten by chapters read" in html
+    assert "All 2 entries" in html
 
 
 def test_entries_page(client, services, mock):
@@ -234,11 +234,12 @@ def test_entries_page_paging(client, services):
 def test_sync_page_and_run_filter(client, services, mock):
     r1, r2 = seed_writes(services.repo)
     html = client.get("/stats/syncs").text
-    assert "chapters added to AniList" in html and ">55<" in html
-    assert "Chapters added per sync" in html and "Biggest updates" in html and "Need a look (2)" in html
+    assert "Chapters added" in html and ">55<" in html
+    assert "Chapters per sync" in html and "Largest updates" in html and "Problems (2)" in html
     one = client.get(f"/stats/syncs?run={r2}").text
-    assert f'<option value="{r2}" selected>' in one and "Chapters added per sync" not in one
-    assert "All syncs" in client.get("/stats/syncs?run=999").text  # unknown run falls back
+    assert f'<option value="{r2}" selected>' in one and "Chapters per sync" not in one
+    assert '<option value="" >' not in client.get("/stats/syncs?run=999").text
+    assert "Chapters per sync" in client.get("/stats/syncs?run=999").text  # unknown run falls back to all
     assert f'href="/stats/syncs?run={r1}"' in client.get(f"/history/{r1}").text
     assert len(mock.calls) == 0
 
@@ -248,3 +249,112 @@ def test_titles_escaped_in_stats(client, services):
     services.repo.replace_md_snapshot([md_manga_row("b", "<img src=x onerror=alert(1)>")], {})
     html = client.get("/stats/syncs").text
     assert "<img src=x onerror" not in html
+
+
+# ---- tags, staff, sortable headers ---------------------------------------------------------------
+
+
+def seed_tags_staff(repo):
+    seed_list(repo)
+    with repo.conn:
+        repo.conn.execute("UPDATE al_media SET tags=?, staff_roles=? WHERE media_id=1",
+                          (json.dumps([{"name": "Isekai", "rank": 90, "category": "Setting"}]),
+                           json.dumps([{"id": 7, "name": "Kanehito Yamada", "role": "Story"}])))
+        repo.conn.execute("UPDATE al_media SET tags=?, staff_roles=? WHERE media_id=2",
+                          (json.dumps([{"name": "Isekai", "rank": 60, "category": "Setting"}]),
+                           json.dumps([{"id": 7, "name": "Kanehito Yamada", "role": "Story & Art"},
+                                       {"id": 8, "name": "Tsukasa Abe", "role": "Art"}])))
+
+
+def test_tags_and_staff_stats_and_filters(services):
+    seed_tags_staff(services.repo)
+    s = list_stats(services.repo)
+    assert s.tags[0]["name"] == "Isekai" and s.tags[0]["count"] == 2
+    top = s.staff[0]
+    assert (top["name"], top["key"], top["count"], top["chapters"]) == ("Kanehito Yamada", "7", 2, 146)
+    assert set(top["roles"]) == {"Story", "Story & Art"}
+    assert (s.tags_known, s.staff_known) == (2, 2)
+    assert [r["title"] for r in entries(services.repo, {"tag": "Isekai"})] == ["A", "B"]
+    assert [r["title"] for r in entries(services.repo, {"staff": "8"})] == ["B"]
+
+
+def test_staff_and_tag_charts_link_to_entries(client, services):
+    seed_tags_staff(services.repo)
+    html = client.get("/stats").text
+    assert 'href="/stats/entries?tag=Isekai"' in html and 'href="/stats/entries?staff=7"' in html
+    chips = client.get("/stats/entries?staff=7").text
+    assert "Staff: Kanehito Yamada" in chips
+
+
+def test_column_headers_sort_both_ways(client, services):
+    seed_list(services.repo)
+    html = client.get("/stats/entries").text
+    assert 'aria-sort="ascending"' in html  # title, A→Z by default
+    assert 'href="/stats/entries?sort=title&amp;dir=desc"' in html  # clicking the active column flips it
+    assert 'href="/stats/entries?sort=progress&amp;dir=desc"' in html  # numbers start biggest-first
+    desc = client.get("/stats/entries?sort=title&dir=desc").text
+    assert desc.index(">C<") < desc.index(">A<")
+    asc = client.get("/stats/entries?sort=progress&dir=asc").text
+    assert asc.index(">C<") < asc.index(">B<")
+    assert '<select name="sort"' not in html  # the dropdown is gone
+
+
+def test_heat_map_fills_its_panel(client, services):
+    seed_list(services.repo)
+    html = client.get("/stats").text
+    assert '<colgroup><col class="heat-rowhead">' in html
+    css = client.get("/static/app.css").text
+    assert "table.heat { width: 100%; table-layout: fixed;" in css
+
+
+async def test_tags_fall_back_when_too_complex(services, mock):
+    import httpx
+
+    services.anilist_queue.set_interval(0)
+    fake = FakeAniList()
+    fake.add_media(al_media(1, "A"))
+    fake.add_list("Reading", [(10, 1, "CURRENT", 3)])
+    fake.install(mock)
+    real = fake.handle
+
+    def complex_once(request):
+        if b"tags {" in request.content:
+            return httpx.Response(400, json={"data": None, "errors": [{"message": "Max query complexity exceeded"}]})
+        return real(request)
+
+    fake.route.side_effect = complex_once
+    await fetch_list(services.anilist, services.repo, 1)
+    assert 1 in services.repo.al_entries()
+
+
+async def test_staff_backfill_is_capped_and_cached(services, mock):
+    from mdal.fetch.anilist_list import fetch_staff
+
+    services.anilist_queue.set_interval(0)
+    fake = FakeAniList()
+    for i in range(1, 61):
+        fake.add_media(al_media(i, f"M{i}"))
+    fake.add_list("Reading", [(100 + i, i, "CURRENT", 1) for i in range(1, 61)])
+    fake.install(mock)
+    await fetch_list(services.anilist, services.repo, 1)
+    before = fake.call_count
+    left = await fetch_staff(services.anilist, services.repo, max_requests=2)
+    assert fake.call_count - before == 2 and left == 10  # 25 per request
+    left = await fetch_staff(services.anilist, services.repo, max_requests=2)
+    assert left == 0 and fake.call_count - before == 3
+    await fetch_staff(services.anilist, services.repo, max_requests=2)
+    assert fake.call_count - before == 3  # nothing left to look up
+
+
+def test_tag_and_role_cleaning():
+    from mdal.fetch.anilist_list import clean_tags, creator_roles
+
+    tags = clean_tags([{"name": "Isekai", "rank": 80}, {"name": "Weak", "rank": 30},
+                       {"name": "Twist", "rank": 90, "isMediaSpoiler": True}])
+    assert [t["name"] for t in tags] == ["Isekai"]
+    roles = creator_roles({"edges": [
+        {"role": "Story & Art", "node": {"id": 1, "name": {"full": "Author"}}},
+        {"role": "Translator (English)", "node": {"id": 2, "name": {"full": "Translator"}}},
+        {"role": "Original Creator", "node": {"id": 3, "name": {"full": "Creator"}}},
+    ]})
+    assert [r["id"] for r in roles] == [1, 3]

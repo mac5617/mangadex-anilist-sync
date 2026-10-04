@@ -1,12 +1,12 @@
 {% import "_macros.html" as ui %}
 {%- set dismissed = r.action == "skip" and r.flag_kind -%}
 <tr class="r-{{ r.action }}" data-md-id="{{ r.md_id }}" id="row-{{ r.md_id }}">
-  <td class="check">
+  {% if approvable %}<td class="check">
     {% if r.action != "skip" %}
       <input type="checkbox" name="sel" value="{{ r.md_id }}" aria-label="select {{ r.md_title }}"
         {%- if r.checked and r.selectable %} checked{% endif %}{% if not r.selectable %} disabled{% endif %}>
     {% endif %}
-  </td>
+  </td>{% endif %}
   <td>{{ ui.series(r.md_title, r.md_url, r.cover, r.al_title, r.al_url) }}</td>
   <td class="num">
     {% if r.status_only %}{{ r.md_progress }} (unchanged)
@@ -15,7 +15,7 @@
     {% if r.unresolved %}<span class="sub" title="read chapters whose number could not be resolved">{{ r.unresolved }} unresolved</span>{% endif %}
   </td>
   <td>{% if dismissed %}<span class="badge">dismissed</span>
-    {% else %}<span class="badge a-{{ r.action }}{% if r.flag_kind %} k-{{ r.flag_kind }}{% endif %}">{{ r.flag_kind | replace("_", " ") if r.flag_kind else r.action }}</span>{% endif %}</td>
+    {% else %}<span class="badge a-{{ r.action }}{% if r.flag_kind %} k-{{ r.flag_kind }}{% endif %}">{{ change_labels.get(r.flag_kind or r.action, r.action) }}</span>{% endif %}</td>
   <td>
     {% if r.status_label and not r.set_status %}<span class="muted">{{ r.status_label }}</span>
     {% elif r.status_label %}
@@ -28,7 +28,7 @@
     {% if r.flag_kind == "implausible" and r.action == "flag" %}<label class="override"><input type="checkbox" name="ov" value="{{ r.md_id }}"> override: write anyway</label>{% endif %}
     {% if approvable and r.action == "flag" %}
       <button type="button" class="link-button" hx-post="/sync/{{ run.run_id }}/dismiss/{{ r.md_id }}" hx-params="none"
-        hx-target="#row-{{ r.md_id }}" hx-swap="outerHTML" title="Move to Skipped; it stays dismissed until your MangaDex progress for it changes">Dismiss</button>
+        hx-target="#row-{{ r.md_id }}" hx-swap="outerHTML" title="Moves the row to Skipped until your MangaDex progress for this series changes">Dismiss</button>
     {% elif approvable and dismissed %}
       <button type="button" class="link-button" hx-post="/sync/{{ run.run_id }}/undismiss/{{ r.md_id }}" hx-params="none"
         hx-target="#row-{{ r.md_id }}" hx-swap="outerHTML">Show again</button>

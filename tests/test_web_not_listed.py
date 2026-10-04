@@ -15,7 +15,7 @@ def client(services, repo, fake):  # noqa: F811
 
 def test_page_lists_rows_with_defaults(client, fake):  # noqa: F811
     html = client.get("/not-listed").text
-    assert "Not on my list (3)" in html
+    assert "Unlisted series (3)" in html
     fin = re.search(r'<tr id="nl-fin">.*?</tr>', html, re.S).group(0)
     assert '<option value="COMPLETED" selected>Completed</option>' in fin
     rel = re.search(r'<tr id="nl-rel">.*?</tr>', html, re.S).group(0)
@@ -32,7 +32,7 @@ def test_add_swaps_row(client, services, fake):  # noqa: F811
     assert response.text.startswith('<tr id="nl-rel" class="done">')
     assert "Added to AniList as Reading, progress 7." in response.text
     assert len(fake.mutations) == 1
-    assert "Not on my list (2)" in client.get("/not-listed").text
+    assert "Unlisted series (2)" in client.get("/not-listed").text
 
 
 def test_add_refusal_inline(client, fake):  # noqa: F811

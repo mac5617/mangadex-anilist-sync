@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +32,10 @@ def when(iso: str | None) -> str:
 
 templates.env.globals["md_cover"] = md_cover_url
 templates.env.filters["when"] = when
+templates.env.globals["change_labels"] = {
+    "write": "update", "add": "new entry", "skip": "skip", "flag": "flagged",
+    "implausible": "unusual", "exceeds_total": "over total",
+}
 
 
 def num(value: float | int | None) -> str:
@@ -43,6 +48,16 @@ def num(value: float | int | None) -> str:
 
 
 templates.env.filters["num"] = num
+
+
+def date_from_unix(value: int | None) -> str:
+    """AniList updatedAt (Unix seconds) -> '2026-10-03'."""
+    if not value:
+        return "—"
+    return datetime.fromtimestamp(int(value), tz=timezone.utc).strftime("%Y-%m-%d")
+
+
+templates.env.filters["date_from_unix"] = date_from_unix
 
 
 def get_services(request: Request) -> Services:

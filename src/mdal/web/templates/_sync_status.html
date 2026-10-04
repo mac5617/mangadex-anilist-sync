@@ -1,22 +1,23 @@
-<div id="sync-status"{% if active %} hx-get="/sync/status" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
+<div id="sync-status" class="stack"{% if active %} hx-get="/sync/status" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
   {% if status_message %}<p class="notice err" role="alert">{{ status_message }}</p>{% endif %}
   {% if run %}
-    <p class="row"><strong>Sync #{{ run.run_id }}</strong> <span class="badge state-{{ run.state }}">{{ run.state }}</span></p>
+    <p class="row"><strong>Sync #{{ run.run_id }}</strong> <span class="badge state-{{ run.state }}">{{ run.state }}</span>
+      <span class="muted small">{{ run.started_at | when }}</span></p>
     {% if run.phase_detail %}<p>{{ run.phase_detail }}</p>{% endif %}
     {% if run.error %}<p class="notice err">{{ run.error }}</p>{% endif %}
-    <p class="muted">Requests: AniList {{ run.req_anilist }}, MangaDex {{ run.req_mangadex }} · started {{ run.started_at | when }}</p>
+    <p class="muted small">Requests: AniList {{ run.req_anilist }}, MangaDex {{ run.req_mangadex }}</p>
   {% else %}
-    <p>No sync yet.</p>
+    <p class="muted">No syncs yet. A sync reads both sites and lists the changes; nothing is written to AniList until you approve them.</p>
   {% endif %}
   {% if cooldown and not active %}
-    <p class="notice warn">MangaDex cooldown: syncing is paused until {{ cooldown.until }} (about {{ cooldown.minutes }} min){% if cooldown.reason %}
-      because {{ cooldown.reason }}{% endif %}. Nothing is sent to MangaDex until then.</p>
+    <p class="notice warn">MangaDex is paused until {{ cooldown.until }} (about {{ cooldown.minutes }} min){% if cooldown.reason %}
+      after: {{ cooldown.reason }}{% endif %}. Nothing is sent to MangaDex until then.</p>
   {% endif %}
   {% if resumable and not active %}
-    <p class="notice warn">Sync #{{ resumable }} was interrupted while writing. Only items not yet written are sent.</p>
+    <p class="notice warn">Sync #{{ resumable }} stopped while writing. Resuming sends only the rows not yet written.</p>
   {% endif %}
-  <div class="row actions-row">
-    {% if run and run.state == "diffed" %}<a class="button" href="/sync/{{ run.run_id }}">Review the diff</a>{% endif %}
+  <div class="row">
+    {% if run and run.state == "diffed" %}<a class="button" href="/sync/{{ run.run_id }}">Changes in sync #{{ run.run_id }}</a>{% endif %}
     {% if resumable and not active %}
       <button hx-post="/sync/{{ resumable }}/resume" hx-target="#sync-status" hx-swap="outerHTML">Resume</button>
     {% endif %}

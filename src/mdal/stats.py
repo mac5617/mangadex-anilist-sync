@@ -52,7 +52,7 @@ FILTER_LABELS = {
     "status": "Status", "format": "Format", "country": "Country", "genre": "Genre", "year": "Released",
     "score": "Score", "started": "Started", "completed": "Completed", "length": "Chapters read",
     "through": "Read so far", "pub": "Publication", "md_status": "MangaDex status", "mismatch": "Status differs",
-    "q": "Title",
+    "tag": "Tag", "staff": "Staff", "q": "Title",
 }
 GLOBAL_FILTERS = ("status", "format", "country")
 
@@ -84,7 +84,7 @@ def entry_rows(repo: Repo) -> list[dict[str, Any]]:
     rows = repo.conn.execute(
         "SELECT e.entry_id, e.media_id, e.status, e.progress, e.progress_volumes, e.score, e.started_at, "
         "e.completed_at, e.updated_at, m.format, m.country, m.start_year, m.genres, m.chapters, m.status AS pub, "
-        "m.romaji, m.english, m.native, m.site_url, m.cover_url "
+        "m.romaji, m.english, m.native, m.site_url, m.cover_url, m.tags, m.staff_roles "
         "FROM al_entry e LEFT JOIN al_media m ON m.media_id = e.media_id"
     ).fetchall()
     md: dict[int, Any] = {}
@@ -98,6 +98,10 @@ def entry_rows(repo: Repo) -> list[dict[str, Any]]:
         d = md.get(r["media_id"])
         row = dict(r)
         row["genres"] = json.loads(r["genres"] or "[]")
+        row["tags"] = [t["name"] for t in json.loads(r["tags"] or "[]")]
+        row["tags_known"] = r["tags"] is not None
+        row["staff"] = json.loads(r["staff_roles"] or "[]")
+        row["staff_known"] = r["staff_roles"] is not None
         row["md_id"] = d["md_id"] if d else None
         row["md_status"] = (d["reading_status"] or "none") if d else "none"
         row["md_cover_file"] = d["cover_file"] if d else None
@@ -115,6 +119,10 @@ def matches(row: dict[str, Any], f: dict[str, str]) -> bool:
             return False
         if key == "genre" and want not in row["genres"]:
             return False
+        if key == "tag" and want not in row["tags"]:
+            return False
+        if key == "staff" and want not in {str(p["id"]) for p in row["staff"]}:
+            return False
         if key == "year" and str(row["start_year"] or "") != want:
             return False
         if key == "score" and score_bucket(row["score"]) != want:
@@ -131,6 +139,10 @@ def matches(row: dict[str, Any], f: dict[str, str]) -> bool:
                 str(row.get(k) or "") for k in ("romaji", "english", "native")).casefold():
             return False
     return True
+
+
+def mismatch_count(repo: Repo) -> int:
+    return sum(1 for r in entry_rows(repo) if is_mismatch(r))
 
 
 def is_mismatch(row: dict[str, Any]) -> bool:
@@ -172,6 +184,10 @@ class ListStats:
     pub: list[Bar] = field(default_factory=list)
     genres: list[dict[str, Any]] = field(default_factory=list)
     has_genres: bool = False
+    tags: list[dict[str, Any]] = field(default_factory=list)
+    tags_known: int = 0
+    staff: list[dict[str, Any]] = field(default_factory=list)
+    staff_known: int = 0
     heat: dict[str, Any] = field(default_factory=dict)
     md: dict[str, int] = field(default_factory=dict)
 
@@ -194,15 +210,42 @@ def _year_columns(counter: Counter, unit: str) -> list[Bar]:
     return [Bar(str(y), counter.get(y, 0), f"{counter.get(y, 0):,} {unit} in {y}", key=str(y)) for y in range(lo, hi + 1)]
 
 
+class _Groups:
+    """Entries grouped by genre, tag or person: count, chapters read, mean score."""
+
+    def __init__(self) -> None:
+        self.count: Counter = Counter()
+        self.chapters: Counter = Counter()
+        self.scores: dict[str, list[float]] = defaultdict(list)
+
+    def add(self, key: str, row: dict[str, Any]) -> None:
+        self.count[key] += 1
+        self.chapters[key] += row["progress"] or 0
+        if row["score"]:
+            self.scores[key].append(row["score"])
+
+    def ranked(self, sort: str = "count") -> list[dict[str, Any]]:
+        out = [{"name": k, "count": n, "chapters": self.chapters[k], "scored": len(self.scores[k]),
+                "mean_score": (sum(self.scores[k]) / len(self.scores[k])) if self.scores[k] else None}
+               for k, n in self.count.most_common()]
+        if sort == "score":  # needs a few scores to mean anything
+            out.sort(key=lambda g: (g["scored"] >= 3, g["mean_score"] or 0), reverse=True)
+        elif sort == "chapters":
+            out.sort(key=lambda g: g["chapters"], reverse=True)
+        return out
+
+
 def list_stats(repo: Repo, filters: dict[str, str] | None = None, genre_sort: str = "count") -> ListStats:
     rows = [r for r in entry_rows(repo) if matches(r, filters or {})]
     s = ListStats(total=len(rows))
     status, formats, countries, years, buckets = Counter(), Counter(), Counter(), Counter(), Counter()
     started, completed, length, through, pub = Counter(), Counter(), Counter(), Counter(), Counter()
     heat: Counter = Counter()
-    genre_count: Counter = Counter()
-    genre_scores: dict[str, list[float]] = defaultdict(list)
-    genre_chapters: Counter = Counter()
+    genre_groups = _Groups()
+    tag_groups = _Groups()
+    staff_groups = _Groups()
+    staff_names: dict[str, str] = {}
+    staff_roles: dict[str, Counter] = defaultdict(Counter)
     scores: list[float] = []
     for r in rows:
         s.chapters += r["progress"] or 0
@@ -230,10 +273,16 @@ def list_stats(repo: Repo, filters: dict[str, str] | None = None, genre_sort: st
                 pub[r["pub"]] += 1
         heat[(r["md_status"], r["status"])] += 1
         for g in r["genres"]:
-            genre_count[g] += 1
-            genre_chapters[g] += r["progress"] or 0
-            if r["score"]:
-                genre_scores[g].append(r["score"])
+            genre_groups.add(g, r)
+        for t in r["tags"]:
+            tag_groups.add(t, r)
+        s.tags_known += r["tags_known"]
+        s.staff_known += r["staff_known"]
+        for person in {str(p["id"]): p for p in r["staff"]}.values():
+            key = str(person["id"])
+            staff_groups.add(key, r)
+            staff_names[key] = person["name"]
+            staff_roles[key][person["role"]] += 1
     s.scored = len(scores)
     if scores:
         s.mean_score = sum(scores) / len(scores)
@@ -254,17 +303,14 @@ def list_stats(repo: Repo, filters: dict[str, str] | None = None, genre_sort: st
                  for label, _, _ in THROUGH_BUCKETS if through.get(label)]
     s.nearly = through.get("90–99%", 0)
     s.pub = _bars(pub, PUB_LABELS, PUB_ORDER, unit="series you're reading")
-    s.has_genres = bool(genre_count)
-    genres = [
-        {"name": g, "count": n, "chapters": genre_chapters[g], "scored": len(genre_scores[g]),
-         "mean_score": (sum(genre_scores[g]) / len(genre_scores[g])) if genre_scores[g] else None}
-        for g, n in genre_count.most_common()
-    ]
-    if genre_sort == "score":  # needs a few scores to mean anything
-        genres.sort(key=lambda g: (g["scored"] >= 3, g["mean_score"] or 0), reverse=True)
-    elif genre_sort == "chapters":
-        genres.sort(key=lambda g: g["chapters"], reverse=True)
-    s.genres = genres
+    s.has_genres = bool(genre_groups.count)
+    s.genres = genre_groups.ranked(genre_sort)
+    s.tags = tag_groups.ranked(genre_sort)
+    s.staff = staff_groups.ranked(genre_sort)
+    for p in s.staff:
+        p["key"] = p["name"]
+        p["name"] = staff_names[p["key"]]
+        p["roles"] = [role for role, _ in staff_roles[p["key"]].most_common(2)]
     md_rows = [m for m in MD_ORDER if any(heat.get((m, a)) for a in STATUS_ORDER)]
     al_cols = [a for a in STATUS_ORDER if any(heat.get((m, a)) for m in MD_ORDER)]
     s.heat = {
@@ -288,19 +334,24 @@ def list_stats(repo: Repo, filters: dict[str, str] | None = None, genre_sort: st
     return s
 
 
+STATUS_RANK = {k: i for i, k in enumerate(STATUS_ORDER)}
+# column -> (sort key, newest/biggest first by default)
 ENTRY_SORTS = {
     "title": (lambda r: r["title"].casefold(), False),
+    "status": (lambda r: (STATUS_RANK.get(r["status"], 99), r["title"].casefold()), False),
     "progress": (lambda r: r["progress"] or 0, True),
-    "score": (lambda r: r["score"] or 0, True),
-    "updated": (lambda r: r["updated_at"] or 0, True),
-    "year": (lambda r: r["start_year"] or 0, True),
     "through": (lambda r: (r["progress"] or 0) / r["chapters"] if r["chapters"] else -1, True),
+    "score": (lambda r: r["score"] or 0, True),
+    "year": (lambda r: r["start_year"] or 0, True),
+    "updated": (lambda r: r["updated_at"] or 0, True),
+    "md": (lambda r: (MD_ORDER.index(r["md_status"]) if r["md_status"] in MD_ORDER else 99, r["title"].casefold()), False),
 }
 
 
-def entries(repo: Repo, filters: dict[str, str], sort: str = "title") -> list[dict[str, Any]]:
-    key, reverse = ENTRY_SORTS.get(sort, ENTRY_SORTS["title"])
-    return sorted((r for r in entry_rows(repo) if matches(r, filters)), key=key, reverse=reverse)
+def entries(repo: Repo, filters: dict[str, str], sort: str = "title", desc: bool | None = None) -> list[dict[str, Any]]:
+    key, default_desc = ENTRY_SORTS.get(sort, ENTRY_SORTS["title"])
+    return sorted((r for r in entry_rows(repo) if matches(r, filters)), key=key,
+                  reverse=default_desc if desc is None else desc)
 
 
 # ---- sync activity ---------------------------------------------------------------

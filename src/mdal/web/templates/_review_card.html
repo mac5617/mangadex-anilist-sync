@@ -28,7 +28,7 @@
           <ul class="reasons">{% for r in c.reasons %}<li>{{ r }}</li>{% endfor %}</ul>
           <form hx-post="/review/{{ card.md_id }}/accept" hx-target="#card-{{ card.md_id }}" hx-swap="outerHTML">
             <input type="hidden" name="al_media_id" value="{{ c.media_id }}">
-            <button>This one</button>
+            <button>Use this match</button>
           </form>
         </div>
       </div>
@@ -42,7 +42,7 @@
     {% if card.state != "not_on_anilist" %}
     <form class="inline-form" hx-post="/review/{{ card.md_id }}/manual" hx-target="#card-{{ card.md_id }}" hx-swap="outerHTML">
       <input type="text" name="text" placeholder="AniList URL or id, e.g. https://anilist.co/manga/…" aria-label="AniList URL or id" required>
-      <button class="secondary">Use this</button>
+      <button class="secondary">Use this ID</button>
     </form>
     <form hx-post="/review/{{ card.md_id }}/not-on-anilist" hx-target="#card-{{ card.md_id }}" hx-swap="outerHTML">
       <button class="secondary">Not on AniList</button>

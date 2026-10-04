@@ -3,6 +3,7 @@
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
+from mdal.stats import mismatch_count
 from mdal.web.app import get_services, render
 from mdal.web.routes.sync import status_context
 
@@ -22,5 +23,6 @@ def dashboard(request: Request) -> HTMLResponse:
             "mangadex_user": s.mangadex_username,
         },
         **status_context(svc),
+        "mismatches": mismatch_count(svc.repo),
     }
     return render(request, "dashboard.html", context)
