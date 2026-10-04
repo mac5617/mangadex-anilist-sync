@@ -194,8 +194,13 @@ of your choice. Each add re-checks your AniList list first.
 - **Connections** is a network of the tags (or genres) on your list. Two are linked when they share series
   more often than chance (at least 1.25 times as often, and at least 3 series), and each keeps only its four
   strongest links, so related themes gather into clusters. Size is how many series have it, shade is how much
-  you like it (the same measure Discover uses). Clicking one lists its series; the table below the graph has
-  the strongest pairings. The Library filters apply here too.
+  you like it (the same measure Discover uses). The table below the graph has the strongest pairings, and the
+  Library filters apply here too.
+
+  Clicking a tag opens it: your 36 best-liked series with that tag appear as covers around it, linked to the
+  other tags they share unusually often and to creators behind two or more of them. Click another tag to keep
+  exploring (the breadcrumb leads back), a cover to open the series on AniList, a creator to list their series,
+  or **List all** for the full table.
 - **Activity** shows what syncs have written: chapters added, entries updated and added, completions,
   problems, and the largest updates, for all syncs or one.
 

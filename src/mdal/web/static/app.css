@@ -396,6 +396,10 @@ svg.network.panning { cursor: grabbing; }
 .net-pill { stroke-width: 1.5; }
 .net-theme .net-pill { fill: color-mix(in srgb, var(--viz-1) 16%, var(--surface)); stroke: var(--viz-1); }
 .net-creator .net-pill { fill: color-mix(in srgb, var(--viz-2) 16%, var(--surface)); stroke: var(--viz-2); }
+.net-focus .net-pill { fill: var(--accent); stroke: var(--accent); stroke-width: 2; }
+.net-focus .net-pill-text { fill: var(--accent-fg); font-size: 14px; font-weight: 700; }
+.net-link-focus { stroke-dasharray: 3 4; }
+.net-breadcrumb { display: flex; flex-wrap: wrap; align-items: baseline; gap: .4rem; font-size: .92rem; color: var(--muted); }
 .net-pill-text { font-size: 11.5px; font-weight: 600; fill: var(--fg); text-anchor: middle; pointer-events: none; }
 .net-label { font-size: 11px; fill: var(--fg); text-anchor: middle; paint-order: stroke; stroke: var(--surface);
   stroke-width: 3.5px; stroke-linejoin: round; pointer-events: none; }
@@ -411,3 +415,4 @@ svg.network.focusing .net-link:not(.near) { opacity: .07; }
 svg.network .off { display: none; }
 .network-panel .network-tip { position: absolute; max-width: 18rem; display: flex; flex-direction: column; gap: .15rem; }
 .network-tip span { font-weight: 400; }
+.net-swatch-focus { width: 1.4rem; height: .85rem; border-radius: .45rem; background: var(--accent); }

@@ -2,7 +2,8 @@
  *
  * Mounts every <svg data-network="json-id">. Data: {nodes: [{id, label, kind, size 0-1, image?, href?,
  * external?, tone?, tip: [lines], rank?}], links: [{source, target, weight 0-1}]}.
- * Node kinds: "rec" and "series" are cover images, "theme" and "creator" are labelled pills, "tag" is a
+ * Node kinds: "rec" and "series" are cover images, "theme", "creator" and "focus" (the opened theme, pinned
+ * to the centre when `pin` is set) are labelled pills, "tag" is a
  * circle sized by size and shaded by tone (1-5). The layout is settled before the first paint and then
  * zoomed to fit, so the graph always fills its panel. Wheel or the +/- buttons zoom, dragging empty space
  * pans, dragging a node moves it, hovering traces its links, clicking opens it.
@@ -68,10 +69,11 @@
         n.lw = text.getComputedTextLength();
         n.radius = Math.max(n.r + 6, n.lw / 2 + 2);
         n.below = 16;
-      } else if (n.kind === "theme" || n.kind === "creator") {
-        var t = el("text", { y: 4, "class": "net-pill-text" }, g);
-        t.textContent = clip(n.label, 24);
-        var w = t.getComputedTextLength() + 16, h = 21;
+      } else if (n.kind === "theme" || n.kind === "creator" || n.kind === "focus") {
+        var big = n.kind === "focus";
+        var t = el("text", { y: big ? 5 : 4, "class": "net-pill-text" }, g);
+        t.textContent = clip(n.label, big ? 32 : 24);
+        var w = t.getComputedTextLength() + (big ? 28 : 16), h = big ? 32 : 21;
         g.insertBefore(el("rect", { x: -w / 2, y: -h / 2, width: w, height: h, rx: h / 2, "class": "net-pill" }), t);
         n.r = h / 2; n.radius = w / 2 + 3; n.below = 0;
       } else {
@@ -84,6 +86,8 @@
         n.below = 14;
       }
     });
+
+    nodes.forEach(function (n) { if (n.pin) { n.fx = width / 2; n.fy = height / 2; } });
 
     // ---- layout ----------------------------------------------------------------------------
     var sim = d3.forceSimulation(nodes)
@@ -219,7 +223,7 @@
       n.el.addEventListener("pointerup", function () {
         if (!drag || drag.node !== n) return;
         var moved = drag.moved; drag = null;
-        if (moved) { sim.alphaTarget(0); n.fx = null; n.fy = null; } else open(n);
+        if (moved) { sim.alphaTarget(0); if (!n.pin) { n.fx = null; n.fy = null; } } else open(n);
       });
     });
     var pan = null;

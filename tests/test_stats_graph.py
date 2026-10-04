@@ -12,7 +12,8 @@ from tests.factories import al_media_row
 
 def row(i, tags, genres=("Action",), score=None, status="CURRENT"):
     return {"media_id": i, "title": f"S{i}", "status": status, "score": score, "progress": 20, "format": "MANGA",
-            "tags": list(tags), "tag_ranks": [{"name": t, "rank": 80} for t in tags], "genres": list(genres), "staff": []}
+            "tags": list(tags), "tag_ranks": [{"name": t, "rank": 80} for t in tags], "genres": list(genres), "staff": [],
+            "site_url": f"https://anilist.co/manga/{i}", "cover_url": None}
 
 
 def library():
@@ -56,8 +57,37 @@ def test_page(services):
         assert 'aria-current="page">Connections' in html and "Strongest pairings" in html
         data = json.loads(re.search(r'<script id="theme-net" type="application/json">(.*?)</script>', html, re.S).group(1))
         assert {"Isekai", "Gore"} <= {n["id"] for n in data["nodes"]}
-        assert next(n for n in data["nodes"] if n["id"] == "Isekai")["href"] == "/stats/entries?tag=Isekai"
+        assert next(n for n in data["nodes"] if n["id"] == "Isekai")["href"] == "/stats/connections?show=tags&focus=Isekai"
+
+        opened = c.get("/stats/connections?show=tags&focus=Isekai").text
+        assert "<h1>Isekai</h1>" in opened and "8 series on your list" in opened and "List all 8" in opened
+        net = json.loads(re.search(r'<script id="theme-focus" type="application/json">(.*?)</script>', opened, re.S).group(1))
+        kinds = {n["kind"] for n in net["nodes"]}
+        assert {"focus", "rec", "theme"} <= kinds
+        magic = next(n for n in net["nodes"] if n["id"] == "t:Magic")
+        assert magic["href"] == "/stats/connections?show=tags&trail=Isekai&focus=Magic"
+        deeper = c.get(magic["href"]).text
+        assert 'href="/stats/connections?show=tags&amp;focus=Isekai">Isekai</a>' in deeper  # breadcrumb back
+        assert "No series on your list have this tag" in c.get("/stats/connections?focus=Nope").text
         assert "<b>x" not in html.split("theme-net")[0]
         genres = c.get("/stats/connections?show=genres&status=CURRENT").text
         assert "Too few series match" in genres or "theme-net" in genres
         assert c.get("/stats/connections?show=bogus").status_code == 200
+
+
+def test_focus_graph():
+    from mdal.stats_graph import focus_graph
+    rows = library()
+    rows[0]["staff"] = [{"id": 9, "name": "Mangaka"}]
+    rows[1]["staff"] = [{"id": 9, "name": "Mangaka"}]
+    g = focus_graph(rows, "tags", "Isekai")
+    assert g["members"] == 21 and g["shown"] == 21
+    nodes = {n["id"]: n for n in g["nodes"]}
+    assert nodes["focus"]["pin"] and nodes["focus"]["label"] == "Isekai"
+    assert {"t:Magic", "t:Reincarnation"} <= set(nodes) and "t:School" not in nodes   # never with Isekai
+    assert "c:9" in nodes and "made 2 of these" in nodes["c:9"]["tip"]
+    # series without a shared tag or creator hang off the opened tag itself
+    lonely = [l for l in g["links"] if l["target"] == "focus"]
+    assert len(lonely) == 9 and {l["source"] for l in lonely} == {*(f"s:{200 + i}" for i in range(8)), "s:400"}
+    assert all(n["kind"] != "rec" or n["href"] for n in g["nodes"])
+    assert focus_graph(rows, "tags", "Nothing")["nodes"] == []

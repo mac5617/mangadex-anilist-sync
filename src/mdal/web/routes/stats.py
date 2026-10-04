@@ -27,7 +27,7 @@ from mdal.stats import (
     runs_with_writes,
     sync_stats,
 )
-from mdal.stats_graph import theme_graph
+from mdal.stats_graph import focus_graph, theme_graph
 from mdal.sync.orchestrator import SITE_NAMES
 from mdal.sync.rules import STATUS_LABELS
 from mdal.web.app import get_services, graph_json, md_cover_url, render
@@ -168,24 +168,59 @@ def stats_syncs(request: Request, run: str = "", site: str = "") -> HTMLResponse
     })
 
 
+TRAIL_MAX = 6
+
+
+def connections_url(filters: dict[str, str], show: str, focus: str | None = None, trail: list[str] | None = None) -> str:
+    params: list[tuple[str, str]] = [*filters.items(), ("show", show)]
+    params += [("trail", t) for t in (trail or [])[-TRAIL_MAX:]]
+    if focus:
+        params.append(("focus", focus))
+    return "/stats/connections?" + urlencode(params)
+
+
 @router.get("/stats/connections", response_class=HTMLResponse)
-def stats_connections(request: Request, show: str = "tags") -> HTMLResponse:
+def stats_connections(request: Request, show: str = "tags", focus: str = "") -> HTMLResponse:
+    """The overview network, or with `focus` one theme opened into the series that have it.
+    `trail` holds the themes opened before this one, for the breadcrumb."""
     filters = _filters(request, GLOBAL_FILTERS)
     show = show if show in ("tags", "genres") else "tags"
-    rows = [r for r in entry_rows(get_services(request).repo) if matches(r, filters)]
-    graph = theme_graph(rows, show)
     key = "tag" if show == "tags" else "genre"
-    for n in graph["nodes"]:
-        n["href"] = entries_url(filters, **{key: n["id"]})
-    for p in graph["pairs"]:
-        p["href_a"], p["href_b"] = entries_url(filters, **{key: p["a"]}), entries_url(filters, **{key: p["b"]})
-    return render(request, "stats_connections.html", {
-        "graph": graph, "graph_json": graph_json(graph), "show": show, "filters": filters,
-        "show_urls": {v: "/stats/connections?" + urlencode({**filters, "show": v}) for v in ("tags", "genres")},
+    trail = [x for x in request.query_params.getlist("trail") if x and x != focus][-TRAIL_MAX:]
+    rows = [r for r in entry_rows(get_services(request).repo) if matches(r, filters)]
+    context: dict[str, Any] = {
+        "show": show, "filters": filters, "focus": focus or None,
+        "show_urls": {v: connections_url(filters, v) for v in ("tags", "genres")},
         "options": {
             "status": [(k, STATUS_LABELS[k]) for k in STATUS_ORDER],
             "format": list(FORMAT_LABELS.items()),
             "country": list(COUNTRY_LABELS.items()),
         },
         "tags_known": any(r["tags_known"] for r in rows),
-    })
+        "overview_url": connections_url(filters, show),
+    }
+    if focus:
+        graph = focus_graph(rows, show, focus)
+        for n in graph["nodes"]:
+            if n["kind"] == "focus":
+                n["href"] = entries_url(filters, **{key: focus})
+            elif n["kind"] == "theme":
+                n["href"] = connections_url(filters, show, n["key"], [*trail, focus])
+            elif n["kind"] == "creator":
+                n["href"] = entries_url(filters, staff=n["key"])
+        for r in graph["related"]:
+            r["href"] = connections_url(filters, show, r["name"], [*trail, focus])
+        context.update({
+            "graph": graph, "graph_json": graph_json(graph), "entries_url": entries_url(filters, **{key: focus}),
+            "breadcrumb": [(name, connections_url(filters, show, name, trail[:i])) for i, name in enumerate(trail)],
+        })
+        return render(request, "stats_connections.html", context)
+
+    graph = theme_graph(rows, show)
+    for n in graph["nodes"]:
+        n["href"] = connections_url(filters, show, n["id"])
+        n["tip"] = [*n["tip"], "Click to open it"]
+    for p in graph["pairs"]:
+        p["href_a"], p["href_b"] = connections_url(filters, show, p["a"]), connections_url(filters, show, p["b"])
+    context.update({"graph": graph, "graph_json": graph_json(graph)})
+    return render(request, "stats_connections.html", context)

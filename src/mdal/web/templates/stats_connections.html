@@ -1,21 +1,36 @@
 {% extends "base.html" %}
-{% block title %}Connections{% endblock %}
+{% block title %}{{ focus ~ " · " if focus else "" }}Connections{% endblock %}
 {% block content %}
 {% with section = "stats" %}{% include "_subnav.html" %}{% endwith %}
+{% set singular = "tag" if show == "tags" else "genre" %}
 <div class="page-head">
   <div>
-    <h1>Connections</h1>
-    <p class="lede">How the {{ show }} on your list go together. Two are linked when they share series more often than chance;
-      each keeps only its strongest links, so related themes gather into clusters.</p>
+    {% if focus %}
+      <nav class="net-breadcrumb" aria-label="Opened {{ show }}">
+        <a href="{{ overview_url }}">All {{ show }}</a>
+        {% for name, url in breadcrumb %}<span aria-hidden="true">›</span><a href="{{ url }}">{{ name }}</a>{% endfor %}
+        <span aria-hidden="true">›</span>
+      </nav>
+      <h1>{{ focus }}</h1>
+      <p class="lede">{% if graph.members %}{{ graph.members | num }} series on your list{% if graph.members > graph.shown %}, your {{ graph.shown }} best-liked shown{% endif %},
+        linked to the {{ show }} they share unusually often and to their creators. Click a {{ singular }} to open it.{% else %}No series on your list have this {{ singular }}{% if filters %} with these filters{% endif %}.{% endif %}</p>
+    {% else %}
+      <h1>Connections</h1>
+      <p class="lede">How the {{ show }} on your list go together. Two are linked when they share series more often than chance;
+        each keeps only its strongest links, so related themes gather into clusters. Click one to open it.</p>
+    {% endif %}
   </div>
+  {% if focus and graph.members %}<div class="page-actions"><a class="button secondary" href="{{ entries_url }}">List all {{ graph.members | num }}</a></div>{% endif %}
 </div>
 
 <form method="get" action="/stats/connections" class="filter-row">
+  {% if not focus %}
   <div class="seg" role="group" aria-label="Show">
     {% for value, text in [("tags", "Tags"), ("genres", "Genres")] %}
       <a href="{{ show_urls[value] }}"{% if show == value %} aria-current="page"{% endif %}>{{ text }}</a>
     {% endfor %}
   </div>
+  {% endif %}
   {% for key, label in [("status", "Status"), ("format", "Format"), ("country", "Country")] %}
     <label>{{ label }}
       <select name="{{ key }}" onchange="this.form.submit()">
@@ -25,12 +40,44 @@
     </label>
   {% endfor %}
   <input type="hidden" name="show" value="{{ show }}">
+  {% if focus %}<input type="hidden" name="focus" value="{{ focus }}">
+    {% for name, _ in breadcrumb %}<input type="hidden" name="trail" value="{{ name }}">{% endfor %}{% endif %}
   <noscript><button class="secondary">Apply</button></noscript>
-  {% if filters %}<a href="/stats/connections?show={{ show }}">Clear filters</a>{% endif %}
+  {% if filters %}<a href="/stats/connections?show={{ show }}{% if focus %}&amp;focus={{ focus | urlencode }}{% endif %}">Clear filters</a>{% endif %}
 </form>
 
 {% if not graph.nodes %}
+  {% if not focus %}
   <div class="panel empty">{% if show == "tags" and not tags_known %}Tags arrive with the next sync (or a Discover refresh).{% elif filters %}Too few series match these filters.{% else %}No AniList list yet. It appears after the first sync.{% endif %}</div>
+  {% else %}
+  <div class="panel empty"><a href="{{ overview_url }}">Back to all {{ show }}</a></div>
+  {% endif %}
+{% elif focus %}
+  {% set legend %}
+    <span class="net-key"><i class="net-swatch net-swatch-focus"></i>{{ focus }}</span>
+    <span class="net-key"><i class="net-swatch net-swatch-rec"></i>Your series (cover; bigger = liked more)</span>
+    <button type="button" class="net-key" data-net-kind="theme" aria-pressed="true"><i class="net-swatch net-swatch-theme"></i>Goes with</button>
+    <button type="button" class="net-key" data-net-kind="creator" aria-pressed="true"><i class="net-swatch net-swatch-creator"></i>Creator</button>
+  {% endset %}
+  {% with net_id = "theme-focus", net_json = graph_json, net_label = "Series with " ~ focus ~ " and what they share", legend = legend %}
+    {% include "_network.html" %}
+  {% endwith %}
+  <p class="muted small">Click a cover to open the series on AniList, a {{ singular }} to open it here, a creator to list their series.
+    Scroll or + and − to zoom, drag to pan, double-click to fit.</p>
+
+  {% if graph.related %}
+  <section class="panel stack">
+    <h2>Goes with {{ focus }}</h2>
+    <div class="table-wrap"><table class="data">
+      <thead><tr><th>{{ singular | capitalize }}</th><th class="num">In these {{ graph.shown }}</th><th class="num">vs. your whole list</th></tr></thead>
+      <tbody>
+      {% for r in graph.related %}
+        <tr><td><a href="{{ r.href }}">{{ r.name }}</a></td><td class="num">{{ r.count }}</td><td class="num">{{ "%.1f" | format(r.lift) }}×</td></tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+  </section>
+  {% endif %}
 {% else %}
   {% set legend %}
     <span class="net-key">Size: series on your list</span>
@@ -43,7 +90,7 @@
     {% include "_network.html" %}
   {% endwith %}
   <p class="muted small">Based on {{ graph.total | num }} series. "How much you like it" combines your scores with statuses and chapters read.
-    Hover to see what a theme goes with; click to list its series. Scroll or + and − to zoom, drag to pan, double-click to fit.</p>
+    Hover to see what a {{ singular }} goes with; click to open it. Scroll or + and − to zoom, drag to pan, double-click to fit.</p>
 
   {% if graph.pairs %}
   <section class="panel stack">
