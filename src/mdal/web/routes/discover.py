@@ -136,8 +136,9 @@ def discover_status(request: Request) -> HTMLResponse:
     return _status_fragment(request)
 
 
+# async: the refresh is an asyncio task, so it must be started on the event loop, not in a worker thread.
 @router.post("/discover-refresh", response_class=HTMLResponse)
-def refresh(request: Request) -> HTMLResponse:
+async def refresh(request: Request) -> HTMLResponse:
     svc = get_services(request)
     if not svc.anilist_token():
         return _status_fragment(request, "Connect AniList in Settings first.", 409)
@@ -149,7 +150,7 @@ def refresh(request: Request) -> HTMLResponse:
 
 
 @router.post("/discover-ask", response_class=HTMLResponse)
-def ask(request: Request) -> HTMLResponse:
+async def ask(request: Request) -> HTMLResponse:
     try:
         get_services(request).recommender.start_llm()
     except RecsBusy as exc:

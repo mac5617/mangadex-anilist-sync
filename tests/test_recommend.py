@@ -287,3 +287,24 @@ async def test_pages_with_data(services, world, mock):
         assert c.post("/discover-model", data={"model": "other:7b"}).status_code == 200
         assert services.repo.get_setting("ollama_model") == "other:7b"
         assert c.post("/discover-model", data={"model": "not-installed"}).status_code == 400
+
+
+@pytest.mark.parametrize("path, method", [("/discover-refresh", "_refresh"), ("/discover-ask", "_llm_only")])
+def test_buttons_start_work_and_refuse_a_second_click(services, monkeypatch, path, method):
+    """Regression: these handlers ran in a worker thread, where starting the background task failed."""
+    services.store_anilist_token("al-token-xyz")
+    started = []
+
+    async def slow(self):
+        started.append(True)
+        await asyncio.sleep(3600)
+
+    import asyncio
+    monkeypatch.setattr(type(services.recommender), method, slow)
+    with TestClient(create_app(services), follow_redirects=False) as c:
+        first = c.post(path)
+        assert first.status_code == 200 and 'hx-trigger="every 2s"' in first.text  # the panel follows progress
+        second = c.post(path)
+        assert second.status_code == 409 and "already being refreshed" in second.text
+        services.recommender.task.cancel()
+    assert started == [True]
