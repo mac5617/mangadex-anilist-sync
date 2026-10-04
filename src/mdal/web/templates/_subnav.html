@@ -10,5 +10,12 @@
 {%- elif section == "stats" %}
   <a href="/stats"{% if path == "/stats" or path.startswith("/stats/entries") %} aria-current="page"{% endif %}>Library</a>
   <a href="/stats/syncs"{% if path.startswith("/stats/syncs") %} aria-current="page"{% endif %}>Activity</a>
+{%- elif section == "discover" %}
+  {%- set q = "?adult=1" if adult else "" %}
+  <a href="/discover{{ q }}"{% if path == "/discover" %} aria-current="page"{% endif %}>For you</a>
+  <a href="/discover/genres{{ q }}"{% if path == "/discover/genres" %} aria-current="page"{% endif %}>Genres</a>
+  <a href="/discover/tags{{ q }}"{% if path == "/discover/tags" %} aria-current="page"{% endif %}>Tags</a>
+  <a href="/discover/creators{{ q }}"{% if path == "/discover/creators" %} aria-current="page"{% endif %}>Creators</a>
+  <a href="/discover/map{{ q }}"{% if path == "/discover/map" %} aria-current="page"{% endif %}>Map</a>
 {%- endif %}
 </nav>

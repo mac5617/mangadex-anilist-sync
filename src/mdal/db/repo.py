@@ -35,6 +35,10 @@ SETTING_DEFAULTS: dict[str, Any] = {
     "mal_rpm": 30,
     "mal_session": None,
     "mal_user_name": None,
+    # Recommendations: the local model (Ollama), the last refresh, and the model's last picks.
+    "ollama_model": "gpt-oss:20b",
+    "rec_status": None,      # {state, detail, error, started_at, finished_at}
+    "rec_llm": None,         # {model, summary, picks: [{id, reason}], created_at, error}
 }
 
 
@@ -318,6 +322,31 @@ class Repo:
             "WHERE p.state IN ('auto','confirmed') AND p.al_media_id IS NOT NULL "
             "AND p.al_media_id NOT IN (SELECT media_id FROM al_entry) ORDER BY m.title COLLATE NOCASE"
         ).fetchall()
+
+    # ---- recommendations -------------------------------------------------
+    def replace_rec_candidates(self, rows: list[dict[str, Any]]) -> None:
+        with self.conn:
+            self.conn.execute("DELETE FROM rec_candidate")
+            for row in rows:
+                _upsert(self.conn, "rec_candidate", row, ["media_id"])
+
+    def rec_candidates(self) -> list[sqlite3.Row]:
+        """Candidates joined with their AniList media."""
+        return self.conn.execute(
+            "SELECT c.sources, c.fetched_at AS rec_fetched_at, m.* FROM rec_candidate c "
+            "JOIN al_media m ON m.media_id = c.media_id"
+        ).fetchall()
+
+    def hide_rec(self, media_id: int) -> None:
+        with self.conn:
+            _upsert(self.conn, "rec_hidden", {"media_id": media_id, "hidden_at": now_iso()}, ["media_id"])
+
+    def unhide_rec(self, media_id: int) -> None:
+        with self.conn:
+            self.conn.execute("DELETE FROM rec_hidden WHERE media_id=?", (media_id,))
+
+    def hidden_recs(self) -> set[int]:
+        return {r[0] for r in self.conn.execute("SELECT media_id FROM rec_hidden")}
 
     # ---- MyAnimeList ------------------------------------------------------
     def replace_mal_entries(self, rows: list[dict[str, Any]]) -> None:

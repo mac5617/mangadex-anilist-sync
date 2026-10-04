@@ -18,6 +18,7 @@ from mdal.clients.ratelimit import PacedQueue
 from mdal.config import ENV_FILE, Settings
 from mdal.db.connection import connect
 from mdal.db.repo import Repo
+from mdal.recommend.service import Recommender
 from mdal.sync.orchestrator import SyncOrchestrator
 
 
@@ -81,6 +82,7 @@ class Services:
         self.mal_store = DbMalStore(repo)
         self.mal = MalClient(lambda: self.settings, self.mal_queue, self.mal_store)
         self.orchestrator = SyncOrchestrator(self)
+        self.recommender = Recommender(self)
 
     @classmethod
     def from_env(cls) -> Services:
@@ -92,6 +94,7 @@ class Services:
         await self.mangadex.aclose()
         await self.oauth.aclose()
         await self.mal.aclose()
+        await self.recommender.aclose()
 
     # ---- settings / secrets ---------------------------------------------
     def reload_settings(self) -> None:

@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}For you{% endblock %}
+{% block content %}
+{% with heading = "For you", lede = "Series not on your lists that fit your whole library: picked by your local model from AniList candidates, or ranked by score when the model isn't available." %}{% include "_discover_head.html" %}{% endwith %}
+
+{% if summary %}
+<section class="block">
+  <h2>Your taste</h2>
+  <p class="taste">{{ summary }}</p>
+</section>
+{% endif %}
+
+{% if picks %}
+<section class="block">
+  <div class="block-head"><h2>{{ "Picks" if from_model else "Top matches" }}</h2>
+    <span class="muted">{% if from_model %}chosen by {{ llm.model }} · {{ llm.created_at | when }}{% else %}by genre, tag, creator and AniList readers' recommendations{% endif %}</span></div>
+  <div class="recs">
+    {% for c in picks %}{% with rank = loop.index %}{% include "_rec_card.html" %}{% endwith %}{% endfor %}
+  </div>
+</section>
+{% endif %}
+
+{% if more %}
+<section class="block">
+  <div class="block-head"><h2>Also worth a look</h2><span class="muted">ranked by overall score</span></div>
+  <div class="recs">
+    {% for c in more %}{% with rank = None %}{% include "_rec_card.html" %}{% endwith %}{% endfor %}
+  </div>
+</section>
+{% endif %}
+{% endblock %}

@@ -98,7 +98,8 @@ def entry_rows(repo: Repo) -> list[dict[str, Any]]:
         d = md.get(r["media_id"])
         row = dict(r)
         row["genres"] = json.loads(r["genres"] or "[]")
-        row["tags"] = [t["name"] for t in json.loads(r["tags"] or "[]")]
+        row["tag_ranks"] = json.loads(r["tags"] or "[]")
+        row["tags"] = [t["name"] for t in row["tag_ranks"]]
         row["tags_known"] = r["tags"] is not None
         row["staff"] = json.loads(r["staff_roles"] or "[]")
         row["staff_known"] = r["staff_roles"] is not None

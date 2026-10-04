@@ -1,0 +1,11 @@
+{% if models %}
+<form class="row model-picker" hx-post="/discover-model" hx-target="#discover-status" hx-swap="outerHTML" hx-trigger="change">
+  <label for="model-select" class="muted small">Model</label>
+  <select id="model-select" name="model">
+    {% for m in models %}<option value="{{ m.name }}"{% if m.name == model %} selected{% endif %}>{{ m.name }}</option>{% endfor %}
+    {% if model not in models | map(attribute="name") | list %}<option value="{{ model }}" selected disabled>{{ model }} (not installed)</option>{% endif %}
+  </select>
+</form>
+{% else %}
+<span class="muted small">Ollama isn't running, so picks come from the scores alone. Start Ollama to use {{ model }}.</span>
+{% endif %}

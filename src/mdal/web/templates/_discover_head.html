@@ -1,0 +1,16 @@
+{% with section = "discover" %}{% include "_subnav.html" %}{% endwith %}
+<div class="page-head">
+  <div>
+    <h1>{{ heading }}</h1>
+    <p class="lede">{{ lede }}</p>
+  </div>
+  <div class="page-actions">
+    <form method="get" class="row small">
+      <label class="row"><input type="checkbox" name="adult" value="1"{% if adult %} checked{% endif %} onchange="this.form.submit()"> Include adult titles</label>
+      <noscript><button class="secondary">Apply</button></noscript>
+    </form>
+    {% if hidden %}<button class="link-button small" hx-post="/discover-unhide-all" hx-swap="none"
+      title="Bring back every series you marked Not interested">Show {{ hidden }} hidden</button>{% endif %}
+  </div>
+</div>
+{% include "_discover_status.html" %}

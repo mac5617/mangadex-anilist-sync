@@ -18,7 +18,7 @@ log = logging.getLogger(__name__)
 
 MEDIA_FIELDS = (
     "id idMal type format status chapters countryOfOrigin startDate { year } "
-    "title { romaji english native } synonyms coverImage { medium } siteUrl genres"
+    "title { romaji english native } synonyms coverImage { medium } siteUrl genres meanScore popularity isAdult"
 )
 STAFF_FIELDS = "staff(perPage: 3) { nodes { name { full native } } }"
 
@@ -100,6 +100,9 @@ def media_row(media: dict[str, Any], fetched_at: str) -> dict[str, Any]:
         "genres": json.dumps(media.get("genres") or [], ensure_ascii=False),
         # None = not part of this request: the repo keeps what it already has
         "tags": json.dumps(clean_tags(media["tags"]), ensure_ascii=False) if "tags" in media else None,
+        "mean_score": media.get("meanScore"),
+        "popularity": media.get("popularity"),
+        "is_adult": None if media.get("isAdult") is None else int(bool(media["isAdult"])),
         "cover_url": (media.get("coverImage") or {}).get("medium"),
         "site_url": media.get("siteUrl"),
         "fetched_at": fetched_at,
@@ -223,10 +226,16 @@ async def fetch_staff(client: AniListClient, repo: Repo, max_requests: int, prog
     missing = [r[0] for r in repo.conn.execute(
         "SELECT m.media_id FROM al_media m JOIN al_entry e ON e.media_id = m.media_id "
         "WHERE m.staff_roles IS NULL ORDER BY m.media_id")]
-    batches = [missing[i:i + STAFF_PAGE] for i in range(0, len(missing), STAFF_PAGE)][:max_requests]
+    return await fetch_staff_for(client, repo, missing, max_requests, progress)
+
+
+async def fetch_staff_for(client: AniListClient, repo: Repo, media_ids: list[int], max_requests: int,
+                          progress=lambda _msg: None) -> int:
+    """Staff for these media, in the given order, 25 per request, at most `max_requests`. Returns ids left."""
+    batches = [media_ids[i:i + STAFF_PAGE] for i in range(0, len(media_ids), STAFF_PAGE)][:max_requests]
     for n, ids in enumerate(batches, start=1):
         progress(f"fetching staff ({n}/{len(batches)})")
         page = (await client.graphql(STAFF_QUERY, {"ids": ids, "perPage": STAFF_PAGE}))["Page"]
         found = {m["id"]: creator_roles(m.get("staff")) for m in page.get("media") or []}
         repo.set_staff_roles({i: found.get(i, []) for i in ids})
-    return max(0, len(missing) - sum(len(b) for b in batches))
+    return max(0, len(media_ids) - sum(len(b) for b in batches))

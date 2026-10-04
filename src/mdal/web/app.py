@@ -84,7 +84,7 @@ def create_app(services: Services) -> FastAPI:
     app.state.mal_states = {}
     app.mount("/static", StaticFiles(directory=WEB_DIR / "static"), name="static")
 
-    from mdal.web.routes import auth, dashboard, history, notlisted, review, settings, stats, sync
+    from mdal.web.routes import auth, dashboard, discover, history, notlisted, review, settings, stats, sync
 
     app.include_router(auth.router)
     app.include_router(settings.router)
@@ -94,5 +94,6 @@ def create_app(services: Services) -> FastAPI:
     app.include_router(notlisted.router)
     app.include_router(history.router)
     app.include_router(stats.router)
+    app.include_router(discover.router)
 
     return app

@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Map · Discover{% endblock %}
+{% block content %}
+{% with heading = "Map", lede = "Your top recommendations, linked to the themes, creators and series on your list that led to them. Drag to rearrange; hover to trace a series' links; click to open it on AniList." %}{% include "_discover_head.html" %}{% endwith %}
+
+{% if graph.nodes %}
+<section class="panel graph-panel">
+  <div class="graph-legend" aria-label="Legend">
+    <span><i class="g-key g-rec"></i>Recommendation</span>
+    <span><i class="g-key g-series"></i>On your list (AniList readers recommend from it)</span>
+    <span><i class="g-key g-theme"></i>Genre or tag</span>
+    <span><i class="g-key g-creator"></i>Creator</span>
+  </div>
+  <svg id="rec-graph" role="img" aria-label="Network of recommendations and what links them to your list"></svg>
+  <div id="graph-tip" class="chart-tip graph-tip" hidden></div>
+</section>
+<script id="graph-data" type="application/json">{{ graph_json | safe }}</script>
+<script src="/static/graph.js" defer></script>
+
+<details class="panel graph-table">
+  <summary>As a table</summary>
+  <div class="table-wrap"><table class="data">
+    <thead><tr><th>#</th><th>Recommendation</th><th>Linked to</th></tr></thead>
+    <tbody>
+    {% set names = {} %}{% for n in graph.nodes %}{% set _ = names.update({n.id: n.label}) %}{% endfor %}
+    {% for n in graph.nodes if n.kind == "rec" %}
+      <tr><td class="num">{{ n.rank }}</td><td><a href="{{ n.url }}" target="_blank" rel="noopener noreferrer">{{ n.label }}</a></td>
+        <td>{% for l in graph.links if l.source == n.id %}{{ names[l.target] }}{% if not loop.last %} · {% endif %}{% else %}<span class="muted">—</span>{% endfor %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</details>
+{% else %}
+  <div class="panel empty">Refresh to build the map.</div>
+{% endif %}
+{% endblock %}

@@ -42,6 +42,9 @@ class Settings(BaseSettings):
     mal_client_secret: SecretStr = SecretStr("")
     mal_redirect_uri: str = "http://127.0.0.1:8765/auth/mal/callback"
 
+    # Local model server for recommendations (Ollama). Only ever a local address.
+    ollama_url: str = "http://127.0.0.1:11434"
+
     mdal_db_path: Path | None = None
     mdal_port: int = 8765
 

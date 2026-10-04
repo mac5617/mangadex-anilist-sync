@@ -24,6 +24,7 @@
         {{ navlink("/sync/latest", "Sync", path.startswith("/sync") or path.startswith("/history")) }}
         {{ navlink("/review", "Matches", path.startswith("/review") or path.startswith("/not-listed"), nav.review if nav else 0) }}
         {{ navlink("/stats", "Stats", path.startswith("/stats")) }}
+        {{ navlink("/discover", "Discover", path.startswith("/discover")) }}
       </nav>
       <div class="topbar-end">
         {{ navlink("/settings", "Settings", path.startswith("/settings")) }}

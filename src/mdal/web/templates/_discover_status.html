@@ -1,0 +1,21 @@
+<div id="discover-status" class="panel stack"{% if running %} hx-get="/discover-status" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
+  {% if status_error %}<p class="notice err" role="alert">{{ status_error }}</p>{% endif %}
+  {% if running %}
+    <p class="row"><span class="badge state-fetching">refreshing</span> {{ rs.detail }}</p>
+  {% elif rs.state == "failed" %}
+    <p class="notice err">Refresh failed: {{ rs.error }}</p>
+  {% elif rs.finished_at %}
+    <p class="row"><span class="muted small">Refreshed {{ rs.finished_at | when }}</span>{% if rs.detail %}<span class="muted small">· {{ rs.detail }}</span>{% endif %}</p>
+  {% else %}
+    <p class="muted">No recommendations yet. Refresh reads about 15 pages of AniList (under a minute), then asks your local model to pick.</p>
+  {% endif %}
+  {% if llm.error and not running %}<p class="notice warn">Model: {{ llm.error }}</p>{% endif %}
+  {% if not running %}
+  <div class="row">
+    {% if anilist %}<button hx-post="/discover-refresh" hx-target="#discover-status" hx-swap="outerHTML">Refresh</button>
+    {% else %}<a href="/settings#anilist">Connect AniList to get recommendations</a>{% endif %}
+    {% if has_candidates %}<button class="secondary" hx-post="/discover-ask" hx-target="#discover-status" hx-swap="outerHTML">Ask the model again</button>{% endif %}
+    <span hx-get="/discover-models" hx-trigger="load" hx-swap="outerHTML"><span class="muted small">Model: {{ model }}</span></span>
+  </div>
+  {% endif %}
+</div>

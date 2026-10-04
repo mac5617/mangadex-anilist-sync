@@ -16,6 +16,9 @@ until you approve it.
 - **Careful with both APIs.** Requests are paced below each site's limit. After any sign of a MangaDex block
   (a 403, repeated 429s, or a dropped connection) Shiori stops and sends nothing to MangaDex for an hour.
 - **Matching you can review.** Uncertain matches wait for you, with candidates, covers and scores.
+- **Recommendations.** Series you don't have yet, ranked by your genres, tags and favourite creators and by
+  what AniList readers recommend from your favourites, with picks and reasons written by a local model
+  (Ollama), plus a map of what links each recommendation to your list.
 - **Stats.** An AniList-style overview of your list (status, formats, scores, release years, genres, tags,
   staff, and how MangaDex and AniList statuses compare), plus a record of everything syncs have written.
   Every bar opens the series behind it.
@@ -137,6 +140,7 @@ The header has four sections:
 | **Sync** | **Changes** for the latest sync, and **History** of every sync and single add, for both sites |
 | **Matches** | **To review** (uncertain or missing matches) and **Unlisted** (matched series not on your AniList list) |
 | **Stats** | **Library** (your AniList list) and **Activity** (what syncs have written, per site or both) |
+| **Discover** | **For you**, **Genres**, **Tags**, **Creators** (recommendations) and **Map** |
 
 ### First sync
 
@@ -194,6 +198,38 @@ Genres, scores, volumes, dates and tags come with the list request every sync al
 separate lookups: up to 20 requests per sync (25 series each) until your whole list is covered, then only
 for newly added series.
 
+### Discover
+
+**Discover → Refresh** builds recommendations from your AniList list, in under a minute and about 15 AniList
+requests:
+
+1. If your list has no tags yet, it re-reads the list once (tags come with it), and fetches the writers and
+   artists of your 150 strongest series.
+2. It works out your taste. Each entry counts by your score, or, when unscored (most of a big library), by its
+   status and chapters read; a real score counts three times as much. A genre, tag or creator ranks high when
+   you rate its series above your average *and* read a lot of it, so a handful of top-scored horror series
+   can outrank hundreds of average fantasy ones, and a genre you mostly drop counts against a series.
+3. It gathers candidates: what AniList readers recommend from your 30 favourite series, the top-scored manga
+   for your 8 strongest tags and 4 strongest genres, and the most popular manga by your 8 favourite creators.
+   Anything on your AniList list or in your MangaDex library is left out.
+4. Your local model picks 12 for **For you** and explains each in a sentence, naming series you liked. It only
+   chooses among the candidates, by id, so it can't invent a title.
+
+| Page | What's on it |
+|---|---|
+| **For you** | A summary of your taste and the model's 12 picks, then more ranked by the combined score |
+| **Genres / Tags / Creators** | Your strongest ones (each opens the series on your list) and the series that best match them, with the reason for each |
+| **Map** | Your top 24 recommendations linked to the genres, tags, creators and series on your list that led to them. Drag nodes; hover to trace links; click to open on AniList. A table below lists the same links. |
+
+**Not interested** hides a series for good (**Show N hidden** brings them all back). Adult titles are left out
+unless you tick **Include adult titles**. **Find on MangaDex** opens a MangaDex search for the title.
+
+**The model.** Shiori uses [Ollama](https://ollama.com) at `http://127.0.0.1:11434` (`OLLAMA_URL` in `.env`
+changes it; it must be on this computer). Pick any installed model from the list on the Discover pages;
+`gpt-oss:20b` is the default and answers in a few seconds on a 16 GB GPU. Only titles, genres, tags, creators,
+statuses and scores are sent, never account details. Without Ollama running, everything still works and
+**For you** shows the top-scored series instead; **Ask the model again** retries without re-reading AniList.
+
 ## Rate limits and settings
 
 **Settings → Limits and thresholds.** The defaults are deliberately conservative:
@@ -249,13 +285,14 @@ mangadex-anilist-sync/
 │   ├── main.py                  # entry point (`uv run mdal`), binds to 127.0.0.1
 │   ├── config.py, logsetup.py   # settings from .env; logging with secret redaction
 │   ├── db/                      # SQLite connection, repository, migrations/
-│   ├── clients/                 # rate-limited AniList, MangaDex and MyAnimeList clients, OAuth, pacing
+│   ├── clients/                 # rate-limited AniList, MangaDex and MyAnimeList clients, OAuth, pacing; Ollama
 │   ├── fetch/                   # MangaDex library, AniList and MyAnimeList lists, lookups, searches, staff
 │   ├── matching/                # title normalisation, scoring, matching pipeline
 │   ├── sync/                    # progress rules, sync state machine, writers, single adds, estimates
+│   ├── recommend/               # taste profile, scoring, model prompt, map, background refresh
 │   ├── stats.py                 # numbers for the stats pages (database reads only)
 │   └── web/                     # FastAPI app, routes/, templates/, static/
-├── tests/                       # 34 test modules plus factories and fakes
+├── tests/                       # 35 test modules plus factories and fakes
 ├── docs/                        # brief, PRD, architecture, API notes, stories/
 ├── scripts/live_check.py        # read-only API probe
 ├── pyproject.toml, uv.lock

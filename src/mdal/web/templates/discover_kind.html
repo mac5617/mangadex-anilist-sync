@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% import "_charts.html" as charts %}
+{% block title %}{{ title }} · Discover{% endblock %}
+{% block content %}
+{% set ledes = {
+  "genre": "Series in the genres you read most and rate highest. A genre you mostly drop counts against a series.",
+  "tag": "Series whose central themes match the tags of the series you like, weighted by how central each tag is.",
+  "staff": "Other series by the writers and artists behind your favourites."} %}
+{% with heading = title, lede = ledes[kind] %}{% include "_discover_head.html" %}{% endwith %}
+
+<div class="discover-split">
+  <section class="panel stack">
+    <h2>Your {{ title | lower }}</h2>
+    <p class="muted small">How strongly each one shows in what you read and like (0–100). Each opens the series on your list.</p>
+    {{ charts.hbars(c, title[:-1], "Affinity", "Refresh to build your profile.") }}
+  </section>
+  <section class="block">
+    <div class="block-head"><h2>Recommended</h2><span class="muted">{{ cards | length }} series</span></div>
+    {% if cards %}
+      <div class="recs">{% for c in cards %}{% with rank = loop.index %}{% include "_rec_card.html" %}{% endwith %}{% endfor %}</div>
+    {% else %}
+      <div class="panel empty">{% if kind == "staff" %}No candidates share a creator with your favourites yet. Creators come from AniList; Refresh fetches them for your top series.{% else %}No recommendations yet.{% endif %}</div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

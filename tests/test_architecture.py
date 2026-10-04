@@ -44,7 +44,8 @@ def test_writer_status_literals():
     assert set(re.findall(r"\b(COMPLETED|CURRENT|PLANNING|PAUSED|DROPPED|REPEATING)\b", text)) == {"COMPLETED", "CURRENT"}
 
 
-PURE_MODULES = ["matching/normalize.py", "matching/score.py", "sync/rules.py", "sync/estimate.py"]
+PURE_MODULES = ["matching/normalize.py", "matching/score.py", "sync/rules.py", "sync/estimate.py",
+                "recommend/profile.py", "recommend/score.py", "recommend/llm.py", "recommend/graph.py"]
 IMPURE_IMPORT = re.compile(
     r"^\s*(import|from)\s+(httpx|sqlite3|asyncio|socket|urllib|pathlib|os|mdal\.(db|clients|fetch|web|services|config))\b",
     re.MULTILINE,
