@@ -1,12 +1,22 @@
-{# Chart macros. Marks: one series colour (--viz-1), <=24px thick, 4px rounded data-end, 2px gaps,
-   hairline grid, value labels in text ink. Every mark has a tooltip (hover + keyboard focus) and every
-   chart has a table view. Import with: {% import "_charts.html" as charts %} #}
+{# Chart macros. Marks: one series colour (--viz-1; --viz-2 for a second series), <=24px thick, 4px rounded
+   data-end, 2px gaps, hairline grid, value labels in text ink. Every mark has a tooltip (hover + keyboard
+   focus); marks with a drill-down are links to the entries list. Every chart has a table view.
+   Import with: {% import "_charts.html" as charts %} #}
 
-{% macro table(c, label_head, value_head) -%}
+{% macro mark(tag_href, cls, tip) -%}
+  {%- if tag_href %}<a class="{{ cls }} drill" href="{{ tag_href }}" data-tip="{{ tip }} · click to list them">
+  {%- else %}<div class="{{ cls }}" tabindex="0" data-tip="{{ tip }}">{% endif -%}
+{%- endmacro %}
+{% macro end_mark(tag_href) -%}{% if tag_href %}</a>{% else %}</div>{% endif %}{%- endmacro %}
+
+{% macro table(c, label_head, value_head, value2_head=None) -%}
   <details class="chart-table"><summary>Show table</summary>
     <table class="data compact">
-      <thead><tr><th>{{ label_head }}</th><th class="num">{{ value_head }}</th><th>Detail</th></tr></thead>
-      <tbody>{% for b in c.bars %}<tr><td>{{ b.label }}</td><td class="num">{{ b.value | num }}</td><td class="muted">{{ b.tip }}</td></tr>{% endfor %}</tbody>
+      <thead><tr><th>{{ label_head }}</th><th class="num">{{ value_head }}</th>{% if value2_head %}<th class="num">{{ value2_head }}</th>{% endif %}<th>Detail</th></tr></thead>
+      <tbody>{% for b in c.bars %}<tr>
+        <td>{% if b.href %}<a href="{{ b.href }}">{{ b.label }}</a>{% else %}{{ b.label }}{% endif %}</td>
+        <td class="num">{{ b.value | num }}</td>{% if value2_head %}<td class="num">{{ b.value2 | num }}</td>{% endif %}
+        <td class="muted">{{ b.tip }}{% if value2_head %} · {{ b.tip2 }}{% endif %}</td></tr>{% endfor %}</tbody>
     </table>
   </details>
 {%- endmacro %}
@@ -16,18 +26,18 @@
   {% if c.empty %}<p class="muted chart-empty">{{ empty }}</p>{% else %}
   <div class="hbars">
     {% for b in c.bars %}
-      <div class="hbar" tabindex="0" data-tip="{{ b.label }} · {{ b.tip }}">
+      {{ mark(b.href, "hbar", b.label ~ " · " ~ b.tip) }}
         <span class="hbar-label">{{ b.label }}</span>
         <span class="hbar-track"><span class="hbar-fill" style="width: {{ '%.2f' | format(b.rel) }}%"></span></span>
         <span class="hbar-value">{{ b.value | num }}</span>
-      </div>
+      {{ end_mark(b.href) }}
     {% endfor %}
   </div>
   {{ table(c, label_head, value_head) }}
   {% endif %}
 {%- endmacro %}
 
-{# Columns: ordered x (years, score buckets, syncs). Labels thinned to stay readable. #}
+{# Columns: ordered x (years, score bands, syncs). Slots share the full width; the bar stays <=24px. #}
 {% macro columns(c, label_head="Year", value_head="Count", empty="No data yet.") -%}
   {% if c.empty %}<p class="muted chart-empty">{{ empty }}</p>{% else %}
   <div class="cols-chart">
@@ -36,7 +46,7 @@
       <div class="cols-grid"><span></span><span></span><span></span></div>
       <div class="cols">
         {% for b in c.bars %}
-          <div class="col" tabindex="0" data-tip="{{ b.tip }}"><span class="col-fill" style="height: {{ '%.2f' | format(b.pct) }}%"></span></div>
+          <div class="col-slot">{{ mark(b.href, "col", b.tip) }}<span class="col-fill" style="height: {{ '%.2f' | format(b.pct) }}%"></span>{{ end_mark(b.href) }}</div>
         {% endfor %}
       </div>
       <div class="cols-x">{% for b in c.bars %}<span>{% if b.show_label %}{{ b.label }}{% endif %}</span>{% endfor %}</div>
@@ -46,7 +56,54 @@
   {% endif %}
 {%- endmacro %}
 
-{% macro tile(value, label, sub=None) -%}
-  <div class="stat"><span class="stat-value">{{ value }}</span><span class="stat-label">{{ label }}</span>
-    {% if sub %}<span class="stat-sub">{{ sub }}</span>{% endif %}</div>
+{# Two series per x (e.g. started vs completed): legend + paired bars with a 2px gap. #}
+{% macro columns2(c, name1, name2, label_head="Year", empty="No data yet.") -%}
+  {% if c.empty %}<p class="muted chart-empty">{{ empty }}</p>{% else %}
+  <div class="legend"><span><i class="key key-1"></i>{{ name1 }}</span><span><i class="key key-2"></i>{{ name2 }}</span></div>
+  <div class="cols-chart">
+    <div class="cols-axis">{% for t in c.ticks %}<span>{{ t | num }}</span>{% endfor %}</div>
+    <div class="cols-plot">
+      <div class="cols-grid"><span></span><span></span><span></span></div>
+      <div class="cols">
+        {% for b in c.bars %}
+          <div class="col-slot pair">
+            {{ mark(b.href, "col", b.tip) }}<span class="col-fill" style="height: {{ '%.2f' | format(b.pct) }}%"></span>{{ end_mark(b.href) }}
+            {{ mark(b.href2, "col s2", b.tip2) }}<span class="col-fill" style="height: {{ '%.2f' | format(b.pct2) }}%"></span>{{ end_mark(b.href2) }}
+          </div>
+        {% endfor %}
+      </div>
+      <div class="cols-x">{% for b in c.bars %}<span>{% if b.show_label %}{{ b.label }}{% endif %}</span>{% endfor %}</div>
+    </div>
+  </div>
+  {{ table(c, label_head, name1, name2) }}
+  {% endif %}
+{%- endmacro %}
+
+{# Heat map: rows x columns of counts, ordinal blue ramp; matching cells outlined; every cell a link. #}
+{% macro heatmap(h, row_head, col_head) -%}
+  {% if not h.rows %}<p class="muted chart-empty">No data yet.</p>{% else %}
+  <div class="heat-wrap">
+  <table class="heat">
+    <thead><tr><th class="heat-corner">{{ row_head }} ↓ · {{ col_head }} →</th>{% for col in h.cols %}<th>{{ col.label }}</th>{% endfor %}</tr></thead>
+    <tbody>
+      {% for row in h.rows %}
+        <tr><th>{{ row.label }}</th>
+          {% for cell in row.cells %}
+            {%- set level = 0 if not cell.value else (1 + ((cell.value / h.max) ** 0.5 * 4.99) | int) -%}
+            <td>{% if cell.value %}<a class="heat-cell h{{ level }}{% if cell.match %} match{% endif %}" href="{{ cell.href }}" data-tip="{{ cell.tip }} · click to list them">{{ cell.value | num }}</a>
+              {%- else %}<span class="heat-cell h0{% if cell.match %} match{% endif %}">·</span>{% endif %}</td>
+          {% endfor %}
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+{%- endmacro %}
+
+{% macro tile(value, label, sub=None, href=None) -%}
+  {% if href %}<a class="stat" href="{{ href }}">{% else %}<div class="stat">{% endif %}
+    <span class="stat-value">{{ value }}</span><span class="stat-label">{{ label }}</span>
+    {% if sub %}<span class="stat-sub">{{ sub }}</span>{% endif %}
+  {% if href %}</a>{% else %}</div>{% endif %}
 {%- endmacro %}

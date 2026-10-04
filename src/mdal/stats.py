@@ -27,7 +27,128 @@ JUMP_BUCKETS = ((1, 1, "1"), (2, 5, "2–5"), (6, 10, "6–10"), (11, 25, "11–
 class Bar:
     label: str
     value: float
-    tip: str = ""          # tooltip / table detail beyond the value
+    tip: str = ""            # tooltip / table detail beyond the value
+    key: str | None = None   # drill-down filter value for this chart's dimension
+    value2: float | None = None
+    tip2: str = ""
+
+
+# ---- entries: one row per list entry, with everything the charts and the drill-down need ----------------
+
+MD_STATUS_LABELS = {"reading": "Reading", "completed": "Completed", "on_hold": "On hold", "plan_to_read": "Plan to read",
+                    "dropped": "Dropped", "re_reading": "Re-reading", "none": "Not in library"}
+MD_ORDER = ("reading", "completed", "on_hold", "plan_to_read", "dropped", "re_reading", "none")
+AL_FOR_MD = {"reading": "CURRENT", "completed": "COMPLETED", "on_hold": "PAUSED", "plan_to_read": "PLANNING",
+             "dropped": "DROPPED", "re_reading": "REPEATING"}
+PUB_LABELS = {"RELEASING": "Releasing", "FINISHED": "Finished", "HIATUS": "On hiatus", "CANCELLED": "Cancelled",
+              "NOT_YET_RELEASED": "Not yet released"}
+PUB_ORDER = ("RELEASING", "FINISHED", "HIATUS", "CANCELLED", "NOT_YET_RELEASED")
+LENGTH_BUCKETS = (("0", 0, 0), ("1", 1, 1), ("2–10", 2, 10), ("11–25", 11, 25), ("26–50", 26, 50),
+                  ("51–100", 51, 100), ("101–200", 101, 200), ("201+", 201, None))
+THROUGH_BUCKETS = (("Under 25%", 0, 25), ("25–49%", 25, 50), ("50–74%", 50, 75), ("75–89%", 75, 90),
+                   ("90–99%", 90, 100), ("Caught up", 100, None))
+
+FILTER_LABELS = {
+    "status": "Status", "format": "Format", "country": "Country", "genre": "Genre", "year": "Released",
+    "score": "Score", "started": "Started", "completed": "Completed", "length": "Chapters read",
+    "through": "Read so far", "pub": "Publication", "md_status": "MangaDex status", "mismatch": "Status differs",
+    "q": "Title",
+}
+GLOBAL_FILTERS = ("status", "format", "country")
+
+
+def length_bucket(progress: int | None) -> str:
+    p = progress or 0
+    for label, lo, hi in LENGTH_BUCKETS:
+        if p >= lo and (hi is None or p <= hi):
+            return label
+    return "201+"
+
+
+def through_bucket(progress: int | None, chapters: int | None) -> str | None:
+    """How far through a series with a known total; None when the total is unknown."""
+    if not chapters:
+        return None
+    pct = 100 * (progress or 0) / chapters
+    for label, lo, hi in THROUGH_BUCKETS:
+        if pct >= lo and (hi is None or pct < hi):
+            return label
+    return "Caught up"
+
+
+def score_bucket(score: float | None) -> str | None:
+    return str(min(100, max(10, math.ceil(score / 10) * 10))) if score else None
+
+
+def entry_rows(repo: Repo) -> list[dict[str, Any]]:
+    rows = repo.conn.execute(
+        "SELECT e.entry_id, e.media_id, e.status, e.progress, e.progress_volumes, e.score, e.started_at, "
+        "e.completed_at, e.updated_at, m.format, m.country, m.start_year, m.genres, m.chapters, m.status AS pub, "
+        "m.romaji, m.english, m.native, m.site_url, m.cover_url "
+        "FROM al_entry e LEFT JOIN al_media m ON m.media_id = e.media_id"
+    ).fetchall()
+    md: dict[int, Any] = {}
+    for r in repo.conn.execute(
+        "SELECT p.al_media_id, d.md_id, d.reading_status, d.cover_file, d.title FROM mapping p "
+        "JOIN md_manga d ON d.md_id = p.md_id WHERE p.state IN ('auto','confirmed') ORDER BY d.md_id"
+    ):
+        md.setdefault(r["al_media_id"], r)
+    out = []
+    for r in rows:
+        d = md.get(r["media_id"])
+        row = dict(r)
+        row["genres"] = json.loads(r["genres"] or "[]")
+        row["md_id"] = d["md_id"] if d else None
+        row["md_status"] = (d["reading_status"] or "none") if d else "none"
+        row["md_cover_file"] = d["cover_file"] if d else None
+        row["title"] = r["romaji"] or r["english"] or r["native"] or (d["title"] if d else None) or f"#{r['media_id']}"
+        row["through"] = through_bucket(r["progress"], r["chapters"])
+        out.append(row)
+    return out
+
+
+def matches(row: dict[str, Any], f: dict[str, str]) -> bool:
+    for key, want in f.items():
+        if not want:
+            continue
+        if key in ("status", "format", "country", "pub", "md_status") and (row.get(key) or "") != want:
+            return False
+        if key == "genre" and want not in row["genres"]:
+            return False
+        if key == "year" and str(row["start_year"] or "") != want:
+            return False
+        if key == "score" and score_bucket(row["score"]) != want:
+            return False
+        if key in ("started", "completed") and (row[f"{key}_at"] or "")[:4] != want:
+            return False
+        if key == "length" and length_bucket(row["progress"]) != want:
+            return False
+        if key == "through" and row["through"] != want:
+            return False
+        if key == "mismatch" and want == "1" and not is_mismatch(row):
+            return False
+        if key == "q" and want.casefold() not in " ".join(
+                str(row.get(k) or "") for k in ("romaji", "english", "native")).casefold():
+            return False
+    return True
+
+
+def is_mismatch(row: dict[str, Any]) -> bool:
+    expected = AL_FOR_MD.get(row["md_status"])
+    return expected is not None and row["status"] != expected
+
+
+def filter_label(key: str, value: str) -> str:
+    labels = {"status": STATUS_LABELS, "format": FORMAT_LABELS, "country": COUNTRY_LABELS, "pub": PUB_LABELS,
+              "md_status": MD_STATUS_LABELS}.get(key, {})
+    if key == "score":
+        return f"{int(value) - 9}–{value}"
+    if key == "mismatch":
+        return "MangaDex vs AniList"
+    return labels.get(value, value)
+
+
+# ---- the list overview ------------------------------------------------------------------------
 
 
 @dataclass
@@ -38,42 +159,47 @@ class ListStats:
     mean_score: float | None = None
     score_sd: float | None = None
     scored: int = 0
+    completed: int = 0
     status: list[Bar] = field(default_factory=list)
     formats: list[Bar] = field(default_factory=list)
     countries: list[Bar] = field(default_factory=list)
     years: list[Bar] = field(default_factory=list)
     scores: list[Bar] = field(default_factory=list)
-    completed_by_year: list[Bar] = field(default_factory=list)
+    timeline: list[Bar] = field(default_factory=list)
+    length: list[Bar] = field(default_factory=list)
+    through: list[Bar] = field(default_factory=list)
+    nearly: int = 0
+    pub: list[Bar] = field(default_factory=list)
     genres: list[dict[str, Any]] = field(default_factory=list)
     has_genres: bool = False
+    heat: dict[str, Any] = field(default_factory=dict)
     md: dict[str, int] = field(default_factory=dict)
 
 
 def _bars(counter: Counter, labels: dict[str, str] | None = None, order: tuple[str, ...] | None = None,
           unit: str = "entries", other_after: int = 7) -> list[Bar]:
     keys = [k for k in order if counter.get(k)] if order else [k for k, _ in counter.most_common()]
+    def bar(k: str) -> Bar:
+        return Bar((labels or {}).get(k, str(k)), counter[k], f"{counter[k]:,} {unit}", key=str(k))
     if not order and len(keys) > other_after:  # fold the long tail: never more than ~8 bars
         rest = sum(counter[k] for k in keys[other_after:])
-        keys = keys[:other_after]
-        bars = [Bar((labels or {}).get(k, str(k)), counter[k], f"{counter[k]:,} {unit}") for k in keys]
-        return bars + [Bar("Other", rest, f"{rest:,} {unit}")]
-    return [Bar((labels or {}).get(k, str(k)), counter[k], f"{counter[k]:,} {unit}") for k in keys]
+        return [bar(k) for k in keys[:other_after]] + [Bar("Other", rest, f"{rest:,} {unit}")]
+    return [bar(k) for k in keys]
 
 
 def _year_columns(counter: Counter, unit: str) -> list[Bar]:
     if not counter:
         return []
     lo, hi = min(counter), max(counter)
-    return [Bar(str(y), counter.get(y, 0), f"{counter.get(y, 0):,} {unit} in {y}") for y in range(lo, hi + 1)]
+    return [Bar(str(y), counter.get(y, 0), f"{counter.get(y, 0):,} {unit} in {y}", key=str(y)) for y in range(lo, hi + 1)]
 
 
-def list_stats(repo: Repo) -> ListStats:
-    rows = repo.conn.execute(
-        "SELECT e.status, e.progress, e.progress_volumes, e.score, e.completed_at, "
-        "m.format, m.country, m.start_year, m.genres FROM al_entry e LEFT JOIN al_media m ON m.media_id = e.media_id"
-    ).fetchall()
+def list_stats(repo: Repo, filters: dict[str, str] | None = None, genre_sort: str = "count") -> ListStats:
+    rows = [r for r in entry_rows(repo) if matches(r, filters or {})]
     s = ListStats(total=len(rows))
-    status, formats, countries, years, buckets, completed = Counter(), Counter(), Counter(), Counter(), Counter(), Counter()
+    status, formats, countries, years, buckets = Counter(), Counter(), Counter(), Counter(), Counter()
+    started, completed, length, through, pub = Counter(), Counter(), Counter(), Counter(), Counter()
+    heat: Counter = Counter()
     genre_count: Counter = Counter()
     genre_scores: dict[str, list[float]] = defaultdict(list)
     genre_chapters: Counter = Counter()
@@ -82,6 +208,7 @@ def list_stats(repo: Repo) -> ListStats:
         s.chapters += r["progress"] or 0
         s.volumes += r["progress_volumes"] or 0
         status[r["status"]] += 1
+        s.completed += r["status"] == "COMPLETED"
         if r["format"]:
             formats[r["format"]] += 1
         if r["country"]:
@@ -90,10 +217,19 @@ def list_stats(repo: Repo) -> ListStats:
             years[r["start_year"]] += 1
         if r["score"]:
             scores.append(r["score"])
-            buckets[min(100, max(10, math.ceil(r["score"] / 10) * 10))] += 1
+            buckets[score_bucket(r["score"])] += 1
+        if r["started_at"]:
+            started[int(r["started_at"][:4])] += 1
         if r["completed_at"]:
             completed[int(r["completed_at"][:4])] += 1
-        for g in json.loads(r["genres"] or "[]"):
+        length[length_bucket(r["progress"])] += 1
+        if r["status"] == "CURRENT":
+            if r["through"]:
+                through[r["through"]] += 1
+            if r["pub"]:
+                pub[r["pub"]] += 1
+        heat[(r["md_status"], r["status"])] += 1
+        for g in r["genres"]:
             genre_count[g] += 1
             genre_chapters[g] += r["progress"] or 0
             if r["score"]:
@@ -106,14 +242,40 @@ def list_stats(repo: Repo) -> ListStats:
     s.formats = _bars(formats, FORMAT_LABELS)
     s.countries = _bars(countries, COUNTRY_LABELS)
     s.years = _year_columns(years, "series")
-    s.completed_by_year = _year_columns(completed, "completed")
-    s.scores = [Bar(str(b), buckets.get(b, 0), f"{buckets.get(b, 0):,} scored {b - 9}–{b}") for b in range(10, 101, 10)] if scores else []
+    s.scores = [Bar(f"{b - 9}–{b}", buckets.get(str(b), 0), f"{buckets.get(str(b), 0):,} scored {b - 9}–{b}", key=str(b))
+                for b in range(10, 101, 10)] if scores else []
+    span = sorted(set(started) | set(completed))
+    s.timeline = [Bar(str(y), started.get(y, 0), f"{started.get(y, 0):,} started in {y}", key=str(y),
+                      value2=completed.get(y, 0), tip2=f"{completed.get(y, 0):,} completed in {y}")
+                  for y in range(span[0], span[-1] + 1)] if span else []
+    s.length = [Bar(label, length.get(label, 0), f"{length.get(label, 0):,} series with {label} chapters read", key=label)
+                for label, _, _ in LENGTH_BUCKETS if length.get(label)]
+    s.through = [Bar(label, through.get(label, 0), f"{through.get(label, 0):,} of the series you're reading", key=label)
+                 for label, _, _ in THROUGH_BUCKETS if through.get(label)]
+    s.nearly = through.get("90–99%", 0)
+    s.pub = _bars(pub, PUB_LABELS, PUB_ORDER, unit="series you're reading")
     s.has_genres = bool(genre_count)
-    s.genres = [
-        {"name": g, "count": n, "chapters": genre_chapters[g],
+    genres = [
+        {"name": g, "count": n, "chapters": genre_chapters[g], "scored": len(genre_scores[g]),
          "mean_score": (sum(genre_scores[g]) / len(genre_scores[g])) if genre_scores[g] else None}
         for g, n in genre_count.most_common()
     ]
+    if genre_sort == "score":  # needs a few scores to mean anything
+        genres.sort(key=lambda g: (g["scored"] >= 3, g["mean_score"] or 0), reverse=True)
+    elif genre_sort == "chapters":
+        genres.sort(key=lambda g: g["chapters"], reverse=True)
+    s.genres = genres
+    md_rows = [m for m in MD_ORDER if any(heat.get((m, a)) for a in STATUS_ORDER)]
+    al_cols = [a for a in STATUS_ORDER if any(heat.get((m, a)) for m in MD_ORDER)]
+    s.heat = {
+        "rows": [{"key": m, "label": MD_STATUS_LABELS[m],
+                  "cells": [{"key": a, "value": heat.get((m, a), 0), "match": AL_FOR_MD.get(m) == a,
+                             "tip": f"{heat.get((m, a), 0):,} · MangaDex {MD_STATUS_LABELS[m]}, AniList {STATUS_LABELS.get(a, a)}"}
+                            for a in al_cols]} for m in md_rows],
+        "cols": [{"key": a, "label": STATUS_LABELS.get(a, a)} for a in al_cols],
+        "max": max(heat.values(), default=0),
+        "mismatches": sum(1 for r in rows if is_mismatch(r)),
+    }
     md = repo.conn.execute(
         "SELECT (SELECT COUNT(*) FROM md_manga) AS library, (SELECT COUNT(*) FROM md_read) AS read_markers, "
         "(SELECT COUNT(*) FROM md_chapter WHERE missing > 0) AS unresolved, "
@@ -124,6 +286,21 @@ def list_stats(repo: Repo) -> ListStats:
     s.md = dict(md)
     s.md["not_on_list"] = len(repo.not_on_list())
     return s
+
+
+ENTRY_SORTS = {
+    "title": (lambda r: r["title"].casefold(), False),
+    "progress": (lambda r: r["progress"] or 0, True),
+    "score": (lambda r: r["score"] or 0, True),
+    "updated": (lambda r: r["updated_at"] or 0, True),
+    "year": (lambda r: r["start_year"] or 0, True),
+    "through": (lambda r: (r["progress"] or 0) / r["chapters"] if r["chapters"] else -1, True),
+}
+
+
+def entries(repo: Repo, filters: dict[str, str], sort: str = "title") -> list[dict[str, Any]]:
+    key, reverse = ENTRY_SORTS.get(sort, ENTRY_SORTS["title"])
+    return sorted((r for r in entry_rows(repo) if matches(r, filters)), key=key, reverse=reverse)
 
 
 # ---- sync activity ---------------------------------------------------------------
@@ -235,14 +412,15 @@ def nice_max(value: float) -> float:
 
 def chart(bars: list[Bar], max_labels: int = 12) -> dict[str, Any]:
     """Bars scaled to a clean axis: pct per bar, three ticks, and which x labels to show."""
-    biggest = max((b.value for b in bars), default=0)
+    biggest = max([b.value for b in bars] + [b.value2 or 0 for b in bars], default=0)
     top = nice_max(biggest)
     every = max(1, math.ceil(len(bars) / max_labels))
     return {
         # pct: against the axis top (columns, which have an axis); rel: against the largest bar (labelled bars)
         "bars": [{"label": b.label, "value": b.value, "tip": b.tip, "pct": 100 * b.value / top,
-                  "rel": 100 * b.value / biggest if biggest else 0,
+                  "rel": 100 * b.value / biggest if biggest else 0, "key": b.key,
+                  "value2": b.value2, "tip2": b.tip2, "pct2": 100 * (b.value2 or 0) / top,
                   "show_label": i % every == 0 or i == len(bars) - 1} for i, b in enumerate(bars)],
         "ticks": [top, top / 2, 0],
-        "empty": not bars or all(b.value == 0 for b in bars),
+        "empty": not bars or all(b.value == 0 and not b.value2 for b in bars),
     }

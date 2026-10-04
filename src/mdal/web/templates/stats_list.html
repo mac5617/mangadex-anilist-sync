@@ -5,13 +5,29 @@
 <div class="page-head">
   <div>
     <h1>Stats</h1>
-    <p class="lede">Your AniList manga list as of the last sync, and your MangaDex library beside it.</p>
+    <p class="lede">Your AniList manga list as of the last sync, and your MangaDex library beside it.
+      Click any bar to see the series behind it.</p>
   </div>
 </div>
 {% with active = "list" %}{% include "_stats_tabs.html" %}{% endwith %}
 
+<form method="get" action="/stats" class="filter-row" id="stats-filters">
+  {% for key, label in [("status", "Status"), ("format", "Format"), ("country", "Country")] %}
+    <label>{{ label }}
+      <select name="{{ key }}" onchange="this.form.submit()">
+        <option value="">All</option>
+        {% for value, text in options[key] %}<option value="{{ value }}"{% if filters.get(key) == value %} selected{% endif %}>{{ text }}</option>{% endfor %}
+      </select>
+    </label>
+  {% endfor %}
+  <input type="hidden" name="gsort" value="{{ gsort }}">
+  <noscript><button class="secondary">Apply</button></noscript>
+  {% if filters %}<a href="/stats?gsort={{ gsort }}">Clear filters</a>{% endif %}
+  <a class="filter-row-end" href="{{ '/stats/entries?' ~ (filters | urlencode) }}">Browse these {{ s.total | num }} entries →</a>
+</form>
+
 {% if not s.total %}
-  <div class="panel empty">No AniList list yet. Run a sync and your stats appear here.</div>
+  <div class="panel empty">{% if filters %}No entries match these filters.{% else %}No AniList list yet. Run a sync and your stats appear here.{% endif %}</div>
 {% else %}
 <div class="stats">
   {{ charts.tile(s.total | num, "manga on your list") }}
@@ -22,28 +38,48 @@
   {% else %}
     {{ charts.tile("—", "mean score", "no scores yet") }}
   {% endif %}
+  {{ charts.tile(s.heat.mismatches | num, "status differs from MangaDex", "click to list them", mismatch_url) }}
 </div>
 {% if not s.has_genres %}
-  <p class="notice warn">Genres, scores, volumes and completion dates arrive with your next sync. They come with the list request a sync already makes, so it costs nothing extra.</p>
+  <p class="notice warn">Genres, scores, volumes and dates arrive with your next sync. They come with the list request a sync already makes, so it costs nothing extra.</p>
 {% endif %}
 
+<div class="grid three">
+  <section class="panel chart-panel"><h2>Status</h2>{{ charts.hbars(c.status, "Status", "Entries") }}</section>
+  <section class="panel chart-panel"><h2>Format</h2>{{ charts.hbars(c.formats, "Format", "Entries") }}</section>
+  <section class="panel chart-panel"><h2>Country of origin</h2>{{ charts.hbars(c.countries, "Country", "Entries") }}</section>
+</div>
+
+<section class="panel chart-panel">
+  <h2>Reading timeline</h2>
+  <p class="chart-sub">Series you started and completed each year (AniList start and completion dates)</p>
+  {{ charts.columns2(c.timeline, "Started", "Completed", empty="No start or completion dates yet.") }}
+</section>
+
 <div class="grid two">
-  <section class="panel chart-panel">
-    <h2>Status</h2>
-    {{ charts.hbars(c.status, "Status", "Entries") }}
-  </section>
-  <section class="panel chart-panel">
-    <h2>Format</h2>
-    {{ charts.hbars(c.formats, "Format", "Entries") }}
-  </section>
-  <section class="panel chart-panel">
-    <h2>Country of origin</h2>
-    {{ charts.hbars(c.countries, "Country", "Entries") }}
-  </section>
   <section class="panel chart-panel">
     <h2>Score distribution</h2>
     <p class="chart-sub">Entries per score band (100-point scale)</p>
     {{ charts.columns(c.scores, "Score", "Entries", empty="No scored entries yet.") }}
+  </section>
+  <section class="panel chart-panel">
+    <h2>Length</h2>
+    <p class="chart-sub">Series by how many chapters you've read</p>
+    {{ charts.hbars(c.length, "Chapters read", "Series") }}
+  </section>
+</div>
+
+<div class="grid two">
+  <section class="panel chart-panel">
+    <h2>How far through</h2>
+    <p class="chart-sub">Series you're reading whose total chapter count is known</p>
+    {{ charts.hbars(c.through, "Read so far", "Series", empty="No series with a known total.") }}
+    {% if s.nearly %}<p class="chart-foot"><a href="{{ nearly_url }}">{{ s.nearly | num }} nearly finished (90–99%) →</a></p>{% endif %}
+  </section>
+  <section class="panel chart-panel">
+    <h2>What you're reading</h2>
+    <p class="chart-sub">Series marked Reading, by their publication status</p>
+    {{ charts.hbars(c.pub, "Publication", "Series", empty="Nothing marked Reading.") }}
   </section>
 </div>
 
@@ -54,24 +90,30 @@
 </section>
 
 <section class="panel chart-panel">
-  <h2>Completed per year</h2>
-  <p class="chart-sub">Entries by the completion date on AniList</p>
-  {{ charts.columns(c.completed, "Year", "Completed", empty="No completion dates yet.") }}
-</section>
-
-<section class="panel chart-panel">
-  <h2>Genres</h2>
-  <p class="chart-sub">Your ten most common genres</p>
-  {{ charts.hbars(c.genres, "Genre", "Entries", empty="No genres yet: they arrive with your next sync.") }}
+  <div class="chart-head">
+    <div><h2>Genres</h2><p class="chart-sub">Your top ten by {{ genre_sorts[gsort] | lower }}{% if gsort == "score" %} (genres with at least 3 scores){% endif %}</p></div>
+    <div class="seg">{% for key, label in genre_sorts.items() %}
+      <a href="/stats?{{ (filters | dictsort | list + [("gsort", key)]) | urlencode }}"{% if gsort == key %} aria-current="true"{% endif %}>{{ label }}</a>{% endfor %}</div>
+  </div>
+  {{ charts.hbars(c.genres, "Genre", genre_sorts[gsort], empty="No genres yet: they arrive with your next sync.") }}
   {% if s.genres %}
   <details class="chart-table"><summary>All {{ s.genres | length }} genres with chapters and mean score</summary>
     <table class="data compact">
       <thead><tr><th>Genre</th><th class="num">Entries</th><th class="num">Chapters read</th><th class="num">Mean score</th></tr></thead>
-      <tbody>{% for g in s.genres %}<tr><td>{{ g.name }}</td><td class="num">{{ g.count | num }}</td><td class="num">{{ g.chapters | num }}</td>
+      <tbody>{% for g in s.genres %}<tr><td><a href="{{ '/stats/entries?' ~ ((filters | dictsort | list) + [('genre', g.name)]) | urlencode }}">{{ g.name }}</a></td>
+        <td class="num">{{ g.count | num }}</td><td class="num">{{ g.chapters | num }}</td>
         <td class="num">{{ "%.0f" | format(g.mean_score) if g.mean_score is not none else "—" }}</td></tr>{% endfor %}</tbody>
     </table>
   </details>
   {% endif %}
+</section>
+
+<section class="panel chart-panel">
+  <h2>MangaDex status vs AniList status</h2>
+  <p class="chart-sub">Each square counts series with that MangaDex reading status and AniList list status. Outlined squares agree;
+    the rest differ ({{ s.heat.mismatches | num }} series). Syncs only ever change AniList's status to Completed, so anything else is
+    yours to fix by hand if you want them to agree.</p>
+  {{ charts.heatmap(s.heat, "MangaDex", "AniList") }}
 </section>
 {% endif %}
 
@@ -79,8 +121,8 @@
 <div class="stats">
   {{ charts.tile(s.md.library | num, "series in your library") }}
   {{ charts.tile(s.md.read_markers | num, "chapters marked read") }}
-  {{ charts.tile(s.md.matched | num, "matched to AniList", "%s to review · %s unmatched" | format(s.md.review | num, s.md.unmatched | num)) }}
-  {{ charts.tile(s.md.not_on_list | num, "matched, not on your list") }}
+  {{ charts.tile(s.md.matched | num, "matched to AniList", "%s to review · %s unmatched" | format(s.md.review | num, s.md.unmatched | num), "/review") }}
+  {{ charts.tile(s.md.not_on_list | num, "matched, not on your list", None, "/not-listed") }}
   {{ charts.tile(s.md.unresolved | num, "read chapters MangaDex no longer has") }}
 </div>
 <script src="/static/charts.js" defer></script>
