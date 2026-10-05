@@ -116,6 +116,8 @@ def test_times_show_in_local_time():
 
     stored = "2026-10-04T02:36:36+00:00"                       # times are stored in UTC
     local = datetime(2026, 10, 4, 2, 36, 36, tzinfo=UTC).astimezone()
-    assert when(stored) == local.strftime("%Y-%m-%d %H:%M") and "UTC" not in when(stored)
+    assert when(stored) == local.strftime("%Y-%m-%d ") + local.strftime("%I:%M %p").lstrip("0") and "UTC" not in when(stored)
+    from mdal.web.app import clock
+    assert clock(datetime(2026, 1, 1, 21, 5)) == "9:05 PM" and clock(datetime(2026, 1, 1, 0, 30)) == "12:30 AM"
     assert when("2025-06") == "2025-06" and when(None) == "—"   # not a timestamp: shown as it is
     assert date_from_unix(int(local.timestamp())) == local.strftime("%Y-%m-%d")

@@ -6,6 +6,7 @@ Rendering never calls an API: everything comes from the DB.
 from __future__ import annotations
 
 import time
+from datetime import datetime
 from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
@@ -29,7 +30,7 @@ from mdal.sync.orchestrator import (
     open_diff,
 )
 from mdal.sync.rules import AlMediaInfo, MdInfo, completion_info, completion_label
-from mdal.web.app import get_services, md_cover_url, render, templates
+from mdal.web.app import clock, get_services, md_cover_url, render, templates
 
 router = APIRouter()
 
@@ -46,7 +47,7 @@ def cooldown_info(svc: Services) -> dict[str, Any] | None:
     left = until - time.time()
     if left <= 0:
         return None
-    return {"until": time.strftime("%H:%M", time.localtime(until)), "minutes": max(1, round(left / 60)), "reason": reason}
+    return {"until": clock(datetime.fromtimestamp(until)), "minutes": max(1, round(left / 60)), "reason": reason}
 
 
 def status_context(svc: Services, message: str | None = None) -> dict[str, Any]:

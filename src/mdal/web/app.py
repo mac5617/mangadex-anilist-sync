@@ -23,7 +23,7 @@ def md_cover_url(md_id: str, cover_file: str | None) -> str | None:
 
 
 def when(iso: str | None) -> str:
-    """'2026-10-04T02:36:36+00:00' -> '2026-10-03 22:36' in this computer's time zone (times are stored in UTC).
+    """'2026-10-04T02:36:36+00:00' -> '2026-10-03 10:36 PM' in this computer's time zone (times are stored in UTC).
     Anything that isn't a full timestamp (a plain date, say) is shown as it is."""
     if not iso:
         return "—"
@@ -33,7 +33,12 @@ def when(iso: str | None) -> str:
         return str(iso)
     if moment.tzinfo is None:
         return str(iso).replace("T", " ")[:16]
-    return moment.astimezone().strftime("%Y-%m-%d %H:%M")
+    return moment.astimezone().strftime("%Y-%m-%d ") + clock(moment.astimezone())
+
+
+def clock(moment: datetime) -> str:
+    """12-hour time without a leading zero: '9:05 PM' (Windows' strftime has no %-I)."""
+    return moment.strftime("%I:%M %p").lstrip("0")
 
 
 templates.env.globals["md_cover"] = md_cover_url
