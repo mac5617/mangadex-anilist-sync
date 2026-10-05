@@ -45,7 +45,7 @@ def entries_by_id(request: Request) -> dict[int, dict[str, Any]]:
 
 def save_context(request: Request) -> dict[str, Any]:
     r = get_services(request).ranker
-    return {"save": r.status(), "saving": r.saving, "pending": len(r.pending()),
+    return {"save": r.status(), "saving": r.saving, "pending": len(r.pending()), "pending_mal": len(r.pending_mal()),
             "anilist": bool(get_services(request).anilist_token())}
 
 
@@ -91,10 +91,12 @@ def step(request: Request, context: dict[str, Any]) -> HTMLResponse:
     return templates.TemplateResponse(request, "_rank_step.html", context)
 
 
+# async: opening the page starts any waiting save (an asyncio task), e.g. scores not yet on MyAnimeList.
 @router.get("/list/rank", response_class=HTMLResponse)
-def rank_page(request: Request, media_id: int | None = None) -> HTMLResponse:
+async def rank_page(request: Request, media_id: int | None = None) -> HTMLResponse:
     if media_id is not None and media_id not in get_services(request).repo.al_entries():
         raise HTTPException(404, "Only series on your AniList list can be ranked.")
+    get_services(request).ranker.start_save()
     ranked = len(get_services(request).repo.ranking())
     return render(request, "list_rank.html", {**tier_step(request, media_id), "ranked": ranked})
 
@@ -192,8 +194,9 @@ async def rank_save(request: Request) -> HTMLResponse:
 
 
 @router.get("/list/ranking", response_class=HTMLResponse)
-def ranking_page(request: Request) -> HTMLResponse:
+async def ranking_page(request: Request) -> HTMLResponse:
     svc = get_services(request)
+    svc.ranker.start_save()
     entries = entries_by_id(request)
     scores = svc.ranker.ranked_scores()
     tiers = []

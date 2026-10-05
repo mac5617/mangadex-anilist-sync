@@ -441,6 +441,11 @@ class Repo:
                               (media_id, entry_id, site, field, None if old is None else str(old), str(new), state, error,
                                now_iso()))
 
+    def scored_by_shiori(self) -> set[int]:
+        """Series whose AniList score Shiori has set (ranking or quick scoring)."""
+        return {r[0] for r in self.conn.execute(
+            "SELECT DISTINCT media_id FROM list_edit WHERE site='anilist' AND field='score' AND state='done'")}
+
     def list_edits(self, limit: int = 50) -> list[sqlite3.Row]:
         return self.conn.execute("SELECT * FROM list_edit ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
 

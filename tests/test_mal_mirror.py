@@ -99,3 +99,20 @@ def test_stalled_status_goes_to_both_sites_and_the_switch_turns_it_off(setup):
         assert "Marked Paused on AniList." in c.post("/list/status/1", data={"status": "PAUSED"}).text
         assert len(mal.edits) == 1                                                  # switched off: MAL untouched
         assert "now also go to MyAnimeList" in c.post("/settings/mal-mirror", data={"on": "1"}).text
+
+
+def test_scores_saved_before_mirroring_catch_up_on_mal(setup):
+    """Scores Shiori put on AniList earlier reach MyAnimeList when the Rank page opens; your own MAL scores
+    for series Shiori never scored are left alone."""
+    services, mal = setup
+    services.repo.update_al_entry(1, score=84)
+    services.repo.log_edit(1, 101, "score", None, 84, "done")          # Shiori set this one (before mirroring)
+    services.repo.update_al_entry(2, score=50)                         # you set this one yourself on AniList
+    assert services.ranker.pending_mal() == {1: 84}
+    with TestClient(create_app(services)) as c:
+        page = c.get("/list/rank").text
+        assert "to MyAnimeList" in page or "saving" in page.lower()
+        c.get("/list/rank-status")
+    assert mal.edits == [(501, {"score": "8"})]
+    assert services.ranker.pending_mal() == {}
+    assert services.ranker.status()["detail"] == "1 on MyAnimeList"

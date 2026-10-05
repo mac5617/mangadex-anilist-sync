@@ -15,7 +15,7 @@ from mdal.db.repo import now_iso
 from mdal.recommend import ranking
 from mdal.clients.myanimelist import MalError
 from mdal.sync.list_edit import save_scores
-from mdal.sync.mal_list_edit import mirror_scores
+from mdal.sync.mal_list_edit import mal_score, mirror_scores, on_mal
 
 if TYPE_CHECKING:
     from mdal.services import Services
@@ -82,47 +82,63 @@ class Ranker:
         return {m: ranking.to_anilist(s) for m, s in self.ranked_scores().items()
                 if m in entries and (entries[m]["score"] or 0) != ranking.to_anilist(s)}
 
+    def pending_mal(self) -> dict[int, int]:
+        """{media_id: AniList score} for scores Shiori set (ranked or quick-scored) whose whole number isn't on
+        MyAnimeList yet. Scores you set yourself on MyAnimeList are never touched."""
+        if not self.services.mirror_to_mal():
+            return {}
+        entries = self.repo.al_entries()
+        ids = {r["media_id"] for r in self.repo.ranking()} | self.repo.scored_by_shiori()
+        scores = {m: entries[m]["score"] for m in ids if m in entries and entries[m]["score"]}
+        listed = self.repo.mal_entries()
+        return {m: scores[m] for m, mal_id in on_mal(self.repo, list(scores)).items()
+                if (listed[mal_id]["score"] or 0) != mal_score(scores[m])}
+
     def status(self) -> dict[str, Any]:
         return self.repo.get_setting("rank_save") or {}
 
     def start_save(self) -> None:
-        """Save pending scores in the background; a save already running picks up the new ones after it."""
-        if not self.services.anilist_token():
-            return
+        """Save pending scores in the background (AniList, then MyAnimeList); a save already running picks up
+        new ones after it."""
         if self.saving:
             self._again = True
+            return
+        if not (self.services.anilist_token() and self.pending()) and not self.pending_mal():
             return
         self.task = asyncio.create_task(self._save())
 
     async def _save(self) -> None:
         while True:
             self._again = False
-            todo = self.pending()
-            if not todo:
-                break
-            self.repo.set_setting("rank_save", {"state": "running", "detail": f"saving {len(todo)} scores to AniList",
-                                                "started_at": now_iso()})
-            try:
-                saved, failed = await save_scores(self.services.anilist, self.repo, todo,
-                                                  self.repo.get_setting("anilist_write_batch"))
-                detail = f"{len(saved)} scores saved to AniList" + (f", {len(failed)} failed" if failed else "")
-                problems = sorted(set(failed.values()))
-                if saved and self.services.mirror_to_mal():
-                    self.repo.set_setting("rank_save", {**self.status(), "detail": "repeating scores on MyAnimeList"})
-                    try:
-                        mal_saved, mal_failed = await mirror_scores(self.services.mal, self.repo, {m: todo[m] for m in saved})
-                        detail += f"; {len(mal_saved)} on MyAnimeList" + (f" ({len(mal_failed)} failed)" if mal_failed else "")
-                        problems += [f"MyAnimeList: {p}" for p in sorted(set(mal_failed.values()))]
-                    except MalError as exc:
-                        detail += "; MyAnimeList not updated"
-                        problems.append(f"MyAnimeList: {exc}")
-                self.repo.set_setting("rank_save", {
-                    "state": "failed" if problems else "done", "finished_at": now_iso(), "saved": len(saved),
-                    "detail": detail, "error": "; ".join(problems)[:300] if problems else None})
-            except AniListError as exc:
-                log.warning("saving scores failed: %s", exc)
-                self.repo.set_setting("rank_save", {"state": "failed", "finished_at": now_iso(), "error": str(exc),
-                                                    "detail": "scores not saved"})
-                break
+            self.repo.set_setting("rank_save", {"state": "running", "detail": "saving scores", "started_at": now_iso()})
+            parts: list[str] = []
+            problems: list[str] = []
+            todo = self.pending() if self.services.anilist_token() else {}
+            if todo:
+                self.repo.set_setting("rank_save", {**self.status(), "detail": f"saving {len(todo)} scores to AniList"})
+                try:
+                    saved, failed = await save_scores(self.services.anilist, self.repo, todo,
+                                                      self.repo.get_setting("anilist_write_batch"))
+                    parts.append(f"{len(saved)} scores saved to AniList" + (f", {len(failed)} failed" if failed else ""))
+                    problems += sorted(set(failed.values()))
+                except AniListError as exc:
+                    log.warning("saving scores failed: %s", exc)
+                    self.repo.set_setting("rank_save", {"state": "failed", "finished_at": now_iso(), "error": str(exc),
+                                                        "detail": "scores not saved"})
+                    break
+            mal_todo = self.pending_mal()
+            if mal_todo:
+                self.repo.set_setting("rank_save", {**self.status(), "detail": f"saving {len(mal_todo)} scores to MyAnimeList"})
+                try:
+                    mal_saved, mal_failed = await mirror_scores(self.services.mal, self.repo, mal_todo)
+                    parts.append(f"{len(mal_saved)} on MyAnimeList" + (f", {len(mal_failed)} failed" if mal_failed else ""))
+                    problems += [f"MyAnimeList: {p}" for p in sorted(set(mal_failed.values()))]
+                except MalError as exc:
+                    parts.append("MyAnimeList not updated")
+                    problems.append(f"MyAnimeList: {exc}")
+            self.repo.set_setting("rank_save", {
+                "state": "failed" if problems else "done", "finished_at": now_iso(),
+                "detail": "; ".join(parts) or "nothing to save",
+                "error": "; ".join(problems)[:300] if problems else None})
             if not self._again:
                 break
