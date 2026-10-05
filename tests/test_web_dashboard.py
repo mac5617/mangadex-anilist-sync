@@ -107,3 +107,15 @@ def test_favicon(services):
         assert ico.status_code == 200 and ico.headers["content-type"] == "image/x-icon"
         assert c.get("/static/favicon.svg").status_code == 200
         assert c.get("/static/apple-touch-icon.png").status_code == 200
+
+
+def test_times_show_in_local_time():
+    from datetime import UTC, datetime
+
+    from mdal.web.app import date_from_unix, when
+
+    stored = "2026-10-04T02:36:36+00:00"                       # times are stored in UTC
+    local = datetime(2026, 10, 4, 2, 36, 36, tzinfo=UTC).astimezone()
+    assert when(stored) == local.strftime("%Y-%m-%d %H:%M") and "UTC" not in when(stored)
+    assert when("2025-06") == "2025-06" and when(None) == "—"   # not a timestamp: shown as it is
+    assert date_from_unix(int(local.timestamp())) == local.strftime("%Y-%m-%d")

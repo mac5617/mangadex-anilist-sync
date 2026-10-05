@@ -1,7 +1,7 @@
 import asyncio
 import json
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -23,11 +23,17 @@ def md_cover_url(md_id: str, cover_file: str | None) -> str | None:
 
 
 def when(iso: str | None) -> str:
-    """'2026-10-03T20:43:45+00:00' -> '2026-10-03 20:43 UTC' (stored times are UTC)."""
+    """'2026-10-04T02:36:36+00:00' -> '2026-10-03 22:36' in this computer's time zone (times are stored in UTC).
+    Anything that isn't a full timestamp (a plain date, say) is shown as it is."""
     if not iso:
         return "—"
-    text = str(iso).replace("T", " ")
-    return text[:16] + " UTC" if text.endswith("+00:00") and len(text) >= 16 else text
+    try:
+        moment = datetime.fromisoformat(str(iso))
+    except ValueError:
+        return str(iso)
+    if moment.tzinfo is None:
+        return str(iso).replace("T", " ")[:16]
+    return moment.astimezone().strftime("%Y-%m-%d %H:%M")
 
 
 templates.env.globals["md_cover"] = md_cover_url
@@ -62,10 +68,10 @@ templates.env.filters["model_label"] = model_label
 
 
 def date_from_unix(value: int | None) -> str:
-    """AniList updatedAt (Unix seconds) -> '2026-10-03'."""
+    """AniList updatedAt (Unix seconds) -> '2026-10-03', in this computer's time zone."""
     if not value:
         return "—"
-    return datetime.fromtimestamp(int(value), tz=timezone.utc).strftime("%Y-%m-%d")
+    return datetime.fromtimestamp(int(value)).strftime("%Y-%m-%d")
 
 
 templates.env.filters["date_from_unix"] = date_from_unix
