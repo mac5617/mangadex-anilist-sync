@@ -21,6 +21,9 @@ from mdal.web.app import get_services, render, templates
 
 router = APIRouter()
 
+# MyAnimeList's words for each score, so a number reads as a judgement.
+SCORE_WORDS = {1: "Appalling", 2: "Horrible", 3: "Very bad", 4: "Bad", 5: "Average", 6: "Fine", 7: "Good", 8: "Very good",
+               9: "Great", 10: "Masterpiece"}
 MD_ID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 
 
@@ -40,7 +43,7 @@ def series_page(request: Request, kind: str, ident: str) -> HTMLResponse:
         raise HTTPException(404, "Shiori doesn't know this series yet.")
     svc = get_services(request)
     return render(request, "series.html", {"s": s, "verdicts": VERDICTS, "anilist": bool(svc.anilist_token()),
-                                           "mal_default": svc.mirror_to_mal()})
+                                           "mal_default": svc.mirror_to_mal(), "score_words": SCORE_WORDS})
 
 
 # async: the lookups await the API clients on the event loop.
@@ -73,7 +76,8 @@ def series_rate(request: Request, kind: str, ident: str, verdict: str = Form("")
 def verdict_panel(request: Request, key: str, **extra) -> HTMLResponse:
     svc = get_services(request)
     return templates.TemplateResponse(request, "_series_verdict.html", {
-        "s": svc.series.view(key), "verdicts": VERDICTS, "anilist": bool(svc.anilist_token()), **extra})
+        "s": svc.series.view(key), "verdicts": VERDICTS, "anilist": bool(svc.anilist_token()),
+        "score_words": SCORE_WORDS, **extra})
 
 
 # async: awaits the AniList and MyAnimeList clients.
