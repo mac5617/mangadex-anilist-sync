@@ -24,6 +24,7 @@ from mdal.web.app import get_services, render, templates
 
 router = APIRouter()
 
+RANKING_SORTS = {"rank": "By rank", "recent": "Recently ranked", "oldest": "Oldest ranked", "popular": "Most popular"}
 STATUS_WORDS = {"CURRENT": "Reading", "COMPLETED": "Completed", "PAUSED": "Paused", "DROPPED": "Dropped",
                 "PLANNING": "Planning", "REPEATING": "Rereading"}
 
@@ -194,20 +195,33 @@ async def rank_save(request: Request) -> HTMLResponse:
 
 
 @router.get("/list/ranking", response_class=HTMLResponse)
-async def ranking_page(request: Request) -> HTMLResponse:
+async def ranking_page(request: Request, sort: str = "rank") -> HTMLResponse:
+    """Your ranking, by tier and place (the default), when you ranked them, or by popularity on AniList."""
     svc = get_services(request)
     svc.ranker.start_save()
+    sort = sort if sort in RANKING_SORTS else "rank"
     entries = entries_by_id(request)
     scores = svc.ranker.ranked_scores()
-    tiers = []
+    ranked = svc.repo.ranking()
+    popularity = {m: r["popularity"] or 0 for m, r in svc.repo.media([r["media_id"] for r in ranked]).items()}
+    tiers, rows = [], []
     for tier in ranking.TIER_ORDER:
-        rows = [{**view(entries[r["media_id"]]), "score": scores[r["media_id"]], "place": i + 1,
-                 "saved": (entries[r["media_id"]]["score"] or 0) == ranking.to_anilist(scores[r["media_id"]])}
-                for i, r in enumerate(svc.ranker.tier(tier)) if r["media_id"] in entries]
+        tier_rows = [{**view(entries[r["media_id"]]), "score": scores[r["media_id"]], "place": i + 1, "tier": tier,
+                      "tier_label": ranking.TIERS[tier][2], "ranked_at": r["ranked_at"],
+                      "popularity": popularity.get(r["media_id"], 0),
+                      "saved": (entries[r["media_id"]]["score"] or 0) == ranking.to_anilist(scores[r["media_id"]])}
+                     for i, r in enumerate(svc.ranker.tier(tier)) if r["media_id"] in entries]
         low, high, label = ranking.TIERS[tier]
-        tiers.append({"tier": tier, "label": label, "range": f"{low:g}–{high:g}", "rows": rows})
-    return render(request, "list_ranking.html", {"tiers": tiers, "total": sum(len(t["rows"]) for t in tiers),
-                                                 **save_context(request)})
+        tiers.append({"tier": tier, "label": label, "range": f"{low:g}–{high:g}", "rows": tier_rows})
+        rows += tier_rows
+    if sort == "recent":
+        rows.sort(key=lambda r: r["ranked_at"], reverse=True)
+    elif sort == "oldest":
+        rows.sort(key=lambda r: r["ranked_at"])
+    elif sort == "popular":
+        rows.sort(key=lambda r: -r["popularity"])
+    return render(request, "list_ranking.html", {"tiers": tiers, "rows": rows, "total": len(rows), "sort": sort,
+                                                 "sorts": RANKING_SORTS, **save_context(request)})
 
 
 @router.post("/list/ranking/{media_id}/remove", response_class=HTMLResponse)

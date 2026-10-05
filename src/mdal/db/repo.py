@@ -515,6 +515,19 @@ class Repo:
                                                 "data": None if data is None else json.dumps(data, ensure_ascii=False)},
                     ["key", "kind"])
 
+    # ---- notes on series not on your list ------------------------------------------------
+    def series_note(self, key: str) -> str | None:
+        row = self.conn.execute("SELECT notes FROM series_note WHERE key=?", (key,)).fetchone()
+        return row[0] if row else None
+
+    def set_series_note(self, key: str, notes: str) -> None:
+        """Empty notes delete the row."""
+        with self.conn:
+            if notes:
+                _upsert(self.conn, "series_note", {"key": key, "notes": notes, "updated_at": now_iso()}, ["key"])
+            else:
+                self.conn.execute("DELETE FROM series_note WHERE key=?", (key,))
+
     # ---- chat ---------------------------------------------------------------
     def chat_messages(self, limit: int = 200) -> list[sqlite3.Row]:
         return self.conn.execute(

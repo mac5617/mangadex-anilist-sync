@@ -149,7 +149,7 @@ async def test_series_page_and_its_lookup(scanned, mock):
 async def test_list_entries_have_pages_that_say_so(scanned):
     with client_for(scanned) as c:
         page = c.get("/series/al/11").text
-        assert "On your AniList list" in page and "your list entry already counts" in page
+        assert "On your AniList list" in page and "Your score" in page and "/series/al/11/score" in page
 
 
 # ---- MyAnimeList ----------------------------------------------------------------------------------

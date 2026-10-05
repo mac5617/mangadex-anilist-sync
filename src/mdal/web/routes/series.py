@@ -13,7 +13,10 @@ from mdal.recommend.feedback import VERDICTS
 from mdal.recommend.ratings import rate
 from mdal.recommend.series import series_url
 from mdal.sync.list_edit import ListEditError, read_notes, save_notes
+from mdal.sync.list_edit import save_scores
+from mdal.sync.mal_list_edit import mirror_scores
 from mdal.sync.mal_writer import MalCommentsError, save_comments
+from mdal.recommend import ranking
 from mdal.web.app import get_services, render, templates
 
 router = APIRouter()
@@ -64,13 +67,60 @@ def series_rate(request: Request, kind: str, ident: str, verdict: str = Form("")
         row = svc.repo.feedback().get(key)
         return templates.TemplateResponse(request, "_rating_row.html", {"r": row, "key": key, "verdicts": VERDICTS,
                                                                         "href": series_url(key)})
-    return templates.TemplateResponse(request, "_series_verdict.html", {"s": svc.series.view(key), "verdicts": VERDICTS})
+    return verdict_panel(request, key)
+
+
+def verdict_panel(request: Request, key: str, **extra) -> HTMLResponse:
+    svc = get_services(request)
+    return templates.TemplateResponse(request, "_series_verdict.html", {
+        "s": svc.series.view(key), "verdicts": VERDICTS, "anilist": bool(svc.anilist_token()), **extra})
+
+
+# async: awaits the AniList and MyAnimeList clients.
+@router.post("/series/{kind}/{ident}/score", response_class=HTMLResponse)
+async def series_score(request: Request, kind: str, ident: str, score: str = Form("")) -> HTMLResponse:
+    """A score for a series on your list, saved to AniList (and MyAnimeList when mirroring). A ranked series
+    leaves the ranking, which would otherwise put its ranked score back."""
+    key = series_key(kind, ident)
+    media_id = _on_list(request, key)
+    svc = get_services(request)
+    try:
+        value = float(score.replace(",", "."))
+    except ValueError:
+        value = -1
+    if not 0 < value <= 10:
+        return verdict_panel(request, key, score_note="A score is a number from 0.1 to 10.", score_ok=False)
+    try:
+        saved, failed = await save_scores(svc.anilist, svc.repo, {media_id: ranking.to_anilist(value)})
+    except AniListError as exc:
+        return verdict_panel(request, key, score_note=f"AniList didn't save it: {exc}", score_ok=False)
+    if failed:
+        return verdict_panel(request, key, score_note=f"AniList didn't save it: {failed[media_id]}", score_ok=False)
+    svc.ranker.remove(media_id)
+    where = "AniList"
+    if svc.mirror_to_mal():
+        try:
+            mal_saved, mal_failed = await mirror_scores(svc.mal, svc.repo, {media_id: ranking.to_anilist(value)})
+            where = "AniList and MyAnimeList" if mal_saved else where
+            if mal_failed:
+                return verdict_panel(request, key, score_note=f"Saved to AniList; MyAnimeList: {mal_failed[media_id]}.",
+                                     score_ok=False)
+        except MalError as exc:
+            return verdict_panel(request, key, score_note=f"Saved to AniList; MyAnimeList: {exc}.", score_ok=False)
+    return verdict_panel(request, key, score_note=f"Saved {value:g}/10 to {where}.", score_ok=True)
 
 
 def notes_panel(request: Request, key: str, **extra) -> HTMLResponse:
     svc = get_services(request)
     return templates.TemplateResponse(request, "_series_notes.html", {
         "s": svc.series.view(key), "anilist": bool(svc.anilist_token()), "mal_default": svc.mirror_to_mal(), **extra})
+
+
+def _known(request: Request, key: str) -> dict:
+    s = get_services(request).series.view(key)
+    if s is None:
+        raise HTTPException(404, "Shiori doesn't know this series yet.")
+    return s
 
 
 def _on_list(request: Request, key: str) -> int:
@@ -98,8 +148,11 @@ async def series_notes(request: Request, kind: str, ident: str) -> HTMLResponse:
 @router.post("/series/{kind}/{ident}/notes", response_class=HTMLResponse)
 async def series_save_notes(request: Request, kind: str, ident: str, notes: str = Form(""), mal: str = Form("")) -> HTMLResponse:
     key = series_key(kind, ident)
-    media_id = _on_list(request, key)
     svc = get_services(request)
+    if not _known(request, key)["entry"]:
+        svc.repo.set_series_note(key, notes.strip()[:5000])
+        return notes_panel(request, key, notes_saved="Saved in Shiori.")
+    media_id = _on_list(request, key)
     try:
         await save_notes(svc.anilist, svc.repo, media_id, notes)
     except (AniListError, ListEditError) as exc:

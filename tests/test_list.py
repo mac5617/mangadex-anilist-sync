@@ -145,3 +145,44 @@ def test_stalled_page_pauses_on_anilist(services, lists):
         assert "Marked Paused on AniList" in done and services.repo.al_entries()[6]["status"] == "PAUSED"
         assert c.post("/list/status/6", data={"status": "COMPLETED"}).status_code == 400
         assert "Series 6" in c.get("/list/binge").text               # finished, 30 chapters left
+
+
+def test_ranking_sorts(services, lists):
+    services.repo.conn.execute("UPDATE al_media SET popularity = media_id * 100")
+    services.repo.conn.commit()
+    for media_id, tier in ((1, "liked"), (2, "fine"), (3, "liked")):
+        services.repo.set_rank(media_id, tier, media_id)      # ranked in order 1, 2, 3
+        services.repo.conn.execute("UPDATE ranking SET ranked_at=? WHERE media_id=?", (f"2026-10-0{media_id}T00:00:00+00:00", media_id))
+    services.repo.conn.commit()
+
+    def order(page):
+        return [int(m) for m in re.findall(r'href="/series/al/(\d+)"', page)]
+
+    with TestClient(create_app(services)) as c:
+        assert order(c.get("/list/ranking").text) == [1, 3, 2]                   # by tier, then place
+        assert order(c.get("/list/ranking?sort=recent").text) == [3, 2, 1]
+        assert order(c.get("/list/ranking?sort=oldest").text) == [1, 2, 3]
+        page = c.get("/list/ranking?sort=popular").text
+        assert order(page) == [3, 2, 1] and "on 300 AniList lists" in page
+        assert order(c.get("/list/ranking?sort=bogus").text) == [1, 3, 2]
+
+
+def test_series_page_score_and_notes_for_any_series(services, lists):
+    services.repo.upsert_media([al_media_row(50, "Not On My List")])
+    services.repo.set_rank(2, "liked", 0)
+    with TestClient(create_app(services)) as c:
+        page = c.get("/series/al/2").text
+        assert "Your score" in page and "#1 in “I liked it”" in page
+        done = c.post("/series/al/2/score", data={"score": "7.5"}).text
+        assert "Saved 7.5/10 to AniList." in done and services.repo.al_entries()[2]["score"] == 75
+        assert 2 not in {r["media_id"] for r in services.repo.ranking()}       # typed score: out of the ranking
+        assert "number from 0.1 to 10" in c.post("/series/al/2/score", data={"score": "0"}).text
+        assert c.post("/series/al/50/score", data={"score": "8"}).status_code == 404   # not on your list
+
+        other = c.get("/series/al/50").text
+        assert "Your notes" in other and "Kept in Shiori" in other and "Your rating" in other
+        saved = c.post("/series/al/50/notes", data={"notes": "Try after finishing Berserk"}).text
+        assert "Saved in Shiori." in saved and services.repo.series_note("al:50") == "Try after finishing Berserk"
+        assert "Try after finishing Berserk" in c.get("/series/al/50").text
+        c.post("/series/al/50/notes", data={"notes": ""})
+        assert services.repo.series_note("al:50") is None

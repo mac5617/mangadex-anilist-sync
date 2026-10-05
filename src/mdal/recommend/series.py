@@ -176,6 +176,7 @@ class SeriesPages:
             "reasons": self._reasons(key, al_id),
             "ranked": self._ranked(al_id) if entry else None, "al_id": al_id,
             "notes": entry["notes"] if entry else None,
+            "local_notes": self.repo.series_note(key),
             "mal_mirror": bool(entry and media["id_mal"] and self.services.mal.connected
                                and media["id_mal"] in self.repo.mal_entries()),
             "mu": mu, "english": english_meta(mu), "looked_up": self.looked_up(key), "problems": self.problems(key),
@@ -189,7 +190,7 @@ class SeriesPages:
         if row is None:
             return None
         tier = [r["media_id"] for r in rows if r["tier"] == row["tier"]]
-        return {"place": tier.index(al_id) + 1, "label": ranking.TIERS[row["tier"]][2],
+        return {"place": tier.index(al_id) + 1, "label": ranking.TIERS[row["tier"]][2], "tier": row["tier"],
                 "score": self.services.ranker.ranked_scores()[al_id]}
 
     def _reasons(self, key: str, al_id: int | None) -> list[str]:

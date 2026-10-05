@@ -26,7 +26,7 @@
       {% for label, value in s.facts %}<div><dt>{{ label }}</dt><dd>{{ value }}</dd></div>{% endfor %}
     </dl>{% endif %}
 
-    {% if s.entry %}{% include "_series_notes.html" %}{% endif %}
+    {% include "_series_notes.html" %}
 
     {% if s.reasons %}<section class="series-section">
       <h2>Why it's recommended</h2>

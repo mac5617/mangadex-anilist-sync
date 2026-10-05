@@ -1,8 +1,9 @@
 """Backup and export: what only Shiori knows, as JSON to keep and restore; your list and ratings as CSV.
 
 The backup holds your decisions and work: matches, dismissed flags, ratings, your ranking, hidden series,
-Ask conversations, friends compared, list edits and settings. It never holds logins or tokens, and leaves
-out what AniList and MangaDex give back on the next sync (lists, chapters, series details, caches).
+Ask conversations, friends compared, list edits, notes kept in Shiori and settings. It never holds logins or
+tokens, and leaves out what AniList and MangaDex give back on the next sync (lists, chapters, series details,
+caches).
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ FORMAT = "shiori-backup"
 TABLES = {   # table -> primary key (restore replaces rows with the same key)
     "mapping": "md_id", "dismissed_flag": "md_id", "rec_hidden": "media_id", "md_new_hidden": "md_id",
     "rec_feedback": "key", "ranking": "media_id", "chat_message": "id", "friend": "name", "list_edit": "id",
+    "series_note": "key",
 }
 SECRET_SETTINGS = {"mangadex_session", "mal_session", "mangadex_cooldown_until", "mangadex_cooldown_reason"}
 STATE_SETTINGS = {"rec_status", "new_status", "rank_save"}       # what a job was doing: meaningless elsewhere

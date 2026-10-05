@@ -1,13 +1,27 @@
 {%- set kind, ident = s.key.split(":", 1) -%}
 <div id="series-verdict" class="series-verdict panel">
+{% if s.entry %}
+  <h2>Your score</h2>
+  <p class="series-score">
+    {% if s.entry.score %}<span class="score-badge small-badge{% if s.ranked %} tier-{{ s.ranked.tier }}{% endif %}">{{ "%g" | format(s.entry.score / 10) }}</span>
+    {% else %}<span class="muted">Not scored yet</span>{% endif %}
+    {% if s.ranked %}<span class="muted small">#{{ s.ranked.place }} in “{{ s.ranked.label }}”</span>{% endif %}
+  </p>
+  <form class="score-form" hx-post="/series/{{ kind }}/{{ ident }}/score" hx-target="#series-verdict" hx-swap="outerHTML">
+    <label for="series-score">Score</label>
+    <input id="series-score" name="score" type="number" min="0.1" max="10" step="0.1" inputmode="decimal"
+      value="{{ '%g' | format(s.entry.score / 10) if s.entry.score else '' }}" placeholder="8.5" required>
+    <span class="muted">/ 10</span>
+    <button class="secondary"{% if not anilist %} disabled title="Connect AniList in Settings first"{% endif %}>Save</button>
+  </form>
+  {% if score_note %}<p class="notice {{ 'ok' if score_ok else 'err' }} small" role="status">{{ score_note }}</p>{% endif %}
+  <p class="small"><a href="/list/rank?media_id={{ s.al_id }}">{{ "Rank it again by comparing" if s.ranked else "Or rank it by comparing" }}</a></p>
+  {% if s.ranked %}<p class="muted small">Typing a score takes it out of your ranking; ranking it again puts it back.</p>{% endif %}
+{% else %}
   <h2>Your rating</h2>
   {% if s.verdict %}<p class="small"><strong>{{ s.verdict.label }}</strong>
     <span class="muted">· {% if s.verdict.source == "ask" %}from Ask{% elif s.verdict.source == "hide" %}from Not interested{% else %}saved{% endif %} {{ s.verdict.at | when }}</span></p>
-  {% elif not s.entry %}<p class="muted small">Rate it and recommendations learn from it.</p>{% endif %}
-  {% if s.entry and not s.verdict %}<p class="muted small">It's on your AniList list, so your list entry already counts.</p>
-  <p><a class="button secondary" href="/list/rank?media_id={{ s.al_id }}">{{ "Re-rank it" if s.ranked else "Rank it" }}</a>
-    {% if s.ranked %}<span class="muted small">#{{ s.ranked.place }} in “{{ s.ranked.label }}” · {{ "%.1f"|format(s.ranked.score) }}</span>{% endif %}</p>
-  {% else %}
+  {% else %}<p class="muted small">Rate it and recommendations learn from it.</p>{% endif %}
   <div class="verdict-buttons" role="group" aria-label="Your rating">
     {% for v, label in verdicts.items() %}
     <button type="button" class="verdict{% if s.verdict and s.verdict.verdict == v %} chosen{% endif %}" aria-pressed="{{ 'true' if s.verdict and s.verdict.verdict == v else 'false' }}"
@@ -16,5 +30,5 @@
     {% if s.verdict %}<button type="button" class="link-button small" hx-post="/series/{{ kind }}/{{ ident }}/rate" hx-vals='{"verdict": "clear"}'
       hx-target="#series-verdict" hx-swap="outerHTML">Clear rating</button>{% endif %}
   </div>
-  {% endif %}
+{% endif %}
 </div>
