@@ -672,9 +672,14 @@ button.rank-choice .rank-title { text-align: center; }
 .notes-form textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 .series-score { display: flex; align-items: center; gap: .6rem; }
-.score-form { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
-.score-form input { width: 5rem; padding: .35rem .5rem; font: inherit; border: 1px solid var(--line-strong); border-radius: var(--radius);
-  background: var(--surface); color: var(--fg); }
+/* One row in any width: field (shrinks), "/ 10", Save. No number spinners: in Chrome and Firefox they sit on top of
+   the digits in a field this narrow (arrow keys still step the value). */
+.score-form { display: grid; grid-template-columns: minmax(3.5rem, 6rem) auto auto; align-items: center; gap: .5rem; justify-content: start; }
+.score-form input { width: 100%; min-width: 0; box-sizing: border-box; padding: .4rem .55rem; font: inherit; font-variant-numeric: tabular-nums;
+  border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--surface); color: var(--fg);
+  -moz-appearance: textfield; appearance: textfield; }
+.score-form input::-webkit-outer-spin-button, .score-form input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.score-form button { white-space: nowrap; }
 .sort-pick { display: flex; flex-wrap: wrap; gap: .3rem; align-items: center; }
 .sort-pick a { padding: .25rem .65rem; border: 1px solid var(--line-strong); border-radius: 999px; color: var(--muted); font-size: .88rem; }
 .sort-pick a[aria-current="page"] { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
