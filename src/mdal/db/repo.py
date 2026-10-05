@@ -52,6 +52,7 @@ SETTING_DEFAULTS: dict[str, Any] = {
     "rank_skipped": [],
     "rank_save": None,       # {state, detail, error, started_at, finished_at, saved}
     "stalled_days": 90,
+    "mal_mirror": True,      # list edits (scores, Paused/Dropped, notes) also go to MyAnimeList when connected
     "title_language": "english",   # which AniList title pages show: english (romaji when missing) or romaji
 }
 
@@ -533,6 +534,14 @@ class Repo:
             self.conn.execute("DELETE FROM mal_entry")
             for row in rows:
                 _upsert(self.conn, "mal_entry", row, ["mal_id"])
+
+    def update_mal_entry(self, mal_id: int, **fields: Any) -> None:
+        """Keep the local copy of a MAL entry in step after a list edit (score, status)."""
+        if not fields or set(fields) - {"score", "status"}:
+            raise ValueError("only score and status can be edited")
+        with self.conn:
+            self.conn.execute(f"UPDATE mal_entry SET {', '.join(f'{k}=?' for k in fields)} WHERE mal_id=?",
+                              [*fields.values(), mal_id])
 
     def mal_entries(self) -> dict[int, sqlite3.Row]:
         """mal_id -> entry."""

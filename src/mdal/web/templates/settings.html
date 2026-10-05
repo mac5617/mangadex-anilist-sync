@@ -56,6 +56,12 @@
   {% elif mal.connected %}
     <p><span class="badge ok">connected</span>{% if mal.user_name %} as <strong>{{ mal.user_name }}</strong>{% endif %}</p>
     <p class="muted">The sign-in renews itself; reconnect if MyAnimeList starts rejecting it.</p>
+    <form method="post" action="/settings/mal-mirror" class="row">
+      <label class="row"><input type="checkbox" name="on" value="1"{% if mal_mirror %} checked{% endif %}>
+        Also apply list edits here: scores from ranking, Paused/Dropped from Stalled, and notes</label>
+      <button class="secondary">Save</button>
+    </form>
+    <p class="muted small">Only for series already on your MyAnimeList list; each edit is checked first. Syncs work as before.</p>
     <form method="post" action="/auth/mal/disconnect"><button class="secondary">Disconnect</button></form>
   {% else %}
     <p><span class="badge err">not connected</span></p>

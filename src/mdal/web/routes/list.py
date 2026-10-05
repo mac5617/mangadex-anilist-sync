@@ -17,7 +17,9 @@ from mdal.recommend import ranking
 from mdal.recommend.fresh import english_meta
 from mdal.recommend.series import big_cover, series_url
 from mdal.stats import entry_rows
+from mdal.clients.myanimelist import MalError
 from mdal.sync.list_edit import EDIT_STATUSES, ListEditError, save_scores, set_status
+from mdal.sync.mal_list_edit import mirror_scores, mirror_status, on_mal
 from mdal.web.app import get_services, render, templates
 
 router = APIRouter()
@@ -151,7 +153,17 @@ async def rank_score(request: Request, media_id: int = Form(...), score: str = F
         return step(request, tier_step(request, media_id, note=f"AniList didn't save it: {failed[media_id]}"))
     svc.ranker.skip(media_id)        # scored now: it goes to the back of the queue
     title = entries_by_id(request)[media_id]["title"]
-    return step(request, tier_step(request, note=f"Saved {value:g}/10 for {title} to AniList."))
+    where = "AniList"
+    if svc.mirror_to_mal():
+        try:
+            mal_saved, mal_failed = await mirror_scores(svc.mal, svc.repo, {media_id: ranking.to_anilist(value)})
+            where = "AniList and MyAnimeList" if mal_saved else where
+            if mal_failed:
+                return step(request, tier_step(request, note=f"Saved {value:g}/10 for {title} to AniList; "
+                                                             f"MyAnimeList: {mal_failed[media_id]}."))
+        except MalError as exc:
+            return step(request, tier_step(request, note=f"Saved {value:g}/10 for {title} to AniList; MyAnimeList: {exc}."))
+    return step(request, tier_step(request, note=f"Saved {value:g}/10 for {title} to {where}."))
 
 
 @router.post("/list/rank/skip", response_class=HTMLResponse)
@@ -223,7 +235,16 @@ async def change_status(request: Request, media_id: int, status: str = Form(...)
         await set_status(svc.anilist, svc.repo, media_id, status)
         note, ok = f"Marked {STATUS_WORDS[status]} on AniList.", True
     except (ListEditError, AniListError) as exc:
-        note, ok = str(exc), False
+        return templates.TemplateResponse(request, "_status_done.html", {"note": str(exc), "ok": False, "media_id": media_id})
+    if svc.mirror_to_mal():
+        try:
+            problem = await mirror_status(svc.mal, svc.repo, media_id, status)
+        except MalError as exc:
+            problem = str(exc)
+        if problem:
+            note, ok = f"Marked {STATUS_WORDS[status]} on AniList; MyAnimeList: {problem}.", False
+        elif media_id in on_mal(svc.repo, [media_id]):
+            note = f"Marked {STATUS_WORDS[status]} on AniList and MyAnimeList."
     return templates.TemplateResponse(request, "_status_done.html", {"note": note, "ok": ok, "media_id": media_id})
 
 

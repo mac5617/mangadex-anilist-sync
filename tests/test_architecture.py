@@ -62,8 +62,8 @@ def test_pure_modules_do_no_io():
 
 
 def test_mal_writes_only_from_mal_writer():
-    """`update_list_status` is the client's one write; only sync/mal_writer.py may call it."""
-    allowed = {SRC / "sync" / "mal_writer.py", SRC / "clients" / "myanimelist.py"}
+    """MyAnimeList writes: syncs from sync/mal_writer.py, list edits from sync/mal_list_edit.py, nowhere else."""
+    allowed = {SRC / "sync" / "mal_writer.py", SRC / "sync" / "mal_list_edit.py", SRC / "clients" / "myanimelist.py"}
     offenders = [
         str(p.relative_to(ROOT))
         for p in python_files()
@@ -92,3 +92,11 @@ def test_mal_comments_only_from_mal_writer():
     offenders = [str(p.relative_to(ROOT)) for p in python_files()
                  if p not in allowed and "update_comments" in p.read_text(encoding="utf-8")]
     assert offenders == []
+
+
+def test_mal_list_edit_literals():
+    text = (SRC / "sync" / "mal_list_edit.py").read_text(encoding="utf-8")
+    # A list edit only ever sets on_hold or dropped on MyAnimeList, and only for entries it read first.
+    sent = set(re.findall(r'"(reading|completed|on_hold|dropped|plan_to_read)"', text))
+    assert sent == {"on_hold", "dropped"}
+    assert "my_list_status(" in text and "update_list_status" not in text and "update_comments" not in text

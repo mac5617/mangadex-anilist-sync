@@ -119,6 +119,10 @@ class Services:
         saved = [session.get("access"), session.get("refresh"), mal.get("access"), mal.get("refresh")]
         return self.settings.secret_values() + [v for v in saved if v]
 
+    def mirror_to_mal(self) -> bool:
+        """Whether list edits (scores, Paused/Dropped, notes) are repeated on MyAnimeList."""
+        return bool(self.repo.get_setting("mal_mirror")) and self.mal.connected
+
     def anilist_token(self) -> str:
         return self.settings.anilist_access_token.get_secret_value()
 

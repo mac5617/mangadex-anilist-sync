@@ -13,7 +13,9 @@ from typing import TYPE_CHECKING, Any
 from mdal.clients.anilist import AniListError
 from mdal.db.repo import now_iso
 from mdal.recommend import ranking
+from mdal.clients.myanimelist import MalError
 from mdal.sync.list_edit import save_scores
+from mdal.sync.mal_list_edit import mirror_scores
 
 if TYPE_CHECKING:
     from mdal.services import Services
@@ -103,10 +105,20 @@ class Ranker:
             try:
                 saved, failed = await save_scores(self.services.anilist, self.repo, todo,
                                                   self.repo.get_setting("anilist_write_batch"))
+                detail = f"{len(saved)} scores saved to AniList" + (f", {len(failed)} failed" if failed else "")
+                problems = sorted(set(failed.values()))
+                if saved and self.services.mirror_to_mal():
+                    self.repo.set_setting("rank_save", {**self.status(), "detail": "repeating scores on MyAnimeList"})
+                    try:
+                        mal_saved, mal_failed = await mirror_scores(self.services.mal, self.repo, {m: todo[m] for m in saved})
+                        detail += f"; {len(mal_saved)} on MyAnimeList" + (f" ({len(mal_failed)} failed)" if mal_failed else "")
+                        problems += [f"MyAnimeList: {p}" for p in sorted(set(mal_failed.values()))]
+                    except MalError as exc:
+                        detail += "; MyAnimeList not updated"
+                        problems.append(f"MyAnimeList: {exc}")
                 self.repo.set_setting("rank_save", {
-                    "state": "failed" if failed else "done", "finished_at": now_iso(), "saved": len(saved),
-                    "detail": f"{len(saved)} scores saved to AniList" + (f", {len(failed)} failed" if failed else ""),
-                    "error": "; ".join(sorted(set(failed.values())))[:300] if failed else None})
+                    "state": "failed" if problems else "done", "finished_at": now_iso(), "saved": len(saved),
+                    "detail": detail, "error": "; ".join(problems)[:300] if problems else None})
             except AniListError as exc:
                 log.warning("saving scores failed: %s", exc)
                 self.repo.set_setting("rank_save", {"state": "failed", "finished_at": now_iso(), "error": str(exc),

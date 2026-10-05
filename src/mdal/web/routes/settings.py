@@ -125,6 +125,7 @@ def render_settings(
         "tunables": [(t, (form_values or {}).get(t.key, stored[t.key])) for t in TUNABLES],
         "db_path": str(s.db_path),
         "title_language": titles.language(), "title_languages": titles.LANGUAGES,
+        "mal_mirror": svc.repo.get_setting("mal_mirror"),
         "cooldown": cooldown_info(svc),
         "env_status": _env_status(svc),
     }
@@ -158,6 +159,13 @@ def save_titles(request: Request, language: str = Form("")) -> HTMLResponse:
     get_services(request).repo.set_setting("title_language", language)
     titles.set_language(language)
     return render_settings(request, message=f"Titles now show in {titles.LANGUAGES[language]}.")
+
+
+@router.post("/settings/mal-mirror", response_class=HTMLResponse)
+def save_mal_mirror(request: Request, on: str = Form("")) -> HTMLResponse:
+    get_services(request).repo.set_setting("mal_mirror", on == "1")
+    return render_settings(request, message="List edits now also go to MyAnimeList." if on == "1"
+                           else "List edits now only go to AniList.")
 
 
 @router.post("/settings/clear-cooldown", response_class=HTMLResponse)

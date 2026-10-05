@@ -344,6 +344,15 @@ MyAnimeList connected and the series on your MAL list, **Also save to MyAnimeLis
 Shiori checks the entry exists first (one request), because MyAnimeList's save would otherwise create one. Notes
 on series you liked or dropped are quoted, shortened, to your local model, so Ask and the picks can use them.
 
+### On MyAnimeList too
+
+With MyAnimeList connected, list edits are repeated there for series on your MAL list: scores from ranking and
+quick scoring (MyAnimeList scores are whole numbers, so 8.4 becomes 8, and a score whose whole number didn't
+change isn't sent), Paused/Dropped from Stalled (on hold / dropped), and notes (comments). Each edit reads the
+entry first, because MyAnimeList's save would otherwise create it, so it costs 2 MyAnimeList requests.
+**Settings → MyAnimeList** turns this off. Which series are on your MAL list comes from the last MyAnimeList
+sync, so run **Sync MyAnimeList** once if you never have.
+
 ### Stalled and Ready to binge
 
 **Stalled** lists series marked Reading that haven't changed on AniList in 90 days, with **Pause** and **Drop**

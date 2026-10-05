@@ -35,7 +35,9 @@ def series_page(request: Request, kind: str, ident: str) -> HTMLResponse:
     s = get_services(request).series.view(key)
     if s is None:
         raise HTTPException(404, "Shiori doesn't know this series yet.")
-    return render(request, "series.html", {"s": s, "verdicts": VERDICTS, "anilist": bool(get_services(request).anilist_token())})
+    svc = get_services(request)
+    return render(request, "series.html", {"s": s, "verdicts": VERDICTS, "anilist": bool(svc.anilist_token()),
+                                           "mal_default": svc.mirror_to_mal()})
 
 
 # async: the lookups await the API clients on the event loop.
@@ -68,7 +70,7 @@ def series_rate(request: Request, kind: str, ident: str, verdict: str = Form("")
 def notes_panel(request: Request, key: str, **extra) -> HTMLResponse:
     svc = get_services(request)
     return templates.TemplateResponse(request, "_series_notes.html", {
-        "s": svc.series.view(key), "anilist": bool(svc.anilist_token()), **extra})
+        "s": svc.series.view(key), "anilist": bool(svc.anilist_token()), "mal_default": svc.mirror_to_mal(), **extra})
 
 
 def _on_list(request: Request, key: str) -> int:

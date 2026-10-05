@@ -31,7 +31,8 @@ TOKEN_URL = "https://myanimelist.net/v1/oauth2/token"
 LIST_FIELDS = "list_status,num_chapters,status"
 LIST_PAGE = 1000          # the documented maximum for user lists
 REFRESH_MARGIN = 24 * 3600  # refresh a day before expiry
-WRITE_STATUSES = ("reading", "completed")  # the only statuses the app ever sends
+WRITE_STATUSES = ("reading", "completed")  # the only statuses a sync sends
+EDIT_STATUSES = ("on_hold", "dropped")      # the only statuses a list edit sends (List → Stalled)
 
 
 class MalError(Exception):
@@ -247,8 +248,24 @@ class MalClient:
         creates the entry when it isn't."""
         return await self._request("PATCH", f"/manga/{int(mal_id)}/my_list_status", data={"comments": comments})
 
+    async def edit_entry(self, mal_id: int, *, score: int | None = None, status: str | None = None) -> dict[str, Any]:
+        """A list edit outside syncs: a score (1-10) or on_hold/dropped. Callers must check the entry is on your
+        list first: MyAnimeList creates the entry when it isn't."""
+        form: dict[str, Any] = {}
+        if score is not None:
+            if not 1 <= int(score) <= 10:
+                raise ValueError(f"refusing to send score {score!r}")
+            form["score"] = int(score)
+        if status is not None:
+            if status not in EDIT_STATUSES:
+                raise ValueError(f"refusing to send status {status!r}")
+            form["status"] = status
+        if not form:
+            raise ValueError("nothing to send")
+        return await self._request("PATCH", f"/manga/{int(mal_id)}/my_list_status", data=form)
+
     async def update_list_status(self, mal_id: int, *, chapters: int | None, status: str | None) -> dict[str, Any]:
-        """The app's only MyAnimeList write. Sends chapters read and, optionally, reading/completed."""
+        """The sync's MyAnimeList write. Sends chapters read and, optionally, reading/completed."""
         if status is not None and status not in WRITE_STATUSES:
             raise ValueError(f"refusing to send status {status!r}")
         form: dict[str, Any] = {}
