@@ -98,7 +98,16 @@ def build_prompt(profile: Profile, candidates: list[Rec]) -> str:
     return "\n".join(lines)
 
 
-def clean_answer(answer: dict[str, Any], candidate_ids: set[int]) -> tuple[str, list[dict[str, Any]]]:
+def is_reason(text: str, title: str | None = None) -> bool:
+    """A reason is a sentence about the series; models sometimes return just its (romaji) title instead, which is
+    short and has no closing punctuation ("Aku no Hana")."""
+    text = text.strip()
+    if title and text.rstrip(".").casefold() == title.casefold():
+        return False
+    return bool(text) and (len(text.split()) >= 4 or text[-1] in ".!?…")
+
+
+def clean_answer(answer: dict[str, Any], candidate_ids: set[int], titles: dict[int, str] | None = None) -> tuple[str, list[dict[str, Any]]]:
     """(summary, picks) with only valid, unique candidate ids and non-empty reasons."""
     picks: list[dict[str, Any]] = []
     seen: set[int] = set()
@@ -108,7 +117,7 @@ def clean_answer(answer: dict[str, Any], candidate_ids: set[int]) -> tuple[str, 
         except (TypeError, ValueError):
             continue
         reason = str(p.get("reason") or "").strip()
-        if media_id in candidate_ids and media_id not in seen and reason:
+        if media_id in candidate_ids and media_id not in seen and is_reason(reason, (titles or {}).get(media_id)):
             seen.add(media_id)
             picks.append({"id": media_id, "reason": reason[:400]})
     return str(answer.get("summary") or "").strip()[:1200], picks[:PICKS]

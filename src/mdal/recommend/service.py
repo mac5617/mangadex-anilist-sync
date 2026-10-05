@@ -189,7 +189,7 @@ class Recommender:
             self._status(detail=f"asking {model} to pick from {len(top)} candidates")
             answer = await self.ollama().chat_json(model, SYSTEM, build_prompt(profile, top), SCHEMA,
                                                    available[model].get("capabilities"))
-            summary, picks = clean_answer(answer, {r.media_id for r in top})
+            summary, picks = clean_answer(answer, {r.media_id for r in top}, {r.media_id: r.title for r in top})
             if len(picks) < 3:
                 raise OllamaError(f"the model returned only {len(picks)} usable picks")
         except OllamaError as exc:

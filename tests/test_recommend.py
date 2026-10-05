@@ -98,10 +98,13 @@ def test_scoring_and_rankings():
 
 def test_clean_answer_keeps_only_real_unique_candidates():
     summary, picks = clean_answer({"summary": " Likes horror. ", "picks": [
-        {"id": 1, "reason": "Because."}, {"id": 999, "reason": "Invented."}, {"id": 1, "reason": "Again."},
-        {"id": 2, "reason": "  "}, {"id": "3", "reason": "Numeric string."}, {"id": None, "reason": "x"}]}, {1, 2, 3})
+        {"id": 1, "reason": "Body horror like Uzumaki."}, {"id": 999, "reason": "An invented id is dropped."},
+        {"id": 1, "reason": "The same id twice."}, {"id": 2, "reason": "  "}, {"id": "3", "reason": "A numeric string id works."},
+        {"id": None, "reason": "No id at all here."}, {"id": 4, "reason": "Aku no Hana"},
+        {"id": 5, "reason": "Usotsuki Satsuki wa Shi ga Mieru"}]}, {1, 2, 3, 4, 5}, {5: "Usotsuki Satsuki wa Shi ga Mieru"})
     assert summary == "Likes horror."
-    assert picks == [{"id": 1, "reason": "Because."}, {"id": 3, "reason": "Numeric string."}]
+    # "Aku no Hana" is the series' own title, not a reason: the model sometimes answers that way
+    assert picks == [{"id": 1, "reason": "Body horror like Uzumaki."}, {"id": 3, "reason": "A numeric string id works."}]
 
 
 def test_prompt_lists_candidates_by_id():

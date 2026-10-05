@@ -57,7 +57,7 @@
     <p><span class="badge ok">connected</span>{% if mal.user_name %} as <strong>{{ mal.user_name }}</strong>{% endif %}</p>
     <p class="muted">The sign-in renews itself; reconnect if MyAnimeList starts rejecting it.</p>
     <form method="post" action="/settings/mal-mirror" class="row">
-      <label class="row"><input type="checkbox" name="on" value="1"{% if mal_mirror %} checked{% endif %}>
+      <label class="check-line"><input type="checkbox" name="on" value="1"{% if mal_mirror %} checked{% endif %}>
         Also apply list edits here: scores from ranking, Paused/Dropped from Stalled, and notes</label>
       <button class="secondary">Save</button>
     </form>
@@ -136,10 +136,10 @@
   <dl class="facts">
     <dt>Database</dt><dd><code>{{ db_path }}</code> <span class="muted">(change with <code>MDAL_DB_PATH</code> in <code>.env</code>)</span></dd>
   </dl>
-  <table class="env">
+  <ul class="env-list">
     {% for key, is_set in env_status %}
-      <tr><td><code>{{ key }}</code></td><td>{% if is_set %}<span class="badge ok">set</span>{% else %}<span class="badge err">not set</span>{% endif %}</td></tr>
+      <li><code>{{ key }}</code>{% if is_set %}<span class="badge ok">set</span>{% else %}<span class="badge err">not set</span>{% endif %}</li>
     {% endfor %}
-  </table>
+  </ul>
 </section>
 {% endblock %}

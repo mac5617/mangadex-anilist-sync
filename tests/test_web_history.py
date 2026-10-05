@@ -27,9 +27,9 @@ def test_history_lists_runs_with_counts(client, services):
                     finished_at="2026-10-03T10:01:05+00:00", req_anilist=5, req_mangadex=12)
     html = client.get("/history").text
     assert f'href="/history/{run_id}"' in html
-    assert "3 write · 2 flag · 1 skip" in html
+    assert "3 write" in html and "2 flag · 1 skip" in html
     assert "1 done · 1 failed" in html
-    assert "AniList 5 · MangaDex 12" in html
+    assert "AniList 5</span>" in html and "MangaDex 12" in html
     assert "1 min 5 s" in html
 
 

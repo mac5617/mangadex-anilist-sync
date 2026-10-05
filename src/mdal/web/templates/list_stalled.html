@@ -15,7 +15,7 @@
   <thead><tr><th>Series</th><th>Last change</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
   <tbody>{% for r in rows %}<tr id="stalled-{{ r.media_id }}">
     <td><div class="series-cell">
-      {% if r.cover %}<img class="thumb" src="{{ r.cover }}" alt="" width="38" height="54" loading="lazy" referrerpolicy="no-referrer">{% endif %}
+      {% if r.cover %}<img class="thumb" src="{{ r.cover_fallback or r.cover }}" alt="" width="38" height="54" loading="lazy" referrerpolicy="no-referrer">{% endif %}
       <div class="series-text"><a href="{{ r.href }}">{{ r.title }}</a><span class="muted small">{{ r.meta }}</span></div></div></td>
     <td class="num">{{ r.idle_days | num }} days ago</td>
     <td class="actions">{% if anilist %}

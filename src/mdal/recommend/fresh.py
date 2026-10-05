@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from mdal.matching.normalize import normalize
-from mdal.recommend.llm import _entry, _feature_line
+from mdal.recommend.llm import _entry, _feature_line, is_reason
 from mdal.recommend.profile import Feature, Profile
 
 TOP_TAGS = 5
@@ -309,7 +309,7 @@ def clean_picks(answer: dict[str, Any], candidates: list[NewRec]) -> list[dict[s
         except (TypeError, ValueError, AttributeError):
             continue
         reason = plain(str(p.get("reason") or ""))
-        if 1 <= n <= min(len(candidates), CANDIDATES) and n not in seen and reason:
+        if 1 <= n <= min(len(candidates), CANDIDATES) and n not in seen and is_reason(reason, candidates[n - 1].title):
             seen.add(n)
             picks.append({"md_id": candidates[n - 1].md_id, "reason": reason[:400]})
     return picks[:PICKS]

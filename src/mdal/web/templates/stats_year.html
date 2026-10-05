@@ -35,7 +35,7 @@
 
 {% if p.best %}<section class="block">
   <h2>Your best this year</h2>
-  <ul class="tiles">{% for x in p.best %}{{ tile(x) }}{% endfor %}</ul>
+  <ul class="tiles{% if p.best | length >= 5 %} fill-row{% endif %}">{% for x in p.best %}{{ tile(x) }}{% endfor %}</ul>
 </section>{% endif %}
 
 {% if r.more_than_usual %}<section class="block">

@@ -18,6 +18,7 @@ from mdal import titles
 from mdal.clients.ollama import OllamaError
 from mdal.recommend.chat import Item
 from mdal.recommend.fresh import NewRec, english_meta, ranked_new
+from mdal.recommend.llm import is_reason
 from mdal.recommend.graph import build_graph
 from mdal.recommend.ratings import rate
 from mdal.recommend.series import series_url
@@ -49,6 +50,7 @@ def larger_cover(url: str | None) -> str | None:
 
 
 def card(r: Rec, kind: str, reason: str | None = None) -> dict[str, Any]:
+    reason = reason if reason and is_reason(reason, r.title) else None  # picks saved before titles-as-reasons were refused
     reasons = [reason] if reason else []
     if kind == "overall" and not reason:
         for k in ("community", "staff", "tag", "genre"):

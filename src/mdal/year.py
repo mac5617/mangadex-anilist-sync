@@ -11,6 +11,7 @@ from typing import Any
 
 MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 MIN_LIFT_COUNT = 3     # a genre or tag needs this many series that year to count as "more than usual"
+MIN_LIFT_SHARE = 0.05  # ...and to be at least this share of the year, so a niche tag on 4 of 600 series is not news
 
 
 def years(entries: list[dict[str, Any]]) -> list[int]:
@@ -46,7 +47,7 @@ def review(entries: list[dict[str, Any]], year: int) -> dict[str, Any]:
             if count < MIN_LIFT_COUNT:
                 continue
             share, usual = count / n_year, all_counts[name] / n_all
-            if usual and share > usual * 1.25:
+            if usual and share >= MIN_LIFT_SHARE and share > usual * 1.25:
                 out.append({"name": name, "count": count, "share": share, "usual": usual, "lift": share / usual})
         return sorted(out, key=lambda x: -x["lift"])[:8]
 

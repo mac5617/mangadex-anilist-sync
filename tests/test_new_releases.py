@@ -65,8 +65,9 @@ def test_clean_picks_and_reply_keep_only_real_numbers():
 
     items = [chat.Item(key=f"md:{i}", title=f"Title {i}", url="u", cover=None, meta=[], tags=[], description=None,
                        taste=0.5, adult=False, source="New on MangaDex") for i in range(1, 4)]
-    reply, picks = chat.clean_reply({"reply": "Try #2 or (3), not 12.", "picks": [{"n": 2, "reason": "r"}, {"n": 40}]}, items)
-    assert reply == "Try Title 2 or Title 3, not 12." and picks == [{"key": "md:2", "reason": "r"}]
+    reply, picks = chat.clean_reply({"reply": "Try #2 or (3), not 12.", "picks": [{"n": 2, "reason": "Dark."}, {"n": 3, "reason": "Title 3"}, {"n": 40}]}, items)
+    assert reply == "Try Title 2 or Title 3, not 12."
+    assert picks == [{"key": "md:2", "reason": "Dark."}, {"key": "md:3", "reason": ""}]  # a bare title is no reason
     # The cards already show each pick: lines copying the listing go, and Markdown emphasis becomes plain text.
     reply, _ = chat.clean_reply({"reply": "Here you go:\n\n3. Ajin | 2012, Japan | tags: Horror\nLike **GANTZ** and *Tokyo Ghoul*.",
                                  "picks": []}, items)

@@ -9,13 +9,13 @@
         <details><summary>{{ card.alt_titles | length }} alt titles</summary>
           <ul>{% for t in card.alt_titles %}<li>{{ t }}</li>{% endfor %}</ul></details>
       {% endif %}
-      {% if card.reasons %}<p class="muted">{{ card.reasons | join("; ") }}</p>{% endif %}
+      {% if card.reasons and not card.candidates %}<p class="muted">{{ "AniList's search found nothing for any of its titles." if card.reasons == ["no AniList search results"] else card.reasons | join("; ") }}</p>{% endif %}
     </div>
   </div>
 
   {% if card_error %}<p class="notice err" role="alert">{{ card_error }}</p>{% endif %}
 
-  {% if card.state != "not_on_anilist" %}
+  {% if card.state != "not_on_anilist" and card.candidates %}
   <div class="card-candidates">
     {% for c in card.candidates %}
       <div class="candidate">
@@ -32,8 +32,6 @@
           </form>
         </div>
       </div>
-    {% else %}
-      <p class="muted">No candidates found.</p>
     {% endfor %}
   </div>
   {% endif %}

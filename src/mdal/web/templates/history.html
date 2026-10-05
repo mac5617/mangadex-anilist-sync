@@ -5,23 +5,22 @@
 <div class="page-head"><h1>Sync history</h1></div>
 <div class="table-wrap">
 <table class="data">
-  <thead><tr><th>Sync</th><th>Site</th><th>Started</th><th>State</th><th>Rows</th><th>Written</th><th>Requests</th><th>Duration</th><th>Notes</th></tr></thead>
+  <thead><tr><th>Sync</th><th>Started</th><th>State</th><th>Rows</th><th>Written</th><th>Requests</th><th>Duration</th><th>Notes</th></tr></thead>
   <tbody>
   {% for r in runs %}
     <tr>
-      <td><a href="/history/{{ r.run_id }}"><strong>#{{ r.run_id }}</strong></a></td>
-      <td>{{ sites[r.target] }}</td>
+      <td><div class="cell-lines"><a href="/history/{{ r.run_id }}"><strong>#{{ r.run_id }}</strong></a><span class="muted small">{{ sites[r.target] }}</span></div></td>
       <td class="num">{{ r.started_at | when }}</td>
       <td><span class="badge state-{{ r.state }}">{{ r.state }}</span></td>
-      <td class="num">{{ r.counts.get("write", 0) }} write · {{ r.counts.get("flag", 0) }} flag · {{ r.counts.get("skip", 0) }} skip{% if r.counts.get("add") %}<span class="sub">{{ r.counts.add }} add</span>{% endif %}</td>
+      <td class="num"><div class="cell-lines">{{ r.counts.get("write", 0) }} write{% if r.counts.get("add") %} · {{ r.counts.add }} add{% endif %}<span class="muted small">{{ r.counts.get("flag", 0) }} flag · {{ r.counts.get("skip", 0) | num }} skip</span></div></td>
       <td class="num">{{ r.counts.get("done", 0) }} done{% if r.counts.get("failed") %} · {{ r.counts.failed }} failed{% endif %}{% if r.counts.get("dropped") %} · {{ r.counts.dropped }} dropped{% endif %}{% if r.counts.get("pending") %} · {{ r.counts.pending }} pending{% endif %}</td>
-      <td class="num">{% if r.target == "mal" %}MyAnimeList {{ r.req_mal }}{% if r.req_anilist %} · AniList {{ r.req_anilist }}{% endif %}{% else %}AniList {{ r.req_anilist }}{% endif %} · MangaDex {{ r.req_mangadex }}</td>
+      <td class="num"><div class="cell-lines">{% if r.target == "mal" %}<span>MyAnimeList {{ r.req_mal }}</span>{% if r.req_anilist %}<span>AniList {{ r.req_anilist }}</span>{% endif %}{% else %}<span>AniList {{ r.req_anilist }}</span>{% endif %}<span class="muted small">MangaDex {{ r.req_mangadex }}</span></div></td>
       <td class="num">{{ r.duration or "—" }}</td>
-      <td class="reason">{% if r.error %}<span class="notice {{ 'warn' if r.state == 'cancelled' else 'err' }} inline">{{ r.error }}</span>{% elif r.phase_detail %}<span class="muted">{{ r.phase_detail }}</span>{% endif %}
+      <td class="reason history-note">{% if r.error %}<span class="notice {{ 'warn' if r.state == 'cancelled' else 'err' }} inline">{{ r.error }}</span>{% elif r.phase_detail %}<span class="muted">{{ r.phase_detail }}</span>{% endif %}
         {% if r.restorable %}<form method="post" action="/sync/{{ r.run_id }}/restore" class="sub"><button class="link-button">Restore</button></form>{% endif %}</td>
     </tr>
   {% else %}
-    <tr><td colspan="9" class="empty">No syncs yet.</td></tr>
+    <tr><td colspan="8" class="empty">No syncs yet.</td></tr>
   {% endfor %}
   </tbody>
 </table>

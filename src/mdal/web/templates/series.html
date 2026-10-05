@@ -3,7 +3,7 @@
 {% block content %}
 <p class="small"><a href="/discover" onclick="if (history.length > 1) { history.back(); return false; }">← Back</a></p>
 
-<article class="series">
+<article class="series-page">
   <aside class="series-side">
     {% if s.cover %}<img class="series-cover" src="{{ s.cover }}" alt="Cover of {{ s.title }}" referrerpolicy="no-referrer"
       {% if s.cover_fallback %}data-fallback="{{ s.cover_fallback }}" {% endif %}onerror="if(this.dataset.fallback&&this.src!==this.dataset.fallback){this.src=this.dataset.fallback}else{this.onerror=null;this.removeAttribute('src');this.classList.add('broken')}">

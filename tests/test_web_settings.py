@@ -31,7 +31,7 @@ def test_no_secret_values_in_html(client, services):
     for key in ("MANGADEX_PASSWORD", "MANGADEX_CLIENT_SECRET", "ANILIST_CLIENT_SECRET"):
         assert FAKE_ENV[key] not in html
     assert "al-access-token-secret-777" not in html
-    assert "<code>ANILIST_ACCESS_TOKEN</code></td><td><span class=\"badge ok\">set</span>" in html
+    assert "<code>ANILIST_ACCESS_TOKEN</code><span class=\"badge ok\">set</span>" in html
 
 
 @pytest.mark.parametrize(

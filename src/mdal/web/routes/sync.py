@@ -224,15 +224,19 @@ def _counts(rows: list[DiffRow]) -> dict[str, int]:
     return counts
 
 
-def _diff_page(request: Request, run_id: int, f: str = "write", error: str | None = None, status_code: int = 200) -> HTMLResponse:
+def _diff_page(request: Request, run_id: int, f: str | None = None, error: str | None = None,
+               status_code: int = 200) -> HTMLResponse:
     svc = get_services(request)
     repo = svc.repo
     run = _run_or_404(repo, run_id)
     rows = diff_rows(repo, run_id)
+    counts = _counts(rows)
+    if f not in FILTERS:  # no tab asked for: open on the first one with something in it
+        f = next((k for k in ("write", "add", "flag", "skip") if counts[k]), "write")
     return render(request, "diff.html", {
-        "run": run, "rows": rows, "counts": _counts(rows), "est": default_estimate(repo, rows, run["target"]),
+        "run": run, "rows": rows, "counts": counts, "est": default_estimate(repo, rows, run["target"]),
         "site": SITE_NAMES[run["target"]],
-        "filter": f if f in FILTERS else "write",
+        "filter": f,
         "approvable": run["state"] == "diffed",
         "restorable": svc.orchestrator.can_restore(run_id),
         "error": error,
@@ -294,7 +298,7 @@ def restore(request: Request, run_id: int) -> Response:
 
 
 @router.get("/sync/{run_id}", response_class=HTMLResponse)
-def diff_page(request: Request, run_id: int, f: str = "write") -> HTMLResponse:
+def diff_page(request: Request, run_id: int, f: str | None = None) -> HTMLResponse:
     return _diff_page(request, run_id, f)
 
 

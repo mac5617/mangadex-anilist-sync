@@ -15,9 +15,9 @@
   <thead><tr><th>Series</th><th>Your status</th><th class="num">Left</th><th>English</th></tr></thead>
   <tbody>{% for r in rows %}<tr>
     <td><div class="series-cell">
-      {% if r.cover %}<img class="thumb" src="{{ r.cover }}" alt="" width="38" height="54" loading="lazy" referrerpolicy="no-referrer">{% endif %}
+      {% if r.cover %}<img class="thumb" src="{{ r.cover_fallback or r.cover }}" alt="" width="38" height="54" loading="lazy" referrerpolicy="no-referrer">{% endif %}
       <div class="series-text"><a href="{{ r.href }}">{{ r.title }}</a><span class="muted small">{{ r.meta }}</span></div></div></td>
-    <td>{{ r.status }}{% if r.idle_days %} <span class="muted small">· {{ r.idle_days | num }} days</span>{% endif %}</td>
+    <td><div class="cell-lines">{{ r.status }}{% if r.idle_days %}<span class="muted small">idle {{ r.idle_days | num }} days</span>{% endif %}</div></td>
     <td class="num">{% if r.left is not none %}{{ r.left | num }} ch{% else %}<span class="muted">?</span>{% endif %}</td>
     <td>{% if r.checked %}<span class="muted small">{{ r.english | join(" · ") or "no English release listed" }}</span>
       {% else %}<span hx-get="/list/binge/english/{{ r.media_id }}" hx-trigger="revealed" hx-swap="outerHTML" class="muted small">…</span>{% endif %}</td>

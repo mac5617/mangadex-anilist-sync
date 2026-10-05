@@ -13,6 +13,7 @@ from typing import Any
 
 from mdal.matching.normalize import normalize
 from mdal.recommend.fresh import plain, taste_lines
+from mdal.recommend.llm import is_reason
 
 SHORTLIST = 30
 ANILIST_RESERVE = 8           # AniList candidates always on the shortlist
@@ -238,7 +239,8 @@ def clean_reply(answer: dict[str, Any], candidates: list[Item],
             continue
         if 1 <= n <= len(candidates) and n not in seen:
             seen.add(n)
-            picks.append({"key": candidates[n - 1].key, "reason": plain(str(p.get("reason") or ""))[:400]})
+            reason = plain(str(p.get("reason") or ""))
+            picks.append({"key": candidates[n - 1].key, "reason": reason[:400] if is_reason(reason) else ""})
     # The cards show each pick, so lines copying the listing format ("3. Title | 2012, ...") are dropped.
     lines = [line for line in str(answer.get("reply") or "").splitlines() if not LISTING_LINE.match(line)]
     # A sentence that only repeats one of the reasons is already on its card.
