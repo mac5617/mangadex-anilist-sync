@@ -131,7 +131,8 @@ def build_profile(entries: Iterable[dict[str, Any]]) -> Profile:
 
     def brief(w: float, e: dict[str, Any]) -> dict[str, Any]:
         return {"media_id": e.get("media_id"), "title": e.get("title"), "score": e.get("score"),
-                "status": e.get("status"), "progress": e.get("progress"), "weight": w}
+                "status": e.get("status"), "progress": e.get("progress"), "weight": w, "verdict": e.get("verdict"),
+                "notes": e.get("notes") or None}
 
     favourites = [brief(w, e) for w, e in weighted if w > 0][:40]
     disliked = [brief(w, e) for w, e in reversed(weighted) if w < 0][:15]

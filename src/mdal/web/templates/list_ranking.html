@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Your ranking{% endblock %}
+{% block content %}
+{% with section = "list" %}{% include "_subnav.html" %}{% endwith %}
+<div class="page-head">
+  <div>
+    <h1>Your ranking</h1>
+    <p class="lede">{{ total | num }} series, best first. Scores follow from each series' place in its tier.</p>
+  </div>
+  <div class="page-actions">{% include "_rank_save.html" %}<a class="button" href="/list/rank">Rank more</a></div>
+</div>
+{% if not total %}
+<div class="panel"><p class="muted">Nothing ranked yet. <a href="/list/rank">Start ranking</a>: it takes a few seconds per series.</p></div>
+{% endif %}
+{% for t in tiers if t.rows %}
+<section class="block">
+  <div class="block-head"><h2>{{ t.label }}</h2><span class="muted">{{ t.rows | length }} · scores {{ t.range }}</span></div>
+  <ol class="ranked-list">
+    {% for r in t.rows %}<li>
+      <span class="ranked-place">{{ r.place }}</span>
+      {% if r.cover %}<img src="{{ r.cover }}" alt="" width="40" height="57" loading="lazy" referrerpolicy="no-referrer">{% else %}<span class="ranked-noimg"></span>{% endif %}
+      <span class="ranked-text"><a href="{{ r.href }}">{{ r.title }}</a><span class="muted small">{{ r.meta }}</span></span>
+      <span class="score-badge small-badge tier-{{ t.tier }}" title="{{ 'Saved to AniList' if r.saved else 'Not saved to AniList yet' }}">{{ "%.1f"|format(r.score) }}</span>
+      <span class="ranked-actions small">
+        <a href="/list/rank?media_id={{ r.media_id }}">Re-rank</a>
+        <button type="button" class="link-button" hx-post="/list/ranking/{{ r.media_id }}/remove" hx-swap="none"
+          hx-confirm="Take {{ r.title }} out of your ranking? Its AniList score stays as it is.">Remove</button>
+      </span>
+    </li>{% endfor %}
+  </ol>
+</section>
+{% endfor %}
+{% endblock %}

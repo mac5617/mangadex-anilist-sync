@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}{{ s.title }}{% endblock %}
+{% block content %}
+<p class="small"><a href="/discover" onclick="if (history.length > 1) { history.back(); return false; }">← Back</a></p>
+
+<article class="series">
+  <aside class="series-side">
+    {% if s.cover %}<img class="series-cover" src="{{ s.cover }}" alt="Cover of {{ s.title }}" referrerpolicy="no-referrer"
+      {% if s.cover_fallback %}data-fallback="{{ s.cover_fallback }}" {% endif %}onerror="if(this.dataset.fallback&&this.src!==this.dataset.fallback){this.src=this.dataset.fallback}else{this.onerror=null;this.removeAttribute('src');this.classList.add('broken')}">
+    {% else %}<div class="series-cover placeholder" aria-hidden="true">no cover</div>{% endif %}
+    {% include "_series_verdict.html" %}
+    {% if s.links %}<ul class="series-links">{% for label, url in s.links %}
+      <li><a href="{{ url }}" target="_blank" rel="noopener noreferrer">{{ label }} ↗</a></li>{% endfor %}</ul>{% endif %}
+  </aside>
+
+  <div class="series-main">
+    <header class="series-head">
+      <h1>{{ s.title }}{% if s.adult %} <span class="badge">adult</span>{% endif %}</h1>
+      {% if s.alt_titles %}<p class="muted small series-alt">{{ s.alt_titles | join(" · ") }}</p>{% endif %}
+      {% if s.entry or s.md_status %}<p class="series-yours">
+        {% if s.entry %}<span class="badge ok">On your AniList list</span> {{ s.entry.status }}{% if s.entry.progress %} · {{ s.entry.progress }} ch read{% endif %}{% if s.entry.score %} · scored {{ s.entry.score | num }}{% endif %}{% endif %}
+        {% if s.md_status %}<span class="muted"> · MangaDex: {{ s.md_status }}</span>{% endif %}</p>{% endif %}
+    </header>
+
+    {% if s.facts %}<dl class="series-facts">
+      {% for label, value in s.facts %}<div><dt>{{ label }}</dt><dd>{{ value }}</dd></div>{% endfor %}
+    </dl>{% endif %}
+
+    {% if s.entry %}{% include "_series_notes.html" %}{% endif %}
+
+    {% if s.reasons %}<section class="series-section">
+      <h2>Why it's recommended</h2>
+      <ul class="rec-reasons">{% for r in s.reasons %}<li>{{ r }}</li>{% endfor %}</ul>
+    </section>{% endif %}
+
+    {% if s.description %}<section class="series-section">
+      <h2>Description</h2>
+      <p class="series-desc">{{ s.description }}</p>
+    </section>{% endif %}
+
+    {% if s.genres or s.tags %}<section class="series-section">
+      <h2>Genres and tags</h2>
+      <ul class="tag-list series-tags">
+        {% for g in s.genres %}<li class="genre">{{ g }}</li>{% endfor %}
+        {% for t in s.tags %}<li title="{% if t.rank %}{{ t.rank }}% relevant{% endif %}">{{ t.name }}{% if t.rank %} <span>{{ t.rank }}%</span>{% endif %}</li>{% endfor %}
+      </ul>
+    </section>{% endif %}
+
+    {% if s.staff or s.authors %}<section class="series-section">
+      <h2>Creators</h2>
+      <p>{% if s.staff %}{% for p in s.staff %}{{ p.name }} <span class="muted">({{ p.role }})</span>{% if not loop.last %} · {% endif %}{% endfor %}
+        {% else %}{{ s.authors | join(" · ") }}{% endif %}</p>
+    </section>{% endif %}
+
+    {% include "_series_details.html" %}
+  </div>
+</article>
+{% endblock %}

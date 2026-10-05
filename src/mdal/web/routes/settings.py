@@ -34,6 +34,10 @@ TUNABLES = (
     Tunable("mangadex_rps", "MangaDex requests per second", float, 0.2, 4, "MangaDex allows about 5/s; stay below."),
     Tunable("mal_rpm", "MyAnimeList requests per minute", int, 1, 60,
             "MyAnimeList publishes no limit; one request per entry written."),
+    Tunable("mangaupdates_rps", "MangaUpdates requests per second", float, 0.2, 2,
+            "MangaUpdates publishes no limit; series pages and scans use a few requests each."),
+    Tunable("new_scan_hours", "Scan MangaDex for new releases every (hours)", int, 0, 168,
+            "0 turns the background scan off. About 25 MangaDex requests per scan."),
     Tunable("match_auto", "Auto-accept score", float, 0, 1),
     Tunable("match_review", "Review score", float, 0, 1, "Below this, a series is unmatched."),
     Tunable("match_margin", "Auto-accept margin over the runner-up", float, 0, 0.5),
@@ -70,6 +74,7 @@ def apply_rates(svc: Services) -> None:
     svc.anilist_queue.set_interval(60.0 / svc.repo.get_setting("anilist_rpm"))
     svc.mangadex_queue.set_interval(1.0 / svc.repo.get_setting("mangadex_rps"))
     svc.mal_queue.set_interval(60.0 / svc.repo.get_setting("mal_rpm"))
+    svc.mangaupdates_queue.set_interval(1.0 / svc.repo.get_setting("mangaupdates_rps"))
 
 
 def _env_status(svc: Services) -> list[tuple[str, bool]]:

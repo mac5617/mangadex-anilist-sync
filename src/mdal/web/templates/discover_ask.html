@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Ask{% endblock %}
+{% block body_class %}fill-screen{% endblock %}
+{% block content %}
+{% with section = "discover" %}{% include "_subnav.html" %}{% endwith %}
+<div class="ask">
+  <div class="ask-bar">
+    <h1>Ask</h1>
+    {% include "_ask_status.html" %}
+    <div class="ask-bar-end">
+      <form method="get" class="row small">
+        <label class="row"><input type="checkbox" name="adult" value="1"{% if adult %} checked{% endif %} onchange="this.form.submit()"> Include adult titles</label>
+      </form>
+      {% if messages %}<button type="button" class="secondary" hx-post="/discover-chat-clear" hx-swap="none"
+        hx-confirm="Start over? This clears the whole conversation.">New conversation</button>{% endif %}
+    </div>
+  </div>
+
+  <div id="chat-log" class="chat-log">
+    <div id="chat-thread" class="chat-thread" aria-live="polite">
+      {% if messages %}{% include "_chat_messages.html" %}
+      {% else %}
+      <div class="chat-empty">
+        <h2>What do you feel like reading?</h2>
+        {% if pool %}
+        <p class="muted">Suggestions only come from series you haven't read: {{ new_count | num }} new on MangaDex and
+          {{ (pool - new_count) | num }} AniList recommendations, matched to your list.</p>
+        <div class="prompt-chips">
+          {% for prompt in prompts %}<button type="button" class="prompt-chip" data-ask>{{ prompt }}</button>{% endfor %}
+        </div>
+        {% else %}
+        <p class="muted">There's nothing to suggest yet. <a href="/discover/new">Scan new releases</a> or refresh
+          <a href="/discover">For you</a> first, because answers only come from those series.</p>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <form id="chat-form" class="composer" hx-post="/discover/ask" hx-target="#chat-thread" hx-swap="beforeend">
+    <input type="hidden" name="adult" value="{{ '1' if adult else '' }}">
+    <div class="composer-box">
+      <label for="chat-input" class="visually-hidden">Your question</label>
+      <textarea id="chat-input" name="message" rows="1" maxlength="1000" required autofocus
+        placeholder="Ask for a mood, a genre, or “like X but…”"></textarea>
+      <button id="chat-send" disabled>Send</button>
+    </div>
+    <p class="composer-hint muted small">Enter to send · Shift+Enter for a new line · ↑ to edit your last question</p>
+  </form>
+</div>
+<script src="/static/chat.js" defer></script>
+{% endblock %}

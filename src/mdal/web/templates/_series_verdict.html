@@ -1,0 +1,20 @@
+{%- set kind, ident = s.key.split(":", 1) -%}
+<div id="series-verdict" class="series-verdict panel">
+  <h2>Your rating</h2>
+  {% if s.verdict %}<p class="small"><strong>{{ s.verdict.label }}</strong>
+    <span class="muted">· {% if s.verdict.source == "ask" %}from Ask{% elif s.verdict.source == "hide" %}from Not interested{% else %}saved{% endif %} {{ s.verdict.at | when }}</span></p>
+  {% elif not s.entry %}<p class="muted small">Rate it and recommendations learn from it.</p>{% endif %}
+  {% if s.entry and not s.verdict %}<p class="muted small">It's on your AniList list, so your list entry already counts.</p>
+  <p><a class="button secondary" href="/list/rank?media_id={{ s.al_id }}">{{ "Re-rank it" if s.ranked else "Rank it" }}</a>
+    {% if s.ranked %}<span class="muted small">#{{ s.ranked.place }} in “{{ s.ranked.label }}” · {{ "%.1f"|format(s.ranked.score) }}</span>{% endif %}</p>
+  {% else %}
+  <div class="verdict-buttons" role="group" aria-label="Your rating">
+    {% for v, label in verdicts.items() %}
+    <button type="button" class="verdict{% if s.verdict and s.verdict.verdict == v %} chosen{% endif %}" aria-pressed="{{ 'true' if s.verdict and s.verdict.verdict == v else 'false' }}"
+      hx-post="/series/{{ kind }}/{{ ident }}/rate" hx-vals='{"verdict": "{{ v }}"}' hx-target="#series-verdict" hx-swap="outerHTML">{{ label }}</button>
+    {% endfor %}
+    {% if s.verdict %}<button type="button" class="link-button small" hx-post="/series/{{ kind }}/{{ ident }}/rate" hx-vals='{"verdict": "clear"}'
+      hx-target="#series-verdict" hx-swap="outerHTML">Clear rating</button>{% endif %}
+  </div>
+  {% endif %}
+</div>

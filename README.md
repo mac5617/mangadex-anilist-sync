@@ -19,6 +19,16 @@ until you approve it.
 - **Recommendations.** Series you don't have yet, ranked by your genres, tags and favourite creators and by
   what AniList readers recommend from your favourites, with picks and reasons written by a local model
   (Ollama), plus a map of what links each recommendation to your list.
+- **New releases and Ask.** A scan of the latest MangaDex series you haven't read or followed, matched to your
+  list by description, tags and creators, with picks by the local model; and a chat that suggests unread series.
+  The scan can run in the background, and Home shows the picks you haven't seen.
+- **Series pages and ratings.** Every recommended or listed series has a page with its details, your list
+  status, why it's recommended, its English release (MangaUpdates) and what AniList and MyAnimeList readers
+  recommend for it. Rate a series there (or tell Ask) and recommendations learn from it.
+- **Rank and tidy your list.** Rank what you've read by comparing two series at a time (like Beli); each
+  series' place sets its score, saved to AniList. Find series stalled as Reading, and finished series ready to binge.
+- **Search, year in review, compare, backup.** Search any title from the header; see your year in review; compare
+  your list with a friend's; back up everything only Shiori knows, and export your list as CSV.
 - **Stats.** An AniList-style overview of your list (status, formats, scores, release years, genres, tags,
   staff, and how MangaDex and AniList statuses compare), plus a record of everything syncs have written.
   Every bar opens the series behind it.
@@ -139,8 +149,9 @@ The header has four sections:
 | **Home** | Latest sync, open items, accounts, and a start button per site |
 | **Sync** | **Changes** for the latest sync, and **History** of every sync and single add, for both sites |
 | **Matches** | **To review** (uncertain or missing matches) and **Unlisted** (matched series not on your AniList list) |
-| **Stats** | **Library** (your AniList list), **Connections** (how your tags and genres go together) and **Activity** (what syncs have written, per site or both) |
-| **Discover** | **For you**, **Genres**, **Tags**, **Creators** (recommendations) and **Map** |
+| **List** | **Rank** (compare two at a time; scores saved to AniList), **Your ranking**, **Stalled** and **Ready to binge** |
+| **Stats** | **Library** (your AniList list), **Connections** (how your tags and genres go together), **Year** (your year in review), **Compare** (with a friend's list) and **Activity** (what syncs have written, per site or both) |
+| **Discover** | **For you**, **Genres**, **Tags**, **Creators** (recommendations), **Map**, **New releases** (a MangaDex scan), **Ask** (chat) and **Ratings** (your verdicts) |
 
 ### First sync
 
@@ -244,6 +255,117 @@ changes it; it must be on this computer). Pick any installed model from the list
 statuses and scores are sent, never account details. Without Ollama running, everything still works and
 **For you** shows the top-scored series instead; **Ask the model again** retries without re-reading AniList.
 
+### New releases and Ask
+
+**Discover → New releases → Scan MangaDex** reads the 500 series with the latest English chapters and the 100
+newest series, plus your MangaDex follows: about 25 paced MangaDex requests (6 pages of series, one page per
+100 follows), under a minute. The first scan also re-reads your AniList list once to get descriptions. Anything
+in your MangaDex library, followed, on your AniList or MyAnimeList list (by its AniList or MAL link, or by title),
+or marked **Not interested** is left out. Each remaining series is scored by:
+
+- **Description**: how close its description is to those of your 150 best-liked series, and how far from the
+  ones you dropped. This needs an embedding model in Ollama (see below); without one it's skipped.
+- **Tags**: MangaDex genres and themes matched by name to your AniList genres and tags.
+- **Creators**: an author or artist of series you liked.
+
+Your chat model then reads the descriptions of the best 40 and picks 12, with a reason for each.
+
+**Ask** is a conversation about what to read next ("a dark fantasy with a clever lead, finished", "more like
+that but funnier"). For each message Shiori shortlists the 30 series that best fit both the question and your
+taste, from the new releases and the For you candidates; the model can only suggest from that shortlist, so
+every answer is a real series you haven't read. A genre or tag you name is a filter ("an isekai", "no gore"),
+and a series you name ("I just read X, another like it?") is the reference: it's never suggested back, and
+AniList (and MyAnimeList, when connected) readers' recommendations for it join the shortlist. If you say what
+you thought of it, Ask saves that as a rating. **New conversation** clears it. A large local model takes
+10 to 60 seconds per answer.
+
+**Background scans.** While Shiori runs, it scans MangaDex again when the last scan is older than
+**Settings → Scan MangaDex for new releases every (hours)** (default 24; 0 turns it off). It never starts during
+a sync or a MangaDex cooldown. Home shows the picks you haven't seen on New releases yet.
+
+### Series pages
+
+Clicking a title anywhere in Discover (or in **Stats → Library**) opens the series page: cover, titles,
+description, genres and tags, creators, your AniList and MangaDex status, your rating and why it's recommended.
+The first visit each week also looks the series up (a few seconds):
+
+- **MangaUpdates**: English chapters, whether it's fully translated, licensing and English publishers, its score,
+  and the categories its readers vote for. Found by the MangaUpdates link MangaDex keeps, else by title.
+  No account needed; 1 request per second (**Settings → MangaUpdates requests per second**).
+- **AniList readers also recommend**, with the readers' votes; a series too new to have any gets the top-scored
+  manga sharing its main tags instead.
+- **MyAnimeList readers also recommend**, when MyAnimeList is connected.
+
+A lookup costs 1 to 3 AniList, 1 MyAnimeList and 1 or 2 MangaUpdates requests. After each scan, the model's
+picks are looked up on MangaUpdates too, so their cards show English chapter counts.
+
+### Ratings
+
+Rate a series on its page (**Loved it**, **Liked it**, **Didn't like it**, **Read it**, **Not interested**), or
+just tell Ask ("I read X and loved it"). A rating counts like a list score towards your genres, tags, creators
+and description matching (loved 95, liked 75, didn't like 30; not interested a mild 45; read only stops it
+being recommended), and a series you've read is never recommended again. **Not interested** on a card saves
+that rating too. **Discover → Ratings** lists them all to change or remove; series on your AniList list keep
+using their list entry.
+
+**MyAnimeList in For you.** With MyAnimeList connected, **Refresh** also asks what MyAnimeList readers of your
+15 favourites recommend (one request each, cached for a week), so candidates come from both communities.
+
+**Embedding model.** Description matching uses `qwen3-embedding:0.6b` (about 640 MB) by default:
+
+```powershell
+ollama pull qwen3-embedding:0.6b
+```
+
+Any Ollama embedding model works; choose it next to the chat model on the New releases or Ask page. Vectors
+are cached, so later scans only embed new or changed descriptions.
+
+## Your list
+
+### Rank
+
+**List → Rank** shows the series you've read but not ranked, unscored and most-read first. Say how it felt
+(**I liked it**, **It was fine**, **I didn't like it**), then pick which you liked more, two at a time, against
+series already in that tier. It's a binary search, so ranking into a tier of 100 takes about 7 questions; **Too
+close to call** places it right there. Keys: 1/2/3, ←/→, T, S to skip, Enter for the next series.
+
+A series' score follows from its place: **I liked it** spans 6.8–10, **It was fine** 4.0–6.7, **I didn't like it**
+0–3.9, best at the top and spread evenly. Placing one moves its neighbours a little, so every score that changes is
+saved to your AniList list in the background, 10 per request, by entry id (an edit can never add or duplicate an
+entry). **Or just give it a score** saves a number straight away without ranking it. **List → Your ranking** shows
+the whole ranking, with **Re-rank** and **Remove** (which leaves the AniList score as it is). MyAnimeList scores
+aren't changed.
+
+### Notes
+
+A series on your list has a **Your notes** box on its page: your AniList notes for that entry, read with your
+list (or once, when the page first opens). **Save notes** writes them back to AniList by entry id. With
+MyAnimeList connected and the series on your MAL list, **Also save to MyAnimeList** mirrors them to its comments;
+Shiori checks the entry exists first (one request), because MyAnimeList's save would otherwise create one. Notes
+on series you liked or dropped are quoted, shortened, to your local model, so Ask and the picks can use them.
+
+### Stalled and Ready to binge
+
+**Stalled** lists series marked Reading that haven't changed on AniList in 90 days, with **Pause** and **Drop**
+(saved to AniList; the only statuses Shiori sets outside a sync). **Ready to binge** lists series you paused,
+dropped or stalled on that have finished publishing, your highest-rated first, with chapters left and, loaded from
+MangaUpdates as you scroll, the English release.
+
+### Search, year in review, compare
+
+The **search box** in the header finds any title (romaji, English, Japanese, synonyms) among your list, your
+MangaDex library, new releases, recommendations and every series Shiori has seen, as you type. **Search AniList**
+asks AniList itself (1 request); results open their series page. **Stats → Year** is your year in review from
+your list's start and completion dates. **Stats → Compare** reads any public AniList list (1 request) and shows
+what you share, how alike your scores and genres are, what they loved that you haven't read, and the other way round.
+
+### Backup and export
+
+**Settings → Backup and export** downloads a JSON backup of what only Shiori knows (match decisions, dismissed
+flags, ratings, your ranking, hidden series, Ask conversations, friends, list edits and settings), never logins or
+tokens, and restores one: rows in the backup replace the same rows, nothing else is removed. It also exports your
+list and your ratings as CSV for Excel or Sheets.
+
 ## Rate limits and settings
 
 **Settings → Limits and thresholds.** The defaults are deliberately conservative:
@@ -299,11 +421,11 @@ mangadex-anilist-sync/
 │   ├── main.py                  # entry point (`uv run mdal`), binds to 127.0.0.1
 │   ├── config.py, logsetup.py   # settings from .env; logging with secret redaction
 │   ├── db/                      # SQLite connection, repository, migrations/
-│   ├── clients/                 # rate-limited AniList, MangaDex and MyAnimeList clients, OAuth, pacing; Ollama
+│   ├── clients/                 # rate-limited AniList, MangaDex, MyAnimeList and MangaUpdates clients, OAuth, pacing; Ollama
 │   ├── fetch/                   # MangaDex library, AniList and MyAnimeList lists, lookups, searches, staff
 │   ├── matching/                # title normalisation, scoring, matching pipeline
 │   ├── sync/                    # progress rules, sync state machine, writers, single adds, estimates
-│   ├── recommend/               # taste profile, scoring, model prompt, map, background refresh
+│   ├── recommend/               # taste profile, scoring, prompts, map, new-release scan, Ask chat, ratings, series pages
 │   ├── stats.py, stats_graph.py # numbers and the Connections graph for the stats pages (database reads only)
 │   └── web/                     # FastAPI app, routes/, templates/, static/
 ├── tests/                       # 36 test modules plus factories and fakes

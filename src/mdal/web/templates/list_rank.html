@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Rank{% endblock %}
+{% block content %}
+{% with section = "list" %}{% include "_subnav.html" %}{% endwith %}
+<div class="page-head">
+  <div>
+    <h1>Rank what you've read</h1>
+    <p class="lede">Say how a series felt, then pick which you liked more, two at a time. Its place sets its score, saved to
+      your AniList list. {{ ranked | num }} ranked so far.</p>
+  </div>
+  <div class="page-actions">{% include "_rank_save.html" %}</div>
+</div>
+<div id="rank-stage" class="rank-stage">{% include "_rank_step.html" %}</div>
+<script src="/static/rank.js" defer></script>
+{% endblock %}

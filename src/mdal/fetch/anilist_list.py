@@ -5,8 +5,10 @@ Everything here is read-only. Query text is constant; user input only travels as
 
 from __future__ import annotations
 
+import html
 import json
 import logging
+import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
@@ -22,6 +24,7 @@ MEDIA_FIELDS = (
 )
 STAFF_FIELDS = "staff(perPage: 3) { nodes { name { full native } } }"
 
+DESCRIPTION_FIELD = "description(asHtml: false)"  # list request only: it feeds description matching
 TAG_FIELDS = "tags { name rank category isMediaSpoiler isGeneralSpoiler }"
 TAG_MIN_RANK = 50  # AniList's own stats count a tag only at 50%+ relevance
 STAFF_ROLE_FIELDS = "staff(perPage: 6, sort: [RELEVANCE, ID]) { edges { role node { id name { full } } } }"
@@ -35,9 +38,9 @@ def list_query(with_tags: bool) -> str:
     tags = f" {TAG_FIELDS}" if with_tags else ""
     return (
         "query ($userId: Int) { MediaListCollection(userId: $userId, type: MANGA) { "
-        "lists { name isCustomList entries { id status progress progressVolumes score(format: POINT_100) updatedAt "
+        "lists { name isCustomList entries { id status progress progressVolumes score(format: POINT_100) updatedAt notes "
         "startedAt { year month day } completedAt { year month day } "
-        f"media {{ {MEDIA_FIELDS}{tags} }} }} }} }} }}"
+        f"media {{ {MEDIA_FIELDS} {DESCRIPTION_FIELD}{tags} }} }} }} }} }}"
     )
 
 
@@ -100,6 +103,7 @@ def media_row(media: dict[str, Any], fetched_at: str) -> dict[str, Any]:
         "genres": json.dumps(media.get("genres") or [], ensure_ascii=False),
         # None = not part of this request: the repo keeps what it already has
         "tags": json.dumps(clean_tags(media["tags"]), ensure_ascii=False) if "tags" in media else None,
+        "description": plain_text(media.get("description")) if "description" in media else None,
         "mean_score": media.get("meanScore"),
         "popularity": media.get("popularity"),
         "is_adult": None if media.get("isAdult") is None else int(bool(media["isAdult"])),
@@ -107,6 +111,21 @@ def media_row(media: dict[str, Any], fetched_at: str) -> dict[str, Any]:
         "site_url": media.get("siteUrl"),
         "fetched_at": fetched_at,
     }
+
+
+HTML_TAG = re.compile(r"<[^>]+>")
+LINE_BREAK = re.compile(r"<br\s*/?>", re.IGNORECASE)
+# The publisher credit and any notes after it ("Note: Includes eight extra chapters.") aren't the story.
+SOURCE_NOTE = re.compile(r"(\(\s*source\s*:|^\s*notes?\s*:).*", re.IGNORECASE | re.DOTALL | re.MULTILINE)
+
+
+def plain_text(description: str | None) -> str:
+    """AniList's description without HTML or a trailing "(Source: ...)". "" when there is none (fetched, empty)."""
+    if not description:
+        return ""
+    text = HTML_TAG.sub("", LINE_BREAK.sub("\n", description))
+    text = SOURCE_NOTE.sub("", html.unescape(text).strip())
+    return "\n".join(" ".join(line.split()) for line in text.splitlines() if line.strip())
 
 
 def clean_tags(tags: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
@@ -156,7 +175,7 @@ async def fetch_list(client: AniListClient, repo: Repo, user_id: int) -> ListSum
          "score": e.get("score") or None,  # AniList reports 0 for "no score"
          "progress_volumes": e.get("progressVolumes"),
          "started_at": fuzzy_date(e.get("startedAt")), "completed_at": fuzzy_date(e.get("completedAt")),
-         "updated_at": e.get("updatedAt") or None}
+         "updated_at": e.get("updatedAt") or None, "notes": e.get("notes") or ""}
         for e in entries.values()
     ])
     return ListSummary(entries=len(entries), custom_only=len(set(entries) - in_status_list))

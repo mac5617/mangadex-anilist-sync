@@ -1,0 +1,9 @@
+<span id="rank-save" class="rank-save small"{% if saving %} hx-get="/list/rank-status" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
+  {% if not anilist %}<span class="muted">Connect AniList in <a href="/settings#anilist">Settings</a> to save scores.</span>
+  {% elif saving %}<span class="spinner" aria-hidden="true"></span> {{ save.detail or "Saving scores to AniList" }}
+  {% elif save.state == "failed" %}<span class="notice err inline">{{ save.detail }}: {{ save.error }}</span>
+    {% if pending %}<button type="button" class="link-button" hx-post="/list/rank-save" hx-target="#rank-save" hx-swap="outerHTML">Try again</button>{% endif %}
+  {% elif pending %}<span class="muted">{{ pending }} score{{ "s" if pending != 1 }} to save</span>
+    <button type="button" class="link-button" hx-post="/list/rank-save" hx-target="#rank-save" hx-swap="outerHTML">Save to AniList</button>
+  {% elif save.finished_at %}<span class="muted">All scores saved to AniList · {{ save.finished_at | when }}</span>{% endif %}
+</span>

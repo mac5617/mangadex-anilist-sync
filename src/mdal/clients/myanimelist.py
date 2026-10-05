@@ -232,6 +232,21 @@ class MalClient:
                 return items
             offset += len(page)
 
+    async def recommendations(self, mal_id: int) -> list[dict[str, Any]]:
+        """What MyAnimeList readers recommend for a manga: [{node: {id, title}, num_recommendations}]."""
+        body = await self._request("GET", f"/manga/{int(mal_id)}", params={"fields": "recommendations"})
+        return body.get("recommendations") or []
+
+    async def my_list_status(self, mal_id: int) -> dict[str, Any] | None:
+        """Your list entry for a manga ({status, comments, ...}), or None when it isn't on your list."""
+        body = await self._request("GET", f"/manga/{int(mal_id)}", params={"fields": "my_list_status{comments}"})
+        return body.get("my_list_status") or None
+
+    async def update_comments(self, mal_id: int, comments: str) -> dict[str, Any]:
+        """Replace your comments on an entry. Callers must check it's on your list first: MyAnimeList
+        creates the entry when it isn't."""
+        return await self._request("PATCH", f"/manga/{int(mal_id)}/my_list_status", data={"comments": comments})
+
     async def update_list_status(self, mal_id: int, *, chapters: int | None, status: str | None) -> dict[str, Any]:
         """The app's only MyAnimeList write. Sends chapters read and, optionally, reading/completed."""
         if status is not None and status not in WRITE_STATUSES:

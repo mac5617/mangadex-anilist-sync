@@ -1,0 +1,71 @@
+{%- macro series_card(x, big=True) -%}
+  {% if x.cover %}<img class="rank-cover" src="{{ x.cover }}" alt="" referrerpolicy="no-referrer"
+    {% if x.cover_fallback %}data-fallback="{{ x.cover_fallback }}" {% endif %}onerror="if(this.dataset.fallback&&this.src!==this.dataset.fallback){this.src=this.dataset.fallback}else{this.onerror=null;this.removeAttribute('src');this.classList.add('broken')}">{% else %}<span class="rank-cover placeholder" aria-hidden="true"></span>{% endif %}
+  <span class="rank-title">{{ x.title }}</span>
+  <span class="rank-meta muted small">{{ x.meta }}</span>
+{%- endmacro -%}
+{% if note %}<p class="notice {{ 'ok' if note.startswith('Saved') else 'err' }}" role="status">{{ note }}</p>{% endif %}
+
+{% if step == "empty" %}
+  <div class="rank-done panel">
+    <h2>Everything you've read is ranked</h2>
+    <p class="muted">See it all in <a href="/list/ranking">Your ranking</a>, or re-rank a series from its page.</p>
+  </div>
+
+{% elif step == "tier" %}
+  <div class="rank-one">
+    <a class="rank-series" href="{{ s.href }}">{{ series_card(s) }}</a>
+    <div class="rank-ask">
+      <h2>How was it?</h2>
+      <form class="rank-tiers" hx-post="/list/rank/tier" hx-target="#rank-stage">
+        <input type="hidden" name="media_id" value="{{ s.media_id }}">
+        {% for key, (low, high, label) in tiers.items() %}
+        <button name="tier" value="{{ key }}" class="tier tier-{{ key }}{% if suggested == key %} suggested{% endif %}" data-key="{{ loop.index }}">
+          <span>{{ label }}</span><span class="small">{{ "%g–%g"|format(low, high) }} · {{ sizes[key] }} ranked</span>
+          <kbd>{{ loop.index }}</kbd></button>
+        {% endfor %}
+      </form>
+      {% if suggested %}<p class="muted small">Your AniList score points to “{{ tiers[suggested][2] }}”.</p>{% endif %}
+      <form class="rank-quick" hx-post="/list/rank/score" hx-target="#rank-stage">
+        <input type="hidden" name="media_id" value="{{ s.media_id }}">
+        <label for="quick-score">Or just give it a score</label>
+        <input id="quick-score" name="score" type="number" min="0.1" max="10" step="0.1" inputmode="decimal" placeholder="8.5" required>
+        <span class="muted">/ 10</span>
+        <button class="secondary">Save score</button>
+      </form>
+      <p class="rank-foot small">
+        <button type="button" class="link-button" hx-post="/list/rank/skip" hx-vals='{"media_id": "{{ s.media_id }}"}' hx-target="#rank-stage" data-key="s">Skip for now <kbd>S</kbd></button>
+        <span class="muted">· {{ left | num }} to rank</span>
+      </p>
+    </div>
+  </div>
+
+{% elif step == "compare" %}
+  <div class="rank-compare">
+    <p class="rank-q"><span class="muted small">{{ tier_label }} · question {{ question }} of about {{ questions }}</span></p>
+    <h2>Which did you like more?</h2>
+    <form hx-post="/list/rank/compare" hx-target="#rank-stage" class="rank-pair">
+      {% for name, value in [("media_id", s.media_id), ("tier", tier), ("low", low), ("high", high)] %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}
+      <button name="answer" value="better" class="rank-choice" data-key="ArrowLeft">{{ series_card(s) }}<kbd>←</kbd></button>
+      <span class="rank-or muted" aria-hidden="true">or</span>
+      <button name="answer" value="worse" class="rank-choice" data-key="ArrowRight">{{ series_card(other) }}<kbd>→</kbd></button>
+      <p class="rank-tie"><button name="answer" value="tie" class="secondary" data-key="t">Too close to call <kbd>T</kbd></button></p>
+    </form>
+  </div>
+
+{% elif step == "result" %}
+  <div class="rank-one">
+    <a class="rank-series" href="{{ s.href }}">{{ series_card(s) }}</a>
+    <div class="rank-ask rank-result">
+      <span class="score-badge tier-{{ tier }}">{{ "%.1f"|format(score) }}</span>
+      <h2>#{{ place }} of {{ of }} in “{{ tier_label }}”</h2>
+      <p class="muted">Its score follows from that place; the others in the tier moved to make room.</p>
+      <div class="row">
+        <button hx-post="/list/rank/next" hx-target="#rank-stage" autofocus data-key="Enter">Next series <kbd>Enter</kbd></button>
+        <a class="button secondary" href="/list/rank?media_id={{ s.media_id }}">Rank it again</a>
+        <a href="/list/ranking">Your ranking</a>
+      </div>
+    </div>
+  </div>
+{% endif %}
+{% if step in ("result", "tier") %}<div hx-get="/list/rank-status" hx-trigger="load" hx-target="#rank-save" hx-swap="outerHTML" hidden></div>{% endif %}

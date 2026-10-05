@@ -33,8 +33,9 @@
         <div class="series">
           {{ ui.thumb(r.cover) }}
           <div class="series-text">
-            <a class="md-title" href="{{ r.site_url or ('https://anilist.co/manga/' ~ r.media_id) }}" target="_blank" rel="noopener noreferrer">{{ r.title }}</a>
-            <span class="al-title">{{ r.start_year or "?" }} · {{ pub_labels.get(r.pub, r.pub or "?") }}{% if r.chapters %} · {{ r.chapters | num }} ch{% endif %}</span>
+            <a class="md-title" href="/series/al/{{ r.media_id }}">{{ r.title }}</a>
+            <span class="al-title">{{ r.start_year or "?" }} · {{ pub_labels.get(r.pub, r.pub or "?") }}{% if r.chapters %} · {{ r.chapters | num }} ch{% endif %}
+              · <a href="{{ r.site_url or ('https://anilist.co/manga/' ~ r.media_id) }}" target="_blank" rel="noopener noreferrer">AniList ↗</a></span>
           </div>
         </div>
       </td>

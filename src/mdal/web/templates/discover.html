@@ -13,7 +13,7 @@
 {% if picks %}
 <section class="block">
   <div class="block-head"><h2>{{ "Picks" if from_model else "Top matches" }}</h2>
-    <span class="muted">{% if from_model %}chosen by {{ llm.model }} · {{ llm.created_at | when }}{% else %}by genre, tag, creator and AniList readers' recommendations{% endif %}</span></div>
+    <span class="muted">{% if from_model %}chosen by {{ llm.model | model_label }} · {{ llm.created_at | when }}{% else %}by genre, tag, creator and AniList readers' recommendations{% endif %}</span></div>
   <div class="recs">
     {% for c in picks %}{% with rank = loop.index %}{% include "_rec_card.html" %}{% endwith %}{% endfor %}
   </div>

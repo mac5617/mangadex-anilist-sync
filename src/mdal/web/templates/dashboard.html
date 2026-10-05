@@ -11,6 +11,30 @@
 </section>
 
 <section class="block">
+  <div class="block-head"><h2>New releases for you</h2><a class="small" href="/discover/new">New releases</a></div>
+  <div class="panel stack">
+  {% if digest %}
+    <p><strong>{{ digest | length }} new pick{{ "s" if digest | length != 1 }}</strong> since you last looked
+      <span class="muted small">· scanned {{ scan.finished_at | when }}</span></p>
+    <ul class="digest">
+      {% for d in digest[:6] %}<li><a href="{{ d.href }}">
+        {% if d.cover %}<img src="{{ d.cover }}" alt="" width="92" height="131" loading="lazy" referrerpolicy="no-referrer"
+          onerror="this.onerror=null;this.removeAttribute('src');this.classList.add('broken')">{% else %}<span class="digest-noimg" aria-hidden="true"></span>{% endif %}
+        <span class="digest-title">{{ d.title }}</span></a><span class="muted small">{{ d.meta }}</span></li>{% endfor %}
+    </ul>
+  {% elif scan_running %}
+    <p><span class="badge state-fetching">scanning</span> {{ scan.detail }}</p>
+  {% elif scan.finished_at %}
+    <p class="muted">Nothing new since you last looked. Scanned {{ scan.finished_at | when }}.</p>
+  {% else %}
+    <p class="muted">MangaDex hasn't been scanned yet. <a href="/discover/new">Scan it now</a>.</p>
+  {% endif %}
+  <p class="muted small">{% if next_scan %}Next scan {{ next_scan.isoformat(timespec="seconds") | when }}, in the background while Shiori runs.
+    {% else %}Background scans are off. <a href="/settings#tunables">Turn them on in Settings</a>.{% endif %}</p>
+  </div>
+</section>
+
+<section class="block">
   <h2>Open items</h2>
   <ul class="items">
     <li><span class="item-label">Matches to review</span>

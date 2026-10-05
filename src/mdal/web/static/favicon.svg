@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Shiori's mark: a ribbon bookmark (shiori), as in the header -->
+  <rect width="32" height="32" rx="7" fill="#111418"/>
+  <path d="M9 5.5h14v21l-7-5.5-7 5.5z" fill="#4fb8b4"/>
+</svg>

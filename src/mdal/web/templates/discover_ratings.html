@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Your ratings{% endblock %}
+{% block content %}
+{% with section = "discover" %}{% include "_subnav.html" %}{% endwith %}
+<div class="page-head">
+  <div>
+    <h1>Your ratings</h1>
+    <p class="lede">Series you rated here, said something about in Ask, or marked Not interested. Each one shapes your
+      recommendations; anything you've read is never recommended again.</p>
+  </div>
+</div>
+
+{% if rows %}
+<p class="muted small">{% for v, label in verdicts.items() if counts[v] %}{{ label }}: {{ counts[v] }}{% if not loop.last %} · {% endif %}{% endfor %}</p>
+<div class="table-wrap">
+<table class="data ratings">
+  <thead><tr><th>Series</th><th>Rating</th><th>From</th><th>Saved</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
+  <tbody>{% for row in rows %}{% with r = row.r, key = row.key, href = row.href %}{% include "_rating_row.html" %}{% endwith %}{% endfor %}</tbody>
+</table>
+</div>
+{% else %}
+<div class="panel"><p class="muted">No ratings yet. Open a series from Discover and rate it, or tell Ask what you thought of something
+  ("I just read X and loved it").</p></div>
+{% endif %}
+{% endblock %}

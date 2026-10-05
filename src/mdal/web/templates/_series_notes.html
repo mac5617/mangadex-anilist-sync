@@ -1,0 +1,21 @@
+{%- set kind, ident = s.key.split(":", 1) -%}
+<section id="series-notes" class="series-section series-notes"
+  {% if s.notes is none and anilist %}hx-get="/series/{{ kind }}/{{ ident }}/notes" hx-trigger="load" hx-swap="outerHTML"{% endif %}>
+  <h2>Your notes</h2>
+  {% if s.notes is none and anilist %}
+    <p class="muted small"><span class="spinner" aria-hidden="true"></span> Reading your notes from AniList…</p>
+  {% else %}
+  <form hx-post="/series/{{ kind }}/{{ ident }}/notes" hx-target="#series-notes" hx-swap="outerHTML" class="notes-form">
+    <label for="notes-text" class="visually-hidden">Your notes on {{ s.title }}</label>
+    <textarea id="notes-text" name="notes" rows="4" maxlength="5000" placeholder="What you thought, where you stopped, what to remember…">{{ s.notes or "" }}</textarea>
+    <div class="row">
+      <button{% if not anilist %} disabled title="Connect AniList in Settings first"{% endif %}>Save notes</button>
+      {% if s.mal_mirror %}<label class="row small"><input type="checkbox" name="mal" value="1" checked> Also save to MyAnimeList</label>{% endif %}
+      {% if notes_saved %}<span class="notice ok inline" role="status">{{ notes_saved }}</span>{% endif %}
+      {% if notes_error %}<span class="notice err inline" role="alert">{{ notes_error }}</span>{% endif %}
+    </div>
+    <p class="muted small">Saved to your AniList list entry{% if s.mal_mirror %} (and MyAnimeList's comments){% endif %}. Your notes on series you
+      liked also help Ask and the recommendation picks understand your taste.</p>
+  </form>
+  {% endif %}
+</section>

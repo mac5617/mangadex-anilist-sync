@@ -13,11 +13,15 @@ from dotenv import set_key, unset_key
 from mdal.clients.anilist import AniListClient
 from mdal.clients.anilist_oauth import AniListOAuth
 from mdal.clients.mangadex import MangaDexClient, MangaDexCredentials
+from mdal.clients.mangaupdates import MangaUpdatesClient
 from mdal.clients.myanimelist import MalClient
 from mdal.clients.ratelimit import PacedQueue
 from mdal.config import ENV_FILE, Settings
 from mdal.db.connection import connect
 from mdal.db.repo import Repo
+from mdal.recommend.releases import NewReleases
+from mdal.recommend.ranker import Ranker
+from mdal.recommend.series import SeriesPages
 from mdal.recommend.service import Recommender
 from mdal.sync.orchestrator import SyncOrchestrator
 
@@ -81,8 +85,13 @@ class Services:
         self.mal_queue = PacedQueue(60.0 / repo.get_setting("mal_rpm"))
         self.mal_store = DbMalStore(repo)
         self.mal = MalClient(lambda: self.settings, self.mal_queue, self.mal_store)
+        self.mangaupdates_queue = PacedQueue(1.0 / repo.get_setting("mangaupdates_rps"))
+        self.mangaupdates = MangaUpdatesClient(self.mangaupdates_queue)
         self.orchestrator = SyncOrchestrator(self)
         self.recommender = Recommender(self)
+        self.releases = NewReleases(self)
+        self.series = SeriesPages(self)
+        self.ranker = Ranker(self)
 
     @classmethod
     def from_env(cls) -> Services:
@@ -94,6 +103,7 @@ class Services:
         await self.mangadex.aclose()
         await self.oauth.aclose()
         await self.mal.aclose()
+        await self.mangaupdates.aclose()
         await self.recommender.aclose()
 
     # ---- settings / secrets ---------------------------------------------

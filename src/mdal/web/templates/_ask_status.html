@@ -1,0 +1,5 @@
+<div id="ask-status" class="ask-status">
+  {% if status_error %}<span class="notice err inline" role="alert">{{ status_error }}</span>{% endif %}
+  <span class="muted small">{{ pool | num }} series to choose from{% if ns.finished_at %} · scanned {{ ns.finished_at | when }}{% endif %}</span>
+  <span hx-get="/discover-models?panel=ask" hx-trigger="load" hx-swap="outerHTML"><span class="muted small">Model: {{ model | model_label }}</span></span>
+</div>

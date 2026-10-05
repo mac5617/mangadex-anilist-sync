@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% import "_charts.html" as charts %}
+{% block title %}{{ r.year if r else "Year" }} in review{% endblock %}
+{% block content %}
+{% with section = "stats" %}{% include "_subnav.html" %}{% endwith %}
+{%- macro tile(x) -%}
+  <li><a href="{{ x.href }}">{% if x.cover %}<img src="{{ x.cover }}" alt="" loading="lazy" referrerpolicy="no-referrer">{% else %}<span class="tile-noimg"></span>{% endif %}
+    <span class="tile-title">{{ x.title }}</span></a>{% if x.note %}<span class="muted small">{{ x.note }}</span>{% endif %}</li>
+{%- endmacro -%}
+{% if not r %}
+<div class="page-head"><h1>Year in review</h1></div>
+<div class="panel"><p class="muted">No start or completion dates on your AniList list yet. They arrive with the next sync.</p></div>
+{% else %}
+<div class="page-head">
+  <div>
+    <h1>{{ r.year }} in review</h1>
+    <p class="lede">From the start and completion dates on your AniList list.</p>
+  </div>
+  <div class="page-actions">
+    <nav class="year-pick" aria-label="Year">{% for y in years[:8] %}<a href="/stats/year?year={{ y }}"{% if y == r.year %} aria-current="page"{% endif %}>{{ y }}</a>{% endfor %}</nav>
+  </div>
+</div>
+
+<div class="figures">
+  {{ charts.figure(r.finished | num, "Series finished") }}
+  {{ charts.figure(r.started | num, "Series started") }}
+  {{ charts.figure(r.chapters | num, "Chapters in what you finished") }}
+  {{ charts.figure("%.1f" | format(r.mean_score / 10) if r.mean_score else "—", "Average score", "of what you finished and scored") }}
+</div>
+
+<section class="panel chart-panel">
+  <h2>Finished, month by month</h2>
+  {{ charts.columns(c.months, "Month", "Finished", empty="No completion dates with months this year.") }}
+</section>
+
+{% if p.best %}<section class="block">
+  <h2>Your best this year</h2>
+  <ul class="tiles">{% for x in p.best %}{{ tile(x) }}{% endfor %}</ul>
+</section>{% endif %}
+
+{% if r.more_than_usual %}<section class="block">
+  <h2>What you read more of than usual</h2>
+  <ul class="usual-list">{% for x in r.more_than_usual %}
+    <li><strong>{{ x.name }}</strong> <span class="muted">{{ x.count }} series · {{ "%.0f" | format(100 * x.share) }}% of the year against
+      {{ "%.0f" | format(100 * x.usual) }}% of your list</span></li>{% endfor %}</ul>
+</section>{% endif %}
+
+<div class="grid two">
+  <section class="panel chart-panel"><h2>Genres</h2><p class="chart-sub">Series you started or finished</p>{{ charts.hbars(c.genres, "Genre", "Series") }}</section>
+  <section class="panel chart-panel"><h2>Tags</h2><p class="chart-sub">Series you started or finished</p>{{ charts.hbars(c.tags, "Tag", "Series") }}</section>
+</div>
+
+<div class="grid two">
+  {% if p.longest %}<section class="block"><h2>Longest finished</h2><ul class="tiles small-tiles">{% for x in p.longest %}{{ tile(x) }}{% endfor %}</ul></section>{% endif %}
+  <section class="block">
+    <h2>Bookends</h2>
+    <ul class="tiles small-tiles">{% if p.first %}{{ tile(p.first) }}{% endif %}{% if p.last and p.last != p.first %}{{ tile(p.last) }}{% endif %}</ul>
+    {% if r.staff %}<p class="small"><span class="muted">Creators you read most:</span> {% for name, n in r.staff %}{{ name }} ({{ n }}){% if not loop.last %} · {% endif %}{% endfor %}</p>{% endif %}
+    {% if r.dropped %}<p class="small muted">{{ r.dropped | length }} series you started this year are now dropped.</p>{% endif %}
+  </section>
+</div>
+{% endif %}
+{% endblock %}

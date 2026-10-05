@@ -1,0 +1,45 @@
+{%- set kind, ident = s.key.split(":", 1) -%}
+<section id="series-details" class="series-section series-details"
+  {% if not s.looked_up %}hx-post="/series/{{ kind }}/{{ ident }}/lookup" hx-trigger="load" hx-swap="outerHTML"{% endif %}>
+  <div class="block-head">
+    <h2>From AniList, MyAnimeList and MangaUpdates</h2>
+    {% if s.looked_up %}<button type="button" class="link-button small" hx-post="/series/{{ kind }}/{{ ident }}/lookup"
+      hx-vals='{"force": "1"}' hx-target="#series-details" hx-swap="outerHTML">Look up again</button>{% endif %}
+  </div>
+  {% if not s.looked_up %}
+    <p class="muted"><span class="spinner" aria-hidden="true"></span> Looking this series up…</p>
+  {% else %}
+    {% for p in s.problems %}<p class="notice warn small">{{ p }}</p>{% endfor %}
+
+    {% if s.mu %}
+    <div class="mu-panel">
+      <h3>English release <span class="muted small">MangaUpdates</span></h3>
+      <dl class="series-facts">
+        {% if s.english %}<div><dt>English</dt><dd>{{ s.english | join(" · ") }}</dd></div>{% endif %}
+        {% if s.mu.status %}<div><dt>Original run</dt><dd>{{ s.mu.status }}</dd></div>{% endif %}
+        {% if s.mu.english %}<div><dt>Publishers</dt><dd>{% for p in s.mu.english %}{{ p.name }}{% if p.notes %} <span class="muted">({{ p.notes }})</span>{% endif %}{% if not loop.last %} · {% endif %}{% endfor %}</dd></div>{% endif %}
+        {% if s.mu.rating %}<div><dt>MangaUpdates score</dt><dd>{{ s.mu.rating }}/10 <span class="muted">({{ s.mu.votes | num }} votes)</span></dd></div>{% endif %}
+      </dl>
+      {% if s.mu.categories %}<p class="small"><span class="muted">Readers tag it:</span> {{ s.mu.categories | join(", ") }}</p>{% endif %}
+      {% if s.mu.url %}<p class="small"><a href="{{ s.mu.url }}" target="_blank" rel="noopener noreferrer">Open on MangaUpdates ↗</a></p>{% endif %}
+    </div>
+    {% else %}<p class="muted small">MangaUpdates has no matching series.</p>{% endif %}
+
+    {% for site, label, items in [("anilist", "AniList readers also recommend", s.readers.anilist),
+                                 ("mal", "MyAnimeList readers also recommend", s.readers.mal),
+                                 ("mu", "MangaUpdates readers also recommend", s.readers.mu)] if items %}
+    <div class="readers">
+      <h3>{{ label }}</h3>
+      <ul class="reader-recs">
+        {% for r in items %}<li>
+          <a href="{{ r.href }}"{% if r.external %} target="_blank" rel="noopener noreferrer"{% endif %}>
+            {% if r.cover %}<img src="{{ r.cover }}" alt="" width="46" height="66" loading="lazy" referrerpolicy="no-referrer">{% else %}<span class="reader-noimg" aria-hidden="true"></span>{% endif %}
+            <span class="reader-title">{{ r.title }}{% if r.external %} ↗{% endif %}</span></a>
+          <span class="muted small">{% if r.listed %}on your list{% if r.note %} · {% endif %}{% endif %}{{ r.note }}</span>
+        </li>{% endfor %}
+      </ul>
+    </div>
+    {% endfor %}
+    {% if not (s.readers.anilist or s.readers.mal or s.readers.mu) %}<p class="muted small">No readers' recommendations found for this series yet.</p>{% endif %}
+  {% endif %}
+</section>

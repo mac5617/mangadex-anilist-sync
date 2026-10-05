@@ -83,6 +83,23 @@
   </div>
 </section>
 
+<section class="panel stack" id="backup">
+  <h2>Backup and export</h2>
+  <p class="muted small">The backup keeps what only Shiori knows: your match decisions, dismissed flags, ratings, ranking, hidden
+    series, Ask conversations, friends and settings. It never includes logins or tokens. Your lists and series details come
+    back from AniList and MangaDex on the next sync.</p>
+  <div class="row">
+    <a class="button" href="/backup/shiori.json" download>Download backup</a>
+    <a class="button secondary" href="/backup/list.csv" download>Your list (CSV)</a>
+    <a class="button secondary" href="/backup/ratings.csv" download>Ratings and ranking (CSV)</a>
+  </div>
+  <form method="post" action="/backup/restore" enctype="multipart/form-data" class="row restore-form">
+    <label for="restore-file">Restore a backup</label>
+    <input id="restore-file" type="file" name="file" accept=".json,application/json" required>
+    <button class="secondary" onclick="return confirm('Restore this backup? Rows in it replace the same rows here; nothing else is removed.')">Restore</button>
+  </form>
+</section>
+
 <section class="panel stack" id="storage">
   <h2>Storage</h2>
   <p class="muted small">Secrets live in <code>.env</code>; this page only shows whether each one is set.</p>

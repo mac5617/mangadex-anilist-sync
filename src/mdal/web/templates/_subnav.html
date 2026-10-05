@@ -10,7 +10,14 @@
 {%- elif section == "stats" %}
   <a href="/stats"{% if path == "/stats" or path.startswith("/stats/entries") %} aria-current="page"{% endif %}>Library</a>
   <a href="/stats/connections"{% if path.startswith("/stats/connections") %} aria-current="page"{% endif %}>Connections</a>
+  <a href="/stats/year"{% if path.startswith("/stats/year") %} aria-current="page"{% endif %}>Year</a>
+  <a href="/stats/compare"{% if path.startswith("/stats/compare") %} aria-current="page"{% endif %}>Compare</a>
   <a href="/stats/syncs"{% if path.startswith("/stats/syncs") %} aria-current="page"{% endif %}>Activity</a>
+{%- elif section == "list" %}
+  <a href="/list/rank"{% if path == "/list/rank" %} aria-current="page"{% endif %}>Rank</a>
+  <a href="/list/ranking"{% if path == "/list/ranking" %} aria-current="page"{% endif %}>Your ranking</a>
+  <a href="/list/stalled"{% if path == "/list/stalled" %} aria-current="page"{% endif %}>Stalled</a>
+  <a href="/list/binge"{% if path == "/list/binge" %} aria-current="page"{% endif %}>Ready to binge</a>
 {%- elif section == "discover" %}
   {%- set q = "?adult=1" if adult else "" %}
   <a href="/discover{{ q }}"{% if path == "/discover" %} aria-current="page"{% endif %}>For you</a>
@@ -18,5 +25,8 @@
   <a href="/discover/tags{{ q }}"{% if path == "/discover/tags" %} aria-current="page"{% endif %}>Tags</a>
   <a href="/discover/creators{{ q }}"{% if path == "/discover/creators" %} aria-current="page"{% endif %}>Creators</a>
   <a href="/discover/map{{ q }}"{% if path == "/discover/map" %} aria-current="page"{% endif %}>Map</a>
+  <a href="/discover/new{{ q }}"{% if path == "/discover/new" %} aria-current="page"{% endif %}>New releases</a>
+  <a href="/discover/ask{{ q }}"{% if path == "/discover/ask" %} aria-current="page"{% endif %}>Ask</a>
+  <a href="/discover/ratings"{% if path == "/discover/ratings" %} aria-current="page"{% endif %}>Ratings</a>
 {%- endif %}
 </nav>

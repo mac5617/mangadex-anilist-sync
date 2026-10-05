@@ -1,13 +1,19 @@
-<article class="rec" id="rec-{{ c.id }}">
-  {% if c.cover %}<img class="thumb md" src="{{ c.cover }}" alt="" width="64" height="91" loading="lazy" decoding="async" referrerpolicy="no-referrer"
+<article class="rec{% if compact %} compact{% endif %}" id="{{ c.dom_id }}">
+  {% if c.cover %}<img class="thumb md" src="{{ c.cover }}" alt="" width="132" height="188" loading="lazy" decoding="async" referrerpolicy="no-referrer"
     onerror="this.onerror=null;this.removeAttribute('src');this.classList.add('broken')">{% else %}<span class="thumb md placeholder" aria-hidden="true">no cover</span>{% endif %}
   <div class="rec-body">
-    <h3>{% if rank %}<span class="rec-rank">{{ rank }}</span>{% endif %}<a href="{{ c.url }}" target="_blank" rel="noopener noreferrer">{{ c.title }}</a>
+    <h3>{% if rank %}<span class="rec-rank">{{ rank }}</span>{% endif %}<a href="{{ c.page }}">{{ c.title }}</a>
       {% if c.adult %}<span class="badge">adult</span>{% endif %}</h3>
-    <p class="muted small">{{ c.meta }}{% if c.genres %} · {{ c.genres | join(", ") }}{% endif %}</p>
+    {% if c.meta %}<p class="rec-meta muted small">{{ c.meta }}</p>{% endif %}
+    {% if c.genres %}<ul class="tag-list" aria-label="Tags">{% for g in c.genres %}<li>{{ g }}</li>{% endfor %}</ul>{% endif %}
     {% if c.reasons %}<ul class="rec-reasons{% if c.llm %} from-model{% endif %}">{% for reason in c.reasons %}<li>{{ reason }}</li>{% endfor %}</ul>{% endif %}
-    <p class="rec-links small"><a href="{{ c.md_search }}" target="_blank" rel="noopener noreferrer">Find on MangaDex</a>
-      <button type="button" class="link-button" hx-post="/discover-hide/{{ c.id }}" hx-target="#rec-{{ c.id }}" hx-swap="outerHTML"
+    {% if c.description %}<div class="rec-desc">
+      {%- if compact %}<details><summary><span class="more">Description</span><span class="less">Hide description</span></summary><p>{{ c.description }}</p></details>
+      {%- elif c.description | length > 520 %}<details><summary><span class="clip">{{ c.description | truncate(480, killwords=False, end="…") }}</span><span class="more">Read more</span><span class="less">Show less</span></summary><p>{{ c.description }}</p></details>
+      {%- else %}<p>{{ c.description }}</p>{% endif -%}
+    </div>{% endif %}
+    <p class="rec-links small">{% for label, href in c.links if href %}<a href="{{ href }}" target="_blank" rel="noopener noreferrer">{{ label }} ↗</a>{% endfor %}
+      <button type="button" class="link-button" hx-post="{{ c.hide_url }}" hx-target="#{{ c.dom_id }}" hx-swap="outerHTML"
         title="Never recommend this again">Not interested</button></p>
   </div>
 </article>

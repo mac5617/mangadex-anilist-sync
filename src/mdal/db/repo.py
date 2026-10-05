@@ -39,6 +39,19 @@ SETTING_DEFAULTS: dict[str, Any] = {
     "ollama_model": "gpt-oss:20b",
     "rec_status": None,      # {state, detail, error, started_at, finished_at}
     "rec_llm": None,         # {model, summary, picks: [{id, reason}], created_at, error}
+    # New releases: the embedding model for description matching, the scan's language, its last run and picks.
+    "embed_model": "qwen3-embedding:0.6b",
+    "new_language": "en",    # only series with chapters in this language
+    "new_status": None,      # {state, detail, error, started_at, finished_at, requests}
+    "new_llm": None,         # {model, picks: [{md_id, reason}], created_at, error}
+    "new_scan_hours": 24,    # scan MangaDex in the background this often; 0 = only when asked
+    "new_seen": [],
+    "new_digest": None,      # {at, md_ids}: picks from the latest scan not yet seen on New releases          # MangaDex ids of picks already shown on New releases (for the Home digest)
+    "mangaupdates_rps": 1,
+    # List: series skipped while ranking, the last background save of scores, and when Reading counts as stalled.
+    "rank_skipped": [],
+    "rank_save": None,       # {state, detail, error, started_at, finished_at, saved}
+    "stalled_days": 90,
 }
 
 
@@ -118,10 +131,10 @@ class Repo:
 
     # ---- AniList ----------------------------------------------------------
     def upsert_media(self, rows: list[dict[str, Any]]) -> None:
-        """Columns a query did not ask for (`staff`, `tags` = None) keep their cached values."""
+        """Columns a query did not ask for (`staff`, `tags`, `description` = None) keep their cached values."""
         with self.conn:
             for row in rows:
-                keep = [c for c in ("staff", "tags") if c in row and row[c] is None]
+                keep = [c for c in ("staff", "tags", "description") if c in row and row[c] is None]
                 if "staff" in keep:
                     row = {**row, "staff": "[]"}  # NOT NULL column: insert placeholder, never overwrite
                 _upsert(self.conn, "al_media", row, ["media_id"], preserve=keep)
@@ -347,6 +360,171 @@ class Repo:
 
     def hidden_recs(self) -> set[int]:
         return {r[0] for r in self.conn.execute("SELECT media_id FROM rec_hidden")}
+
+    # ---- new releases -------------------------------------------------------
+    def replace_new_releases(self, rows: list[dict[str, Any]], follows: Iterable[str]) -> None:
+        with self.conn:
+            self.conn.execute("DELETE FROM md_new")
+            for row in rows:
+                _upsert(self.conn, "md_new", row, ["md_id"])
+            self.conn.execute("DELETE FROM md_follow")
+            self.conn.executemany("INSERT OR IGNORE INTO md_follow(md_id) VALUES (?)", [(i,) for i in follows])
+
+    def new_releases(self) -> list[sqlite3.Row]:
+        return self.conn.execute("SELECT * FROM md_new").fetchall()
+
+    def set_similarity(self, values: dict[str, tuple[float, list[str]]]) -> None:
+        with self.conn:
+            self.conn.executemany("UPDATE md_new SET similarity=?, similar_to=? WHERE md_id=?",
+                                  [(s, json.dumps(t, ensure_ascii=False), k) for k, (s, t) in values.items()])
+
+    def md_follows(self) -> set[str]:
+        return {r[0] for r in self.conn.execute("SELECT md_id FROM md_follow")}
+
+    def hide_new(self, md_id: str) -> None:
+        with self.conn:
+            _upsert(self.conn, "md_new_hidden", {"md_id": md_id, "hidden_at": now_iso()}, ["md_id"])
+
+    def unhide_all_new(self) -> None:
+        with self.conn:
+            self.conn.execute("DELETE FROM md_new_hidden")
+
+    def hidden_new(self) -> set[str]:
+        return {r[0] for r in self.conn.execute("SELECT md_id FROM md_new_hidden")}
+
+    def descriptions(self, media_ids: Iterable[int]) -> dict[int, str]:
+        ids = list(media_ids)
+        out: dict[int, str] = {}
+        for start in range(0, len(ids), 500):
+            chunk = ids[start : start + 500]
+            out.update({r[0]: r[1] for r in self.conn.execute(
+                f"SELECT media_id, description FROM al_media WHERE description IS NOT NULL "
+                f"AND media_id IN ({','.join('?' * len(chunk))})", chunk)})
+        return out
+
+    # ---- embeddings ---------------------------------------------------------
+    def embeddings(self, model: str, refs: Iterable[str]) -> dict[str, tuple[str, bytes]]:
+        """ref -> (text_hash, vector bytes)."""
+        wanted = list(refs)
+        out: dict[str, tuple[str, bytes]] = {}
+        for start in range(0, len(wanted), 500):
+            chunk = wanted[start : start + 500]
+            out.update({r[0]: (r[1], r[2]) for r in self.conn.execute(
+                f"SELECT ref, text_hash, vector FROM embedding WHERE model=? AND ref IN ({','.join('?' * len(chunk))})",
+                [model, *chunk])})
+        return out
+
+    def save_embeddings(self, model: str, rows: list[tuple[str, str, bytes]]) -> None:
+        """rows: (ref, text_hash, vector bytes)."""
+        with self.conn:
+            self.conn.executemany(
+                "INSERT INTO embedding(ref, model, text_hash, vector) VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(ref, model) DO UPDATE SET text_hash=excluded.text_hash, vector=excluded.vector",
+                [(ref, model, h, v) for ref, h, v in rows])
+
+    # ---- edits to your AniList list (sync/list_edit.py) --------------------------
+    def update_al_entry(self, media_id: int, **fields: Any) -> None:
+        allowed = {"score", "status", "notes"}
+        if not fields or set(fields) - allowed:
+            raise ValueError(f"only {allowed} can be edited")
+        with self.conn:
+            self.conn.execute(f"UPDATE al_entry SET {', '.join(f'{k}=?' for k in fields)} WHERE media_id=?",
+                              [*fields.values(), media_id])
+
+    def log_edit(self, media_id: int, entry_id: int, field: str, old: Any, new: Any, state: str,
+                 error: str | None = None, site: str = "anilist") -> None:
+        with self.conn:
+            self.conn.execute("INSERT INTO list_edit(media_id, entry_id, site, field, old, new, state, error, at) "
+                              "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                              (media_id, entry_id, site, field, None if old is None else str(old), str(new), state, error,
+                               now_iso()))
+
+    def list_edits(self, limit: int = 50) -> list[sqlite3.Row]:
+        return self.conn.execute("SELECT * FROM list_edit ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+
+    # ---- your ranking -------------------------------------------------------------
+    def ranking(self) -> list[sqlite3.Row]:
+        """Every ranked series, best first within each tier (tiers in order liked, fine, disliked)."""
+        return self.conn.execute(
+            "SELECT * FROM ranking ORDER BY CASE tier WHEN 'liked' THEN 0 WHEN 'fine' THEN 1 ELSE 2 END, position"
+        ).fetchall()
+
+    def set_rank(self, media_id: int, tier: str, position: float) -> None:
+        with self.conn:
+            _upsert(self.conn, "ranking", {"media_id": media_id, "tier": tier, "position": position,
+                                           "ranked_at": now_iso()}, ["media_id"])
+
+    def unrank(self, media_id: int) -> None:
+        with self.conn:
+            self.conn.execute("DELETE FROM ranking WHERE media_id=?", (media_id,))
+
+    def renumber_tier(self, tier: str) -> None:
+        """Positions 0, 1, 2... again, so fractions never pile up."""
+        with self.conn:
+            ids = [r[0] for r in self.conn.execute("SELECT media_id FROM ranking WHERE tier=? ORDER BY position", (tier,))]
+            self.conn.executemany("UPDATE ranking SET position=? WHERE media_id=?", [(i, m) for i, m in enumerate(ids)])
+
+    # ---- friends' lists -------------------------------------------------------------
+    def save_friend(self, name: str, user_id: int, entries: list[dict[str, Any]]) -> None:
+        with self.conn:
+            _upsert(self.conn, "friend", {"name": name, "user_id": user_id, "fetched_at": now_iso(),
+                                          "entries": json.dumps(entries)}, ["name"])
+
+    def friend(self, name: str) -> sqlite3.Row | None:
+        return self.conn.execute("SELECT * FROM friend WHERE name=?", (name,)).fetchone()
+
+    def friends(self) -> list[sqlite3.Row]:
+        return self.conn.execute("SELECT name, fetched_at FROM friend ORDER BY fetched_at DESC").fetchall()
+
+    # ---- your verdicts ---------------------------------------------------------
+    def set_feedback(self, key: str, verdict: str, title: str, source: str, *, genres: list[str] = (),
+                     tags: list[str] = (), staff: list[dict[str, Any]] = (), description: str | None = None) -> None:
+        with self.conn:
+            _upsert(self.conn, "rec_feedback", {
+                "key": key, "verdict": verdict, "title": title, "source": source, "created_at": now_iso(),
+                "genres": json.dumps(list(genres), ensure_ascii=False), "tags": json.dumps(list(tags), ensure_ascii=False),
+                "staff": json.dumps(list(staff), ensure_ascii=False), "description": description}, ["key"])
+
+    def clear_feedback(self, key: str) -> None:
+        with self.conn:
+            self.conn.execute("DELETE FROM rec_feedback WHERE key=?", (key,))
+
+    def feedback(self) -> dict[str, sqlite3.Row]:
+        """key -> {key, verdict, title, source, created_at}, newest first."""
+        return {r["key"]: r for r in self.conn.execute("SELECT * FROM rec_feedback ORDER BY created_at DESC")}
+
+    # ---- lookups for series pages -------------------------------------------------
+    def cached(self, key: str, kind: str) -> sqlite3.Row | None:
+        return self.conn.execute("SELECT * FROM lookup_cache WHERE key=? AND kind=?", (key, kind)).fetchone()
+
+    def cached_all(self, kind: str) -> dict[str, Any]:
+        """key -> parsed data, for every cached lookup of one kind that found something."""
+        return {r[0]: json.loads(r[1]) for r in self.conn.execute(
+            "SELECT key, data FROM lookup_cache WHERE kind=? AND data IS NOT NULL", (kind,))}
+
+    def cache(self, key: str, kind: str, data: Any) -> None:
+        with self.conn:
+            _upsert(self.conn, "lookup_cache", {"key": key, "kind": kind, "fetched_at": now_iso(),
+                                                "data": None if data is None else json.dumps(data, ensure_ascii=False)},
+                    ["key", "kind"])
+
+    # ---- chat ---------------------------------------------------------------
+    def chat_messages(self, limit: int = 200) -> list[sqlite3.Row]:
+        return self.conn.execute(
+            "SELECT * FROM (SELECT * FROM chat_message ORDER BY id DESC LIMIT ?) ORDER BY id", (limit,)).fetchall()
+
+    def add_chat_message(self, role: str, content: str, picks: list[dict[str, Any]] | None = None,
+                         notes: list[str] | None = None) -> int:
+        with self.conn:
+            cur = self.conn.execute(
+                "INSERT INTO chat_message(role, content, picks, notes, created_at) VALUES (?, ?, ?, ?, ?)",
+                (role, content, json.dumps(picks, ensure_ascii=False) if picks is not None else None,
+                 json.dumps(notes, ensure_ascii=False) if notes else None, now_iso()))
+        return int(cur.lastrowid or 0)
+
+    def clear_chat(self) -> None:
+        with self.conn:
+            self.conn.execute("DELETE FROM chat_message")
 
     # ---- MyAnimeList ------------------------------------------------------
     def replace_mal_entries(self, rows: list[dict[str, Any]]) -> None:

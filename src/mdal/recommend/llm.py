@@ -12,6 +12,7 @@ from mdal.recommend.profile import Profile
 from mdal.recommend.score import Rec
 
 PICKS = 12
+NOTE_CHARS = 160      # of your own notes on a favourite, quoted to the model
 CANDIDATES = 45
 SYSTEM = (
     "You are a well-read manga recommender. You only recommend series from the numbered candidate list you are "
@@ -38,13 +39,23 @@ def _feature_line(features: list[Any]) -> str:
                      for f in features)
 
 
+VERDICT_WORDS = {"loved": "they said they loved it", "liked": "they said they liked it",
+                 "disliked": "they said they didn't like it", "not_interested": "they marked it not interested"}
+
+
 def _entry(e: dict[str, Any]) -> str:
+    if e.get("verdict"):
+        return f"{e['title']} ({VERDICT_WORDS.get(e['verdict'], e['verdict'])})"
     bits = [STATUS_WORDS.get(e.get("status") or "", "")]
     if e.get("score"):
         bits.append(f"scored {e['score']:.0f}/100")
     elif e.get("progress"):
         bits.append(f"{e['progress']} ch read")
-    return f"{e['title']} ({', '.join(b for b in bits if b)})"
+    line = f"{e['title']} ({', '.join(b for b in bits if b)})"
+    if e.get("notes"):
+        note = " ".join(e["notes"].split())
+        line += f' - their note: "{note[:NOTE_CHARS]}{"…" if len(note) > NOTE_CHARS else ""}"'
+    return line
 
 
 def _candidate(r: Rec) -> str:

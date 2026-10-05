@@ -1,11 +1,30 @@
 {% if models %}
-<form class="row model-picker" hx-post="/discover-model" hx-target="#discover-status" hx-swap="outerHTML" hx-trigger="change">
-  <label for="model-select" class="muted small">Model</label>
-  <select id="model-select" name="model">
-    {% for m in models %}<option value="{{ m.name }}"{% if m.name == model %} selected{% endif %}>{{ m.name }}</option>{% endfor %}
-    {% if model not in models | map(attribute="name") | list %}<option value="{{ model }}" selected disabled>{{ model }} (not installed)</option>{% endif %}
+<span class="row model-pickers">
+<form class="row model-picker" hx-post="/discover-model" hx-target="{{ target }}" hx-swap="outerHTML" hx-trigger="change">
+  <input type="hidden" name="panel" value="{{ panel }}">
+  <label for="model-select-{{ panel or 'recs' }}" class="muted small">Model</label>
+  <select id="model-select-{{ panel or 'recs' }}" name="model">
+    {% for m in models %}<option value="{{ m.name }}"{% if m.name == model %} selected{% endif %}>{{ m.name | model_label }}</option>{% endfor %}
+    {% if model not in models | map(attribute="name") | list %}<option value="{{ model }}" selected disabled>{{ model | model_label }} (not installed)</option>{% endif %}
   </select>
 </form>
+{% if panel %}
+{% if embedders %}
+<form class="row model-picker" hx-post="/discover-embed-model" hx-target="{{ target }}" hx-swap="outerHTML" hx-trigger="change">
+  <input type="hidden" name="panel" value="{{ panel }}">
+  <label for="embed-select-{{ panel }}" class="muted small">Descriptions</label>
+  <select id="embed-select-{{ panel }}" name="model">
+    {% for m in embedders %}<option value="{{ m.name }}"{% if m.name == embed_model %} selected{% endif %}>{{ m.name }}</option>{% endfor %}
+    {% if embed_model not in embedders | map(attribute="name") | list %}<option value="{{ embed_model }}" selected disabled>{{ embed_model }} (not installed)</option>{% endif %}
+  </select>
+</form>
+{% else %}
+<span class="muted small">No embedding model, so descriptions aren't compared. Run <code>ollama pull {{ embed_model }}</code> to add one.</span>
+{% endif %}
+{% endif %}
+</span>
+{% elif panel == "ask" %}
+<span class="notice warn small">Ollama isn't running. Start it to ask {{ model }}.</span>
 {% else %}
 <span class="muted small">Ollama isn't running, so picks come from the scores alone. Start Ollama to use {{ model }}.</span>
 {% endif %}

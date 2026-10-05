@@ -83,7 +83,7 @@ def score_bucket(score: float | None) -> str | None:
 def entry_rows(repo: Repo) -> list[dict[str, Any]]:
     rows = repo.conn.execute(
         "SELECT e.entry_id, e.media_id, e.status, e.progress, e.progress_volumes, e.score, e.started_at, "
-        "e.completed_at, e.updated_at, m.format, m.country, m.start_year, m.genres, m.chapters, m.status AS pub, "
+        "e.completed_at, e.updated_at, e.notes, m.format, m.country, m.start_year, m.genres, m.chapters, m.status AS pub, "
         "m.romaji, m.english, m.native, m.site_url, m.cover_url, m.tags, m.staff_roles "
         "FROM al_entry e LEFT JOIN al_media m ON m.media_id = e.media_id"
     ).fetchall()

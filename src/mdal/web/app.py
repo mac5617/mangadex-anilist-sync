@@ -1,3 +1,4 @@
+import asyncio
 import json
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -5,18 +6,16 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from mdal import __version__
+from mdal.recommend.fresh import MD_COVER
 from mdal.services import Services
 
 WEB_DIR = Path(__file__).parent
 templates = Jinja2Templates(directory=WEB_DIR / "templates")
-
-MD_COVER = "https://uploads.mangadex.org/covers/{md_id}/{file}.256.jpg"
-
 
 def md_cover_url(md_id: str, cover_file: str | None) -> str | None:
     """MangaDex's smallest thumbnail. Loaded by the browser, lazily, with no referrer (api-notes risk 6)."""
@@ -51,6 +50,17 @@ def num(value: float | int | None) -> str:
 templates.env.filters["num"] = num
 
 
+def model_label(name: str | None) -> str:
+    """'hf.co/unsloth/Qwen3.5-35B-A3B-GGUF:UD-Q6_K_XL' -> 'Qwen3.5-35B-A3B'; Ollama library names stay as they are."""
+    if not name or not name.startswith("hf.co/"):
+        return name or ""
+    base = name.rsplit("/", 1)[-1].split(":", 1)[0]
+    return base[:-5] if base.upper().endswith("-GGUF") else base
+
+
+templates.env.filters["model_label"] = model_label
+
+
 def date_from_unix(value: int | None) -> str:
     """AniList updatedAt (Unix seconds) -> '2026-10-03'."""
     if not value:
@@ -81,7 +91,9 @@ def create_app(services: Services) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         services.orchestrator.recover_interrupted()
+        schedule = asyncio.create_task(services.releases.run_schedule())
         yield
+        schedule.cancel()
         await services.aclose()
 
     app = FastAPI(title="Shiori", version=__version__, docs_url=None, redoc_url=None, lifespan=lifespan)
@@ -90,7 +102,12 @@ def create_app(services: Services) -> FastAPI:
     app.state.mal_states = {}
     app.mount("/static", StaticFiles(directory=WEB_DIR / "static"), name="static")
 
-    from mdal.web.routes import auth, dashboard, discover, history, notlisted, review, settings, stats, sync
+    @app.get("/favicon.ico", include_in_schema=False)
+    def favicon() -> FileResponse:
+        """Browsers ask for this path on their own, whatever the page links."""
+        return FileResponse(WEB_DIR / "static" / "favicon.ico", media_type="image/x-icon")
+
+    from mdal.web.routes import auth, backup, dashboard, discover, history, insights, list as list_routes, notlisted, review, search, series, settings, stats, sync
 
     app.include_router(auth.router)
     app.include_router(settings.router)
@@ -100,6 +117,11 @@ def create_app(services: Services) -> FastAPI:
     app.include_router(notlisted.router)
     app.include_router(history.router)
     app.include_router(stats.router)
+    app.include_router(list_routes.router)
+    app.include_router(search.router)
+    app.include_router(insights.router)
+    app.include_router(backup.router)
+    app.include_router(series.router)   # before discover: /discover/ratings must win over /discover/{page}
     app.include_router(discover.router)
 
     return app

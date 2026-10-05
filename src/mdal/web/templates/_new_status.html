@@ -1,0 +1,21 @@
+<div id="new-status" class="panel stack"{% if new_running %} hx-get="/discover-new-status?watch=1" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
+  {% if status_error %}<p class="notice err" role="alert">{{ status_error }}</p>{% endif %}
+  {% if new_running %}
+    <p class="row"><span class="badge state-fetching">scanning</span> {{ ns.detail }}</p>
+  {% elif ns.state == "failed" %}
+    <p class="notice err">Scan failed: {{ ns.error }}</p>
+  {% elif ns.finished_at %}
+    <p class="row"><span class="muted small">Scanned {{ ns.finished_at | when }}</span>{% if ns.detail %}<span class="muted small">· {{ ns.detail }}</span>{% endif %}</p>
+  {% else %}
+    <p class="muted">Not scanned yet. A scan reads the 600 latest series on MangaDex and your follows (about 25 requests, under a minute), compares their descriptions with your list, then asks your local model to pick.</p>
+  {% endif %}
+  {% if new_llm.error and not new_running %}<p class="notice warn">Model: {{ new_llm.error }}</p>{% endif %}
+  {% if not new_running %}
+  <div class="row">
+    {% if mangadex %}<button hx-post="/discover-new-scan" hx-target="#new-status" hx-swap="outerHTML">Scan MangaDex</button>
+    {% else %}<span class="muted">Add your MangaDex login to <code>.env</code> to scan.</span>{% endif %}
+    {% if has_new %}<button class="secondary" hx-post="/discover-new-ask" hx-target="#new-status" hx-swap="outerHTML">Ask the model again</button>{% endif %}
+    <span hx-get="/discover-models?panel=new" hx-trigger="load" hx-swap="outerHTML"><span class="muted small">Model: {{ model }}</span></span>
+  </div>
+  {% endif %}
+</div>

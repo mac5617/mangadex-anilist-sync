@@ -1,0 +1,17 @@
+<div id="search-results" class="search-results">
+{% if q.strip() %}
+  {% if hits %}
+  <ul class="search-list">
+    {% for h in hits %}<li><a href="{{ h.href }}">
+      {% if h.cover %}<img src="{{ h.cover }}" alt="" width="40" height="57" loading="lazy" referrerpolicy="no-referrer">{% else %}<span class="ranked-noimg"></span>{% endif %}
+      <span class="search-text"><span class="search-title">{{ h.title }}</span><span class="muted small">{{ h.group }}{% if h.meta %} · {{ h.meta }}{% endif %}</span></span></a></li>{% endfor %}
+  </ul>
+  {% else %}<p class="muted">Nothing stored here matches “{{ q }}”.</p>{% endif %}
+  <div id="search-anilist">
+    {% if anilist %}<button type="button" class="secondary" hx-get="/search/anilist" hx-vals='{"q": {{ q | tojson }}}' hx-target="#search-anilist">Search AniList for “{{ q }}”</button>
+    {% else %}<p class="muted small">Connect AniList in Settings to search beyond what's stored here.</p>{% endif %}
+  </div>
+{% else %}
+  <p class="muted">Searches your list, your MangaDex library, new releases, recommendations and anything you've looked at.</p>
+{% endif %}
+</div>

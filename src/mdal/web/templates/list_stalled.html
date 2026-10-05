@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Stalled{% endblock %}
+{% block content %}
+{% with section = "list" %}{% include "_subnav.html" %}{% endwith %}
+<div class="page-head">
+  <div>
+    <h1>Stalled</h1>
+    <p class="lede">Series marked Reading on AniList that haven't moved in {{ days }} days or more. Mark them Paused or Dropped so your
+      list, and your taste profile, match what you're really reading.</p>
+  </div>
+</div>
+{% if rows %}
+<div class="table-wrap">
+<table class="data stalled">
+  <thead><tr><th>Series</th><th>Last change</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
+  <tbody>{% for r in rows %}<tr id="stalled-{{ r.media_id }}">
+    <td><div class="series-cell">
+      {% if r.cover %}<img class="thumb" src="{{ r.cover }}" alt="" width="38" height="54" loading="lazy" referrerpolicy="no-referrer">{% endif %}
+      <div class="series-text"><a href="{{ r.href }}">{{ r.title }}</a><span class="muted small">{{ r.meta }}</span></div></div></td>
+    <td class="num">{{ r.idle_days | num }} days ago</td>
+    <td class="actions">{% if anilist %}
+      <button type="button" class="secondary" hx-post="/list/status/{{ r.media_id }}" hx-vals='{"status": "PAUSED"}' hx-target="#stalled-{{ r.media_id }} .actions">Pause</button>
+      <button type="button" class="secondary" hx-post="/list/status/{{ r.media_id }}" hx-vals='{"status": "DROPPED"}' hx-target="#stalled-{{ r.media_id }} .actions"
+        hx-confirm="Mark {{ r.title }} Dropped on AniList?">Drop</button>
+      {% else %}<a href="/settings#anilist">Connect AniList</a>{% endif %}</td>
+  </tr>{% endfor %}</tbody>
+</table>
+</div>
+{% else %}
+<div class="panel"><p class="muted">Nothing stalled: everything marked Reading has moved in the last {{ days }} days.</p></div>
+{% endif %}
+{% endblock %}

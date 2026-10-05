@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}New releases{% endblock %}
+{% block content %}
+{% with heading = "New releases", lede = "Series with fresh chapters on MangaDex that you haven't read or followed, matched to your list by description, tags and creators. Your local model reads the best of them and picks." %}{% include "_discover_head.html" %}{% endwith %}
+
+{% if has_new and not entries %}
+<p class="notice warn">Your AniList list isn't loaded yet, so nothing can be matched to your taste. Run a sync or refresh <a href="/discover">For you</a> first.</p>
+{% endif %}
+
+{% if picks %}
+<section class="block">
+  <div class="block-head"><h2>{{ "Picks" if from_model else "Best matches" }}</h2>
+    <span class="muted">{% if from_model %}chosen by {{ new_llm.model | model_label }} from their descriptions · {{ new_llm.created_at | when }}{% else %}by description, tag and creator{% endif %}</span></div>
+  <div class="recs">
+    {% for c in picks %}{% with rank = loop.index %}{% include "_rec_card.html" %}{% endwith %}{% endfor %}
+  </div>
+</section>
+{% endif %}
+
+{% if more %}
+<section class="block">
+  <div class="block-head"><h2>Also new</h2><span class="muted">{{ total | num }} new to you, best {{ more | length }} shown</span></div>
+  <div class="recs">
+    {% for c in more %}{% with rank = None %}{% include "_rec_card.html" %}{% endwith %}{% endfor %}
+  </div>
+</section>
+{% endif %}
+{% endblock %}

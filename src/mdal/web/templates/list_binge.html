@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Ready to binge{% endblock %}
+{% block content %}
+{% with section = "list" %}{% include "_subnav.html" %}{% endwith %}
+<div class="page-head">
+  <div>
+    <h1>Ready to binge</h1>
+    <p class="lede">Series you paused, dropped or stalled on that have finished since. Your highest-rated first, then the
+      shortest to finish. English releases come from MangaUpdates as the list loads.</p>
+  </div>
+</div>
+{% if rows %}
+<div class="table-wrap">
+<table class="data binge">
+  <thead><tr><th>Series</th><th>Your status</th><th class="num">Left</th><th>English</th></tr></thead>
+  <tbody>{% for r in rows %}<tr>
+    <td><div class="series-cell">
+      {% if r.cover %}<img class="thumb" src="{{ r.cover }}" alt="" width="38" height="54" loading="lazy" referrerpolicy="no-referrer">{% endif %}
+      <div class="series-text"><a href="{{ r.href }}">{{ r.title }}</a><span class="muted small">{{ r.meta }}</span></div></div></td>
+    <td>{{ r.status }}{% if r.idle_days %} <span class="muted small">· {{ r.idle_days | num }} days</span>{% endif %}</td>
+    <td class="num">{% if r.left is not none %}{{ r.left | num }} ch{% else %}<span class="muted">?</span>{% endif %}</td>
+    <td>{% if r.checked %}<span class="muted small">{{ r.english | join(" · ") or "no English release listed" }}</span>
+      {% else %}<span hx-get="/list/binge/english/{{ r.media_id }}" hx-trigger="revealed" hx-swap="outerHTML" class="muted small">…</span>{% endif %}</td>
+  </tr>{% endfor %}</tbody>
+</table>
+</div>
+{% else %}
+<div class="panel"><p class="muted">Nothing waiting: no series you stopped partway through has finished yet.</p></div>
+{% endif %}
+{% endblock %}

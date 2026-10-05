@@ -116,7 +116,7 @@ def score_recs(profile: Profile, rows: list[dict[str, Any]], weights: dict[int, 
         r.raw["community"] = total
         votes.sort(key=lambda x: -x[0])
         r.matched["community"] = [str(s["via"]) for _, s in votes[:3]]
-        r.reasons["community"] = [f"recommended by AniList readers of {s.get('label')} ({s.get('rating') or 0:+d})"
+        r.reasons["community"] = [f"recommended by {s.get('site') or 'AniList'} readers of {s.get('label')} ({s.get('rating') or 0:+d})"
                                   for _, s in votes[:2]]
 
     for kind in KINDS:

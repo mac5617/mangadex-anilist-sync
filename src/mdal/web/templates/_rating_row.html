@@ -1,0 +1,18 @@
+{%- set kind, ident = key.split(":", 1) -%}
+<tr id="rating-{{ kind }}-{{ ident }}">
+{% if r %}
+  <td><a href="{{ href }}">{{ r.title }}</a></td>
+  <td>
+    <select aria-label="Rating for {{ r.title }}" name="verdict" hx-post="/series/{{ kind }}/{{ ident }}/rate" hx-trigger="change"
+      hx-target="#rating-{{ kind }}-{{ ident }}" hx-swap="outerHTML">
+      {% for v, label in verdicts.items() %}<option value="{{ v }}"{% if v == r.verdict %} selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select>
+  </td>
+  <td class="muted">{% if r.source == "ask" %}Ask{% elif r.source == "hide" %}Not interested{% else %}Series page{% endif %}</td>
+  <td class="muted">{{ r.created_at | when }}</td>
+  <td><button type="button" class="link-button small" hx-post="/series/{{ kind }}/{{ ident }}/rate" hx-vals='{"verdict": "clear"}'
+    hx-target="#rating-{{ kind }}-{{ ident }}" hx-swap="outerHTML">Remove</button></td>
+{% else %}
+  <td colspan="5" class="muted">Removed.</td>
+{% endif %}
+</tr>

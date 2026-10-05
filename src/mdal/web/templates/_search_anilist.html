@@ -1,0 +1,12 @@
+<div id="search-anilist">
+  <h2 class="search-subhead">On AniList</h2>
+  {% if error %}<p class="notice err">{{ error }}</p>
+  {% elif found %}
+  <ul class="search-list">
+    {% for h in found %}<li><a href="{{ h.href }}">
+      {% if h.cover %}<img src="{{ h.cover }}" alt="" width="40" height="57" loading="lazy" referrerpolicy="no-referrer">{% else %}<span class="ranked-noimg"></span>{% endif %}
+      <span class="search-text"><span class="search-title">{{ h.title }}</span>
+        <span class="muted small">{% if h.english and h.english != h.title %}{{ h.english }} · {% endif %}{{ h.meta }}{% if h.listed %} · on your list{% endif %}</span></span></a></li>{% endfor %}
+  </ul>
+  {% else %}<p class="muted">AniList found nothing for “{{ q }}”.</p>{% endif %}
+</div>

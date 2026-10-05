@@ -16,7 +16,10 @@ from mdal.clients.ollama import OllamaClient, OllamaError, OllamaUnavailable
 from mdal.db.repo import now_iso
 from mdal.fetch.anilist_list import fetch_list, fetch_staff_for
 from mdal.fetch.anilist_recs import fetch_candidates
+from mdal.fetch.mal_recs import favourites_on_mal
+from mdal.clients.myanimelist import MalError
 from mdal.recommend.llm import CANDIDATES, SCHEMA, SYSTEM, build_prompt, clean_answer
+from mdal.recommend.feedback import pseudo_entry
 from mdal.recommend.profile import Profile, build_profile, entry_weight
 from mdal.recommend.score import Rec, ranked, score_recs
 from mdal.stats import entry_rows
@@ -59,17 +62,28 @@ class Recommender:
 
     # ---- reading what is stored -------------------------------------------
     def profile(self) -> tuple[Profile, dict[int, float]]:
-        entries = entry_rows(self.repo)
+        """Your taste: your AniList list plus the series you rated here (feedback.py)."""
+        entries = entry_rows(self.repo) + self.rated_entries()
         weights = {e["media_id"]: w for e in entries
-                   if (w := entry_weight(e["status"], e["score"], e["progress"])) is not None}
+                   if e["media_id"] is not None and (w := entry_weight(e["status"], e["score"], e["progress"])) is not None}
         return build_profile(entries), weights
+
+    def rated_entries(self) -> list[dict[str, Any]]:
+        """Your verdicts as pseudo-entries; a series already on your list is left to its list entry."""
+        listed = set(self.repo.al_entries())
+        return [e for row in self.repo.feedback().values()
+                if (e := pseudo_entry(row)) is not None and e["media_id"] not in listed]
+
+    def rated_al_ids(self) -> set[int]:
+        """AniList series you gave any verdict: never recommended again."""
+        return {int(k[3:]) for k in self.repo.feedback() if k.startswith("al:")}
 
     def recs(self, include_adult: bool = False) -> tuple[Profile, list[Rec]]:
         profile, weights = self.profile()
         listed = set(self.repo.al_entries())
         in_library = {r[0] for r in self.repo.conn.execute(
             "SELECT al_media_id FROM mapping WHERE al_media_id IS NOT NULL AND state IN ('auto','confirmed')")}
-        hidden = self.repo.hidden_recs()
+        hidden = self.repo.hidden_recs() | self.rated_al_ids()
         rows = [dict(r) for r in self.repo.rec_candidates()
                 if r["media_id"] not in listed | in_library | hidden
                 and (r["format"] or "MANGA") in profile.formats
@@ -118,13 +132,25 @@ class Recommender:
             profile, _ = self.profile()
             collected, n = await fetch_candidates(s.anilist, repo, profile, say)
             sent += n
+            mal_note = ""
+            if s.mal.connected:
+                favourites = [f for f in profile.favourites if f["weight"] > 0.3 and f["media_id"]]
+                try:
+                    from_mal, n = await favourites_on_mal(s.mal, s.anilist, repo, favourites, say)
+                    sent += n
+                    for media_id, sources in from_mal.items():
+                        collected.sources.setdefault(media_id, []).extend(sources)
+                    mal_note = f"; {len(from_mal)} from MyAnimeList readers"
+                except MalError as exc:
+                    log.warning("MyAnimeList recommendations failed: %s", exc)
+                    mal_note = f"; MyAnimeList not used: {exc}"
             repo.replace_rec_candidates([{"media_id": i, "sources": json.dumps(src, ensure_ascii=False),
                                           "fetched_at": collected.fetched_at} for i, src in collected.sources.items()])
             _, recs = self.recs()
             self._status(state="running", detail=f"{len(recs)} candidates; asking the model",
                          requests=sent, candidates=len(recs))
             note = await self._ask_model()
-            self._status(state="done", detail=f"{len(recs)} candidates from {sent} AniList requests" + (f"; {note}" if note else ""),
+            self._status(state="done", detail=f"{len(recs)} candidates from {sent} requests{mal_note}" + (f"; {note}" if note else ""),
                          finished_at=now_iso(), error=None)
         except AniListError as exc:
             log.warning("recommendation refresh failed: %s", exc)

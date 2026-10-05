@@ -8,31 +8,39 @@
     /* Apply the saved theme before first paint (auto = follow the system). */
     (function () { try { var t = localStorage.getItem("theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) {} })();
   </script>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/favicon.ico" sizes="48x48">
+  <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
   <link rel="stylesheet" href="/static/app.css">
   <script src="/static/htmx.min.js" defer></script>
 </head>
-<body>
+<body class="{% block body_class %}{% endblock %}">
   {%- set path = request.url.path if request else "" %}
   {%- macro navlink(href, label, active, count=0) -%}
     <a href="{{ href }}"{% if active %} aria-current="page"{% endif %}>{{ label }}{% if count %} <span class="count">{{ count }}</span>{% endif %}</a>
   {%- endmacro %}
   <header class="topbar">
-    <div class="topbar-inner">
+    <div class="topbar-inner{% if path.startswith("/discover") %} wide{% endif %}">
       <a class="brand" href="/"><span class="brand-mark" aria-hidden="true"></span>Shiori</a>
       <nav class="main" aria-label="Main">
         {{ navlink("/", "Home", path == "/") }}
         {{ navlink("/sync/latest", "Sync", path.startswith("/sync") or path.startswith("/history")) }}
         {{ navlink("/review", "Matches", path.startswith("/review") or path.startswith("/not-listed"), nav.review if nav else 0) }}
+        {{ navlink("/list/rank", "List", path.startswith("/list")) }}
         {{ navlink("/stats", "Stats", path.startswith("/stats")) }}
         {{ navlink("/discover", "Discover", path.startswith("/discover")) }}
       </nav>
       <div class="topbar-end">
+        <form class="topbar-search" action="/search" method="get" role="search">
+          <label for="topbar-q" class="visually-hidden">Search series</label>
+          <input id="topbar-q" type="search" name="q" placeholder="Search series" autocomplete="off">
+        </form>
         {{ navlink("/settings", "Settings", path.startswith("/settings")) }}
         <button type="button" class="theme-toggle" id="theme-toggle" title="Switch between automatic, dark and light">Auto</button>
       </div>
     </div>
   </header>
-  <main class="container">
+  <main class="container{% if path.startswith("/discover") %} wide{% endif %}">
     {% if message %}<p class="notice ok" role="status">{{ message }}</p>{% endif %}
     {% if error %}<p class="notice err" role="alert">{{ error }}</p>{% endif %}
     {% block content %}{% endblock %}

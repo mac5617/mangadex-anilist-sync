@@ -1,4 +1,4 @@
-<div id="discover-status" class="panel stack"{% if running %} hx-get="/discover-status" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
+<div id="discover-status" class="panel stack"{% if running %} hx-get="/discover-status?watch=1" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
   {% if status_error %}<p class="notice err" role="alert">{{ status_error }}</p>{% endif %}
   {% if running %}
     <p class="row"><span class="badge state-fetching">refreshing</span> {{ rs.detail }}</p>

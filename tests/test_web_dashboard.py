@@ -94,3 +94,16 @@ def test_sync_latest_redirect(client, services):
     assert client.get("/sync/latest").headers["location"] == "/"
     run_id = seed_diffed_run(services.repo)
     assert client.get("/sync/latest").headers["location"] == f"/sync/{run_id}"
+
+
+def test_favicon(services):
+    from fastapi.testclient import TestClient
+    from mdal.web.app import create_app
+
+    with TestClient(create_app(services)) as c:
+        page = c.get("/").text
+        assert '<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">' in page
+        ico = c.get("/favicon.ico")
+        assert ico.status_code == 200 and ico.headers["content-type"] == "image/x-icon"
+        assert c.get("/static/favicon.svg").status_code == 200
+        assert c.get("/static/apple-touch-icon.png").status_code == 200

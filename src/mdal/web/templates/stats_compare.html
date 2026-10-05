@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% import "_charts.html" as charts %}
+{% block title %}Compare{% endblock %}
+{% block content %}
+{% with section = "stats" %}{% include "_subnav.html" %}{% endwith %}
+{%- macro tile(x, note) -%}
+  <li><a href="/series/al/{{ x.media_id }}">{% if x.cover %}<img src="{{ x.cover | replace('/cover/small/', '/cover/medium/') }}" alt="" loading="lazy" referrerpolicy="no-referrer">{% else %}<span class="tile-noimg"></span>{% endif %}
+    <span class="tile-title">{{ x.title }}</span></a><span class="muted small">{{ note }}</span></li>
+{%- endmacro -%}
+<div class="page-head">
+  <div>
+    <h1>Compare with a friend</h1>
+    <p class="lede">Any public AniList list: what you share, how alike your scores are, and what each of you loved that the other hasn't read.</p>
+  </div>
+</div>
+
+<form class="search-big" method="post" action="/stats/compare">
+  <label for="friend-name" class="visually-hidden">AniList username</label>
+  <input id="friend-name" name="user" value="{{ user }}" placeholder="AniList username" autocomplete="off" required>
+  <button{% if not anilist %} disabled title="Connect AniList in Settings first"{% endif %}>{{ "Refresh their list" if friend else "Compare" }}</button>
+</form>
+{% if friends %}<p class="small muted">Before: {% for f in friends %}<a href="/stats/compare?user={{ f.name }}">{{ f.name }}</a>{% if not loop.last %} · {% endif %}{% endfor %}</p>{% endif %}
+{% if error %}<p class="notice err">{{ error }}</p>{% endif %}
+{% if missing %}<p class="notice warn">Not compared with {{ user }} yet: press Compare to read their list (1 AniList request).</p>{% endif %}
+
+{% if r %}
+<p class="muted small">{{ friend.name }}'s list read {{ friend.fetched_at | when }}.</p>
+<div class="figures">
+  {{ charts.figure(r.shared | num, "Series in common", "%.0f%% of everything either of you read" | format(r.overlap)) }}
+  {{ charts.figure("%.0f%%" | format(r.genre_match), "Genre match", "how alike your genre mix is") }}
+  {% if r.gap is not none %}{{ charts.figure("%.1f" | format(r.gap), "Average score gap", "out of 10, on " ~ r.scored_both ~ " series you both scored") }}{% endif %}
+  {% if r.agreement is not none %}{{ charts.figure("%+.2f" | format(r.agreement), "Score agreement", "1 = you rank them the same way") }}{% endif %}
+</div>
+
+{% if r.their_picks %}<section class="block">
+  <h2>{{ friend.name }} loved, you haven't read</h2>
+  <ul class="tiles">{% for x in r.their_picks %}{{ tile(x, "they scored " ~ (x.score / 10) | round(1) ~ ("· on your Planning list" if x.planning else "")) }}{% endfor %}</ul>
+</section>{% endif %}
+
+{% if r.both_loved %}<section class="block">
+  <h2>You both loved</h2>
+  <ul class="tiles">{% for x in r.both_loved %}{{ tile(x, "you " ~ (x.mine / 10) | round(1) ~ " · they " ~ (x.theirs / 10) | round(1)) }}{% endfor %}</ul>
+</section>{% endif %}
+
+<div class="grid two">
+  <section class="panel">
+    <h2>Genre mix</h2>
+    <table class="data genre-mix"><thead><tr><th>Genre</th><th class="num">You</th><th class="num">{{ friend.name }}</th></tr></thead>
+      <tbody>{% for g in r.genres %}<tr><td>{{ g.genre }}</td><td class="num">{{ "%.0f" | format(g.mine) }}%</td><td class="num">{{ "%.0f" | format(g.theirs) }}%</td></tr>{% endfor %}</tbody></table>
+  </section>
+  {% if r.apart %}<section class="panel">
+    <h2>Where you disagree most</h2>
+    <table class="data"><thead><tr><th>Series</th><th class="num">You</th><th class="num">{{ friend.name }}</th></tr></thead>
+      <tbody>{% for x in r.apart %}<tr><td><a href="/series/al/{{ x.media_id }}">{{ x.title }}</a></td>
+        <td class="num">{{ (x.mine / 10) | round(1) }}</td><td class="num">{{ (x.theirs / 10) | round(1) }}</td></tr>{% endfor %}</tbody></table>
+  </section>{% endif %}
+</div>
+
+{% if r.my_picks %}<section class="block">
+  <h2>You loved, {{ friend.name }} hasn't read</h2>
+  <ul class="tiles">{% for x in r.my_picks %}{{ tile(x, "you scored " ~ (x.score / 10) | round(1)) }}{% endfor %}</ul>
+</section>{% endif %}
+{% endif %}
+{% endblock %}

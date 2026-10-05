@@ -1,0 +1,18 @@
+{% for m in messages %}
+<div class="chat-msg {{ m.role }}">
+  {% if m.role == "user" %}
+  <p class="chat-bubble">{{ m.content }}</p>
+  {% else %}
+  {% for note in m.notes %}<p class="chat-note small">{{ note }} <a href="/discover/ratings">Your ratings</a></p>{% endfor %}
+  {% if m.content %}<div class="chat-text">{% for para in m.content.split("\n") if para.strip() %}<p>{{ para }}</p>{% endfor %}</div>{% endif %}
+  {% if m.cards %}<div class="recs chat-recs">{% for c in m.cards %}{% with rank = loop.index, compact = True %}{% include "_rec_card.html" %}{% endwith %}{% endfor %}</div>{% endif %}
+  {% if m.gone %}<p class="muted small">{{ m.gone }} earlier suggestion{{ "s" if m.gone != 1 }} no longer shown (hidden, or now on your list).</p>{% endif %}
+  {% endif %}
+</div>
+{% endfor %}
+{% if error %}
+<div class="chat-msg assistant chat-failed" data-question="{{ messages[-1].content }}">
+  <p class="notice err" role="alert">{{ error }}</p>
+  <p><button type="button" class="secondary" data-retry>Try again</button></p>
+</div>
+{% endif %}

@@ -7,6 +7,8 @@ Same safety rules as the AniList writer (sync/writer.py), sharing its re-check a
   the series is already on the list (MyAnimeList would update that entry instead);
 - the list is re-read right before writing, and anything that would lower progress is dropped;
 - MyAnimeList has no batch write, so each item is one request, committed before the next is sent.
+Notes (`save_comments`) are mirrored to an entry already on your list, checked with one read first,
+because MyAnimeList's save creates an entry that doesn't exist.
 """
 
 from __future__ import annotations
@@ -20,6 +22,24 @@ from mdal.fetch.mal_list import fetch_mal_list
 from mdal.sync.writer import is_status_only, recheck, sends_completion, verify_note, with_note
 
 SITE = "MyAnimeList"
+
+
+class MalCommentsError(Exception):
+    pass
+
+
+async def save_comments(mal: MalClient, repo: Repo, media_id: int, mal_id: int, comments: str) -> None:
+    """Mirror your notes to MyAnimeList's comments for one entry (2 requests: check, then save)."""
+    entry = await mal.my_list_status(mal_id)
+    if entry is None:
+        repo.log_edit(media_id, mal_id, "notes", None, comments, "failed", "not on your MyAnimeList list", site="mal")
+        raise MalCommentsError("This series isn't on your MyAnimeList list, so nothing was saved there.")
+    try:
+        await mal.update_comments(mal_id, comments)
+    except MalRequestError as exc:
+        repo.log_edit(media_id, mal_id, "notes", entry.get("comments"), comments, "failed", str(exc), site="mal")
+        raise MalCommentsError(f"MyAnimeList refused the notes: {exc}") from exc
+    repo.log_edit(media_id, mal_id, "notes", entry.get("comments"), comments, "done", site="mal")
 
 
 def is_mal_add(item: Any) -> bool:
