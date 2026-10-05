@@ -9,8 +9,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from mdal import titles
 from mdal.matching.normalize import normalize
-
 
 @dataclass
 class Hit:
@@ -66,9 +66,9 @@ def search(query: str, candidates: list[Hit], limit: int = 40) -> list[Hit]:
 def anilist_hit(media: dict[str, Any], listed: set[int]) -> dict[str, Any]:
     """A result of AniList's own search, for the page."""
     title = media.get("title") or {}
-    name = title.get("romaji") or title.get("english") or title.get("native") or f"#{media['id']}"
+    name = titles.pick(title.get("romaji"), title.get("english"), title.get("native"), f"#{media['id']}")
     meta = [str((media.get("startDate") or {}).get("year") or "") or None, media.get("format"), media.get("status")]
-    return {"key": f"al:{media['id']}", "title": name, "english": title.get("english"),
+    return {"key": f"al:{media['id']}", "title": name, "also": titles.other(title.get("romaji"), title.get("english")),
             "cover": (media.get("coverImage") or {}).get("medium"),
             "meta": " · ".join(str(m).replace("_", " ").capitalize() for m in meta if m),
             "listed": media["id"] in listed}

@@ -13,6 +13,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from typing import Any
 
+from mdal import titles
 from mdal.db.repo import Repo
 from mdal.sync.rules import STATUS_LABELS
 
@@ -106,7 +107,7 @@ def entry_rows(repo: Repo) -> list[dict[str, Any]]:
         row["md_id"] = d["md_id"] if d else None
         row["md_status"] = (d["reading_status"] or "none") if d else "none"
         row["md_cover_file"] = d["cover_file"] if d else None
-        row["title"] = r["romaji"] or r["english"] or r["native"] or (d["title"] if d else None) or f"#{r['media_id']}"
+        row["title"] = titles.pick(r["romaji"], r["english"], r["native"]) or (d["title"] if d else None) or f"#{r['media_id']}"
         row["through"] = through_bucket(r["progress"], r["chapters"])
         out.append(row)
     return out
@@ -439,7 +440,7 @@ def sync_stats(repo: Repo, run_id: int | None = None, target: str | None = None)
             before_label = "New entry" if is_add else STATUS_LABELS.get(i["al_status_before"] or "", "Unknown")
             transitions[before_label] += 1
         gains.append({"run_id": i["run_id"], "md_id": i["md_id"], "title": i["md_title"] or i["md_id"],
-                      "cover_file": i["cover_file"], "al_title": i["romaji"] or i["english"], "al_url": i["site_url"],
+                      "cover_file": i["cover_file"], "al_title": titles.pick(i["romaji"], i["english"]), "al_url": i["site_url"],
                       "before": None if is_add else before, "after": i["md_progress"], "gain": gain,
                       "completed": bool(i["set_status"] == "COMPLETED" and i["status_approved"])})
     s.biggest = sorted(gains, key=lambda g: g["gain"], reverse=True)[:10]

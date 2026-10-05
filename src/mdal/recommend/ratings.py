@@ -5,13 +5,14 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from mdal import titles
 from mdal.db.repo import Repo
 from mdal.fetch.anilist_list import plain_text
 from mdal.recommend.feedback import VERDICTS, split_tags
 
 
 def title_of(m: Any) -> str:
-    return m["romaji"] or m["english"] or m["native"] or f"#{m['media_id']}"
+    return titles.of(m)
 
 
 def snapshot(repo: Repo, key: str) -> dict[str, Any] | None:

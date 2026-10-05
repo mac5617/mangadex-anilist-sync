@@ -85,3 +85,19 @@ def test_no_secret_values_on_any_page(client, services):
         html = client.get(url).text
         for s in secrets:
             assert s not in html, (url, s)
+
+
+def test_titles_default_to_english_and_can_switch(client, services):
+    from mdal import titles
+    from tests.factories import al_media_row
+
+    assert titles.pick("Shingeki no Kyojin", "Attack on Titan") == "Attack on Titan"
+    assert titles.pick("Kemono Michi", None) == "Kemono Michi"                      # no English title: romaji
+    assert titles.other("Shingeki no Kyojin", "Attack on Titan") == "Shingeki no Kyojin"
+    services.repo.upsert_media([al_media_row(1, "Shingeki no Kyojin", english="Attack on Titan")])
+    assert "Attack on Titan" in client.get("/series/al/1").text.split("<h1>")[1][:60]
+    done = client.post("/settings/titles", data={"language": "romaji"})
+    assert "Titles now show in Romaji" in done.text and services.repo.get_setting("title_language") == "romaji"
+    assert "Shingeki no Kyojin" in client.get("/series/al/1").text.split("<h1>")[1][:60]
+    assert client.post("/settings/titles", data={"language": "klingon"}).status_code == 400
+    client.post("/settings/titles", data={"language": "english"})

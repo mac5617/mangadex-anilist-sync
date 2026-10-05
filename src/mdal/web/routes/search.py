@@ -7,6 +7,7 @@ import json
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
+from mdal import titles
 from mdal.clients.anilist import AniListError
 from mdal.db.repo import now_iso
 from mdal.fetch.anilist_list import DESCRIPTION_FIELD, MEDIA_FIELDS, media_row
@@ -40,7 +41,8 @@ def candidates(request: Request) -> list[Hit]:
         meta = " · ".join(x for x in (FORMAT_LABELS.get(m["format"] or "", m["format"]),   # same-named series differ by format
                                       str(m["start_year"]) if m["start_year"] else None,
                                       STATUS.get(e["status"]) if e else None) if x)
-        hits.append(Hit(f"al:{m['media_id']}", names[0] if names else f"#{m['media_id']}", m["cover_url"], meta, group,
+        hits.append(Hit(f"al:{m['media_id']}", titles.pick(m["romaji"], m["english"], m["native"], f"#{m['media_id']}"),
+                        m["cover_url"], meta, group,
                         names=names))
     mapped = {r[0] for r in repo.conn.execute("SELECT md_id FROM mapping WHERE state IN ('auto','confirmed')")}
     for table, group in (("md_manga", "MangaDex library"), ("md_new", "New on MangaDex")):

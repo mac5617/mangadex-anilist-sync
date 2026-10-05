@@ -22,7 +22,7 @@
         {{ ui.thumb(c.cover, "md") }}
         <div>
           <strong><a href="{{ c.url }}" target="_blank" rel="noopener noreferrer">{{ c.title }}</a></strong>
-          {% if c.english %}<span class="muted">({{ c.english }})</span>{% endif %}
+          {% if c.also %}<span class="muted">({{ c.also }})</span>{% endif %}
           <div class="row"><span class="muted">{{ c.year or "?" }} · {{ c.format or "?" }} · {{ c.country or "?" }}</span>
             <span class="badge score">score {{ "%.2f" | format(c.score) }}</span></div>
           <ul class="reasons">{% for r in c.reasons %}<li>{{ r }}</li>{% endfor %}</ul>

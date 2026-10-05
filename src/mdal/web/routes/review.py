@@ -11,6 +11,7 @@ from typing import Any
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 
+from mdal import titles
 from mdal.db.repo import Repo
 from mdal.matching.pipeline import AniListFetch, confirm, confirm_manual, mark_not_on_anilist, retry_matching
 from mdal.sync.orchestrator import refresh_item
@@ -34,8 +35,8 @@ def _card(repo: Repo, row: Any) -> dict[str, Any]:
         "candidates": [
             {
                 "media_id": c["media_id"],
-                "title": c["romaji"] or c["english"] or c["native"] or f"#{c['media_id']}",
-                "english": c["english"] if c["english"] != c["romaji"] else None,
+                "title": titles.of(c),
+                "also": titles.other(c["romaji"], c["english"]),
                 "year": c["start_year"],
                 "format": c["format"],
                 "country": c["country"],

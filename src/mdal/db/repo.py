@@ -52,6 +52,7 @@ SETTING_DEFAULTS: dict[str, Any] = {
     "rank_skipped": [],
     "rank_save": None,       # {state, detail, error, started_at, finished_at, saved}
     "stalled_days": 90,
+    "title_language": "english",   # which AniList title pages show: english (romaji when missing) or romaji
 }
 
 

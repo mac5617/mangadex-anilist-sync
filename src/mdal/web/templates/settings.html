@@ -65,6 +65,18 @@
 </section>
 </div>
 
+<section class="panel stack" id="titles">
+  <h2>Titles</h2>
+  <form method="post" action="/settings/titles" class="row">
+    {% for value, label in title_languages.items() %}
+    <label class="row"><input type="radio" name="language" value="{{ value }}"{% if value == title_language %} checked{% endif %}> {{ label }}</label>
+    {% endfor %}
+    <button class="secondary">Save</button>
+  </form>
+  <p class="muted small">Which AniList title Shiori shows. English falls back to romaji for series without an English title.
+    Matching always uses every title a series has.</p>
+</section>
+
 <section class="panel stack" id="tunables">
   <h2>Limits and thresholds</h2>
   <form method="post" action="/settings" class="settings-form">

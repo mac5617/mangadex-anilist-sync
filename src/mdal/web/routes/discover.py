@@ -14,6 +14,7 @@ from urllib.parse import quote, urlencode
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 
+from mdal import titles
 from mdal.clients.ollama import OllamaError
 from mdal.recommend.chat import Item
 from mdal.recommend.fresh import NewRec, english_meta, ranked_new
@@ -131,7 +132,7 @@ def rec_map(request: Request) -> HTMLResponse:
     svc = get_services(request)
     profile, recs = svc.recommender.recs(_adult(request))
     top = ranked(recs, "overall", MAP_SIZE)
-    series = {r["media_id"]: (r["romaji"] or r["english"] or r["native"] or f"#{r['media_id']}", r["cover_url"])
+    series = {r["media_id"]: (titles.of(r), r["cover_url"])
               for r in svc.repo.conn.execute(
                   "SELECT m.media_id, m.romaji, m.english, m.native, m.cover_url FROM al_entry e JOIN al_media m USING (media_id)")}
     graph = build_graph(profile, top, series)

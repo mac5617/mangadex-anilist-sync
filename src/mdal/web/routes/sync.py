@@ -13,6 +13,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
+from mdal import titles
 from mdal.db.repo import Repo
 from mdal.services import Services
 from mdal.sync.estimate import estimate
@@ -119,10 +120,10 @@ def diff_rows(repo: Repo, run_id: int) -> list[DiffRow]:
     for r in repo.diff_rows(run_id):
         site = SITE_NAMES[r["target"]]
         if r["target"] == "mal":
-            title = r["mal_title"] or r["romaji"] or r["english"] or r["native"]
+            title = r["mal_title"] or titles.pick(r["romaji"], r["english"], r["native"])
             url = MAL_MANGA_URL.format(r["mal_id"]) if r["mal_id"] else None
         else:
-            title, url = r["romaji"] or r["english"] or r["native"], r["site_url"]
+            title, url = titles.pick(r["romaji"], r["english"], r["native"]), r["site_url"]
         status_label = None
         is_new = r["al_entry_id"] is None and r["action"] in ("add", "flag")
         if r["set_status"] == "COMPLETED":

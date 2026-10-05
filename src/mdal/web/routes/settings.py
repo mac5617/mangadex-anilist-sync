@@ -5,9 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 
+from mdal import titles
 from mdal.services import Services
 from mdal.web.app import get_services, render
 from mdal.web.routes.sync import cooldown_info
@@ -123,6 +124,7 @@ def render_settings(
         },
         "tunables": [(t, (form_values or {}).get(t.key, stored[t.key])) for t in TUNABLES],
         "db_path": str(s.db_path),
+        "title_language": titles.language(), "title_languages": titles.LANGUAGES,
         "cooldown": cooldown_info(svc),
         "env_status": _env_status(svc),
     }
@@ -146,6 +148,16 @@ async def save_settings(request: Request) -> HTMLResponse:
         svc.repo.set_setting(key, value)
     apply_rates(svc)
     return render_settings(request, message="Settings saved.")
+
+
+@router.post("/settings/titles", response_class=HTMLResponse)
+def save_titles(request: Request, language: str = Form("")) -> HTMLResponse:
+    """Which AniList title pages show: English (romaji when a series has none) or romaji."""
+    if language not in titles.LANGUAGES:
+        return render_settings(request, error="Choose English or Romaji.", status_code=400)
+    get_services(request).repo.set_setting("title_language", language)
+    titles.set_language(language)
+    return render_settings(request, message=f"Titles now show in {titles.LANGUAGES[language]}.")
 
 
 @router.post("/settings/clear-cooldown", response_class=HTMLResponse)

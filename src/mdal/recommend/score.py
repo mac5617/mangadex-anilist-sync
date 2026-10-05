@@ -15,6 +15,7 @@ import math
 from dataclasses import dataclass, field
 from typing import Any
 
+from mdal import titles
 from mdal.recommend.profile import Profile
 
 KINDS = ("genre", "tag", "staff", "community")
@@ -59,7 +60,7 @@ def _json(value: Any, default: Any) -> Any:
 def make_rec(row: dict[str, Any]) -> Rec:
     return Rec(
         media_id=row["media_id"],
-        title=row.get("romaji") or row.get("english") or row.get("native") or f"#{row['media_id']}",
+        title=titles.pick(row.get("romaji"), row.get("english"), row.get("native"), f"#{row['media_id']}"),
         url=row.get("site_url"), cover=row.get("cover_url"), year=row.get("start_year"),
         format=row.get("format"), country=row.get("country"), chapters=row.get("chapters"), status=row.get("status"),
         genres=_json(row.get("genres"), []), tags=_json(row.get("tags"), []), staff=_json(row.get("staff_roles"), []),

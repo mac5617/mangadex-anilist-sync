@@ -47,7 +47,7 @@ def test_writer_status_literals():
 PURE_MODULES = ["matching/normalize.py", "matching/score.py", "sync/rules.py", "sync/estimate.py",
                 "recommend/profile.py", "recommend/score.py", "recommend/llm.py", "recommend/graph.py",
                 "recommend/fresh.py", "recommend/chat.py", "recommend/feedback.py", "recommend/ranking.py",
-                "listtools.py", "search.py", "year.py", "compare.py"]
+                "listtools.py", "search.py", "year.py", "compare.py", "titles.py"]
 IMPURE_IMPORT = re.compile(
     r"^\s*(import|from)\s+(httpx|sqlite3|asyncio|socket|urllib|pathlib|os|mdal\.(db|clients|fetch|web|services|config))\b",
     re.MULTILINE,

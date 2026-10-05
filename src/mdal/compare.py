@@ -15,6 +15,8 @@ import math
 from collections import Counter
 from typing import Any
 
+from mdal import titles
+
 LOVED = 80
 READ = ("CURRENT", "COMPLETED", "PAUSED", "DROPPED", "REPEATING")
 
@@ -24,7 +26,7 @@ def _genres(media: Any) -> list[str]:
 
 
 def _title(media: Any) -> str:
-    return (media["romaji"] or media["english"] or media["native"]) if media is not None else "?"
+    return titles.pick(media["romaji"], media["english"], media["native"], "?") if media is not None else "?"
 
 
 def pearson(pairs: list[tuple[float, float]]) -> float | None:

@@ -11,6 +11,7 @@ from typing import Any
 
 from collections.abc import Awaitable, Callable
 
+from mdal import titles
 from mdal.clients.anilist import AniListClient, AniListGraphQLError
 from mdal.db.repo import Repo, now_iso
 from mdal.fetch.anilist_list import fetch_list
@@ -59,7 +60,7 @@ def not_listed_rows(repo: Repo) -> list[NotListedRow]:
         total = al_info.chapters
         over = proposed is not None and total is not None and proposed > total
         progress = (total if over else proposed) or 0
-        title = (al["romaji"] or al["english"] or al["native"]) if al else None
+        title = titles.pick(al["romaji"], al["english"], al["native"]) if al else None
         rows.append(NotListedRow(
             md_id=m["md_id"],
             md_title=md["title"],

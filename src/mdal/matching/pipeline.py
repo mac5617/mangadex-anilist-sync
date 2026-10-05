@@ -13,6 +13,7 @@ import sqlite3
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
+from mdal import titles
 from mdal.clients.anilist import AniListClient
 from mdal.db.repo import Repo
 from mdal.fetch import anilist_list
@@ -92,7 +93,7 @@ def needs_matching(row: sqlite3.Row, mapping: sqlite3.Row | None) -> bool:
 
 
 def _label(media: sqlite3.Row) -> str:
-    return media["romaji"] or media["english"] or media["native"] or f"#{media['media_id']}"
+    return titles.of(media)
 
 
 def _chapter_count(row: sqlite3.Row, read_counts: dict[str, int]) -> int:

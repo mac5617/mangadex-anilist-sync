@@ -15,6 +15,7 @@ import time
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
+from mdal import titles
 from mdal.clients.anilist import AniListError
 from mdal.clients.mangadex import MangaDexError
 from mdal.clients.ollama import OllamaError, OllamaUnavailable
@@ -377,7 +378,7 @@ class NewReleases:
                 index.setdefault(normalize(name), (i.key, i.title))
         listed = self.repo.media(self.repo.al_entries())
         for m in listed.values():
-            title = m["romaji"] or m["english"] or m["native"] or f"#{m['media_id']}"
+            title = titles.of(m)
             for name in (m["romaji"], m["english"], m["native"], *json.loads(m["synonyms"] or "[]")):
                 if name:
                     index[normalize(name)] = (f"lib:{m['media_id']}", title)   # your list wins a tie
