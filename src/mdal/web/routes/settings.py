@@ -126,6 +126,7 @@ def render_settings(
         "db_path": str(s.db_path),
         "title_language": titles.language(), "title_languages": titles.LANGUAGES,
         "mal_mirror": svc.repo.get_setting("mal_mirror"),
+        "sync_targets": svc.repo.get_setting("sync_targets") or [],
         "cooldown": cooldown_info(svc),
         "env_status": _env_status(svc),
     }
@@ -159,6 +160,17 @@ def save_titles(request: Request, language: str = Form("")) -> HTMLResponse:
     get_services(request).repo.set_setting("title_language", language)
     titles.set_language(language)
     return render_settings(request, message=f"Titles now show in {titles.LANGUAGES[language]}.")
+
+
+@router.post("/settings/sync-targets", response_class=HTMLResponse)
+def save_sync_targets(request: Request, anilist: str = Form(""), mal: str = Form("")) -> HTMLResponse:
+    """Which sites Sync covers. MyAnimeList's box is disabled until it's connected, so keep it if it was on."""
+    svc = get_services(request)
+    keep_mal = "mal" in (svc.repo.get_setting("sync_targets") or []) and not svc.mal.connected
+    targets = [t for t, on in (("anilist", anilist == "1"), ("mal", mal == "1" or keep_mal)) if on]
+    svc.repo.set_setting("sync_targets", targets)
+    names = " and ".join({"anilist": "AniList", "mal": "MyAnimeList"}[t] for t in targets)
+    return render_settings(request, message=f"Sync now covers {names}." if targets else "Sync is off for both sites.")
 
 
 @router.post("/settings/mal-mirror", response_class=HTMLResponse)

@@ -71,6 +71,18 @@
 </section>
 </div>
 
+<section class="panel stack" id="sync">
+  <h2>Sync</h2>
+  <form method="post" action="/settings/sync-targets" class="row">
+    <label class="row"><input type="checkbox" name="anilist" value="1"{% if "anilist" in sync_targets %} checked{% endif %}> AniList</label>
+    <label class="row"><input type="checkbox" name="mal" value="1"{% if "mal" in sync_targets %} checked{% endif %}{% if not mal.connected %} disabled{% endif %}>
+      MyAnimeList{% if not mal.connected %} <span class="muted small">(connect it first)</span>{% endif %}</label>
+    <button class="secondary">Save</button>
+  </form>
+  <p class="muted small">The sites Sync covers, one after the other; MyAnimeList reuses AniList's MangaDex read. Each site's changes are
+    reviewed and approved on their own.</p>
+</section>
+
 <section class="panel stack" id="titles">
   <h2>Titles</h2>
   <form method="post" action="/settings/titles" class="row">

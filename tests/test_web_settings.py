@@ -101,3 +101,16 @@ def test_titles_default_to_english_and_can_switch(client, services):
     assert "Shingeki no Kyojin" in client.get("/series/al/1").text.split("<h1>")[1][:60]
     assert client.post("/settings/titles", data={"language": "klingon"}).status_code == 400
     client.post("/settings/titles", data={"language": "english"})
+
+
+def test_sync_targets_setting(client, services):
+    assert services.repo.get_setting("sync_targets") == ["anilist", "mal"]
+    page = client.post("/settings/sync-targets", data={"anilist": "1"}).text
+    # MyAnimeList isn't connected here, so its box is disabled and stays on
+    assert services.repo.get_setting("sync_targets") == ["anilist", "mal"] and "Sync now covers AniList and MyAnimeList" in page
+    from tests.factories import connect_mal
+    connect_mal(services)
+    client.post("/settings/sync-targets", data={"anilist": "1"})
+    assert services.repo.get_setting("sync_targets") == ["anilist"]
+    assert "Sync AniList" in client.get("/").text and "MyAnimeList</button>" not in client.get("/").text
+    assert "Sync is off for both sites" in client.post("/settings/sync-targets", data={}).text

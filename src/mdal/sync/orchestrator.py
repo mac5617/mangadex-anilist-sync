@@ -299,6 +299,7 @@ class SyncOrchestrator:
         self.services = services
         self.lock = asyncio.Lock()
         self.task: asyncio.Task[None] | None = None
+        self.queued: list[str] = []      # sites still to sync after the current one (Sync covers both)
 
     @property
     def repo(self) -> Repo:
@@ -346,6 +347,34 @@ class SyncOrchestrator:
             raise
         self.task = asyncio.create_task(self._guarded(run_id, self._dry_run))
         return run_id
+
+    def sync_targets(self) -> list[str]:
+        """The sites Sync covers: those turned on in Settings (MyAnimeList only once connected; AniList as before,
+        so a first sync explains a missing AniList connection instead of offering nothing)."""
+        wanted = self.repo.get_setting("sync_targets")
+        return [t for t in TARGETS if t in wanted and (t != "mal" or self.services.mal.connected)]
+
+    async def start_sync(self, targets: list[str] | None = None) -> int:
+        """Sync each site in turn: AniList, then MyAnimeList, which reuses the MangaDex read the first one did.
+        Each site's changes are reviewed and approved on their own."""
+        targets = [t for t in (targets if targets is not None else self.sync_targets()) if t in TARGETS]
+        if not targets:
+            raise SyncStateError("Turn on at least one connected site under Settings → Sync.")
+        run_id = await self.start_run(targets[0])
+        self.queued = targets[1:]
+        return run_id
+
+    async def _start_queued(self, previous: asyncio.Task[Any]) -> None:
+        """Start the next site once the run before it has fully finished."""
+        await asyncio.wait([previous])
+        if not self.queued:
+            return
+        target = self.queued.pop(0)
+        try:
+            await self.start_run(target)
+        except (SyncAlreadyRunning, SyncCoolingDown, SyncStateError) as exc:
+            log.warning("queued %s sync not started: %s", target, exc)
+            self.queued = []
 
     async def wait(self) -> None:
         if self.task:
@@ -452,6 +481,12 @@ class SyncOrchestrator:
             self.repo.update_run(run_id, state="failed", error=failure_message(exc), finished_at=now_iso())
         finally:
             self.lock.release()
+            # Sync covering both sites: once this site's changes are ready, read the next one's.
+            if self.queued:
+                if body == self._dry_run and self.repo.get_run(run_id)["state"] == "diffed":
+                    asyncio.create_task(self._start_queued(asyncio.current_task()))
+                else:
+                    self.queued = []
 
     def _phase(self, run_id: int, state: str | None = None, detail: str | None = None) -> None:
         fields: dict[str, Any] = {"phase_detail": detail}

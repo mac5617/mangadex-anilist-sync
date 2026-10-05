@@ -1,10 +1,11 @@
-<div id="sync-status" class="stack"{% if active %} hx-get="/sync/status" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
+<div id="sync-status" class="stack"{% if active or queued %} hx-get="/sync/status" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
   {% if status_message %}<p class="notice err" role="alert">{{ status_message }}</p>{% endif %}
   {% if run %}
     <p class="row"><strong>Sync #{{ run.run_id }}</strong> <span class="site-tag">{{ site }}</span>
       <span class="badge state-{{ run.state }}">{{ run.state }}</span>
       <span class="muted small">{{ run.started_at | when }}</span></p>
     {% if run.phase_detail %}<p>{{ run.phase_detail }}</p>{% endif %}
+    {% if queued %}<p class="muted small">Then {{ queued | join(" and ") }}, reusing this MangaDex read.</p>{% endif %}
     {% if run.error %}<p class="notice err">{{ run.error }}</p>{% endif %}
     <p class="muted small">Requests: {% if run.target == "mal" %}MyAnimeList {{ run.req_mal }}{% if run.req_anilist %}, AniList {{ run.req_anilist }}{% endif %}{% else %}AniList {{ run.req_anilist }}{% endif %}, MangaDex {{ run.req_mangadex }}</p>
   {% else %}
@@ -25,13 +26,15 @@
     {% if resumable and not active %}
       <button hx-post="/sync/{{ resumable }}/resume" hx-target="#sync-status" hx-swap="outerHTML">Resume</button>
     {% endif %}
-    {% if not active %}
+    {% if not active and not queued %}
       {% set style = "secondary" if open_diffs else "" %}
-      {% if not cooldown %}
-        <button class="{{ style }}" hx-post="/sync" hx-vals='{"target": "anilist"}' hx-target="#sync-status" hx-swap="outerHTML">Sync AniList</button>
-      {% endif %}
-      {% if mal_connected and (not cooldown or md_fresh) %}
-        <button class="{{ style }}" hx-post="/sync" hx-vals='{"target": "mal"}' hx-target="#sync-status" hx-swap="outerHTML">Sync MyAnimeList</button>
+      {% if sync_sites and (not cooldown or (sync_sites == ["MyAnimeList"] and md_fresh)) %}
+        <button class="{{ style }}" hx-post="/sync" hx-target="#sync-status" hx-swap="outerHTML">Sync {{ sync_sites | join(" and ") }}</button>
+        {% if sync_sites | length > 1 %}<span class="muted small">or only
+          <button type="button" class="link-button" hx-post="/sync" hx-vals='{"target": "anilist"}' hx-target="#sync-status" hx-swap="outerHTML">AniList</button> /
+          <button type="button" class="link-button" hx-post="/sync" hx-vals='{"target": "mal"}' hx-target="#sync-status" hx-swap="outerHTML">MyAnimeList</button></span>{% endif %}
+      {% elif not sync_sites %}
+        <span class="muted">Turn on a connected site under <a href="/settings#sync">Settings → Sync</a>.</span>
       {% endif %}
     {% endif %}
   </div>

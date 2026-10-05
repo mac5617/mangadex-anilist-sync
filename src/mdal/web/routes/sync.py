@@ -62,6 +62,8 @@ def status_context(svc: Services, message: str | None = None) -> dict[str, Any]:
         "open_diffs": [(SITE_NAMES[t], d["run_id"]) for t in TARGETS if (d := open_diff(svc.repo, t))],
         "mal_connected": svc.mal.connected,
         "md_fresh": svc.orchestrator.md_snapshot_fresh(),
+        "sync_sites": [SITE_NAMES[t] for t in svc.orchestrator.sync_targets()],
+        "queued": [SITE_NAMES[t] for t in svc.orchestrator.queued],
     }
 
 
@@ -73,9 +75,14 @@ def _status_fragment(request: Request, message: str | None = None, status_code: 
 
 @router.post("/sync", response_class=HTMLResponse)
 async def start_sync(request: Request) -> HTMLResponse:
-    target = str((await request.form()).get("target") or "anilist")
+    """Sync every site turned on in Settings (target "all", the default), or just one."""
+    target = str((await request.form()).get("target") or "all")
+    orchestrator = get_services(request).orchestrator
     try:
-        await get_services(request).orchestrator.start_run(target)
+        if target == "all":
+            await orchestrator.start_sync()
+        else:
+            await orchestrator.start_run(target)
     except SyncAlreadyRunning:
         return _status_fragment(request, "A sync is already running.", status_code=409)
     except (SyncCoolingDown, SyncStateError) as exc:

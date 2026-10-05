@@ -52,6 +52,7 @@ SETTING_DEFAULTS: dict[str, Any] = {
     "rank_skipped": [],
     "rank_save": None,       # {state, detail, error, started_at, finished_at, saved}
     "stalled_days": 90,
+    "sync_targets": ["anilist", "mal"],   # what Sync covers (MyAnimeList only once connected)
     "mal_mirror": True,      # list edits (scores, Paused/Dropped, notes) also go to MyAnimeList when connected
     "title_language": "english",   # which AniList title pages show: english (romaji when missing) or romaji
 }

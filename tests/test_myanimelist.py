@@ -349,11 +349,12 @@ def test_connect_flow(client, services, mock):
     assert services.mal.connected and services.repo.get_setting("mal_user_name") == "MalReader"
     html = client.get("/settings").text
     assert "mal-access-2222" not in html and "mal-refresh-2222" not in html
-    assert "Sync MyAnimeList" in client.get("/").text
+    assert "Sync AniList and MyAnimeList" in client.get("/").text
 
     client.post("/auth/mal/disconnect")
     assert not services.mal.connected
-    assert "Sync MyAnimeList" not in client.get("/").text
+    home = client.get("/").text
+    assert "Sync AniList and MyAnimeList" not in home and "Sync AniList" in home
 
 
 def test_callback_rejects_unknown_state(client, services, mock):
@@ -375,3 +376,43 @@ async def test_diff_page_names_the_site(fast, world):
         assert 'href="https://myanimelist.net/manga/11"' in html
         assert "No MyAnimeList link" in html
         assert "MyAnimeList" in c.get("/history").text
+
+
+async def test_sync_covers_both_sites_one_after_the_other(services, monkeypatch):
+    """Sync reads AniList, then MyAnimeList; Settings can leave either out; a failed first run stops the second."""
+    import asyncio
+
+    connect_mal(services)
+    order = []
+    orch = services.orchestrator
+
+    async def fake_dry_run(run_id):
+        order.append(services.repo.get_run(run_id)["target"])
+        services.repo.update_run(run_id, state="diffed")
+
+    monkeypatch.setattr(orch, "_dry_run", fake_dry_run)
+    monkeypatch.setattr(orch, "md_snapshot_fresh", lambda: True)
+    await orch.start_sync()
+    for _ in range(50):
+        await asyncio.sleep(0)
+        if len(order) == 2 and not orch.queued and orch.task.done():
+            break
+    await orch.wait()
+    assert order == ["anilist", "mal"]
+
+    services.repo.set_setting("sync_targets", ["mal"])
+    assert orch.sync_targets() == ["mal"]
+    services.repo.set_setting("sync_targets", [])
+    with pytest.raises(SyncStateError):
+        await orch.start_sync()
+
+    async def failing(run_id):
+        order.append("failed " + services.repo.get_run(run_id)["target"])
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(orch, "_dry_run", failing)
+    await orch.start_sync(["anilist", "mal"])
+    await orch.wait()
+    for _ in range(20):
+        await asyncio.sleep(0)
+    assert order[-1] == "failed anilist" and orch.queued == []      # MyAnimeList wasn't started
