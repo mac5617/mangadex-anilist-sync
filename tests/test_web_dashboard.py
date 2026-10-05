@@ -49,8 +49,8 @@ def test_dashboard_with_diffed_run(client, services, mock):
 
 def test_dashboard_auth_status(client):
     html = client.get("/").text
-    assert "not connected" in html  # no AniList token in the fake .env
-    assert "configured</span> for reader" in html
+    assert '<span class="off">AniList · <a href="/settings#anilist">connect</a>' in html  # no AniList token in the fake .env
+    assert '<span class="ok">MangaDex · reader' in html
 
 
 def test_status_fragment_stops_polling_when_idle(client, services):

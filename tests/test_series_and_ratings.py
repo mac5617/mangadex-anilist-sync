@@ -215,9 +215,10 @@ async def test_schedule_starts_a_scan(services, monkeypatch):
 async def test_home_shows_new_picks_until_you_look(scanned):
     with client_for(scanned) as c:
         home = c.get("/").text
-        assert "4 new picks" in home and f"/series/md/{uuid(1)}" in home and "Next scan" in home
+        assert "4 new picks since you last looked" in home and f"/series/md/{uuid(1)}" in home
         c.get("/discover/new")
-        assert "Nothing new since you last looked" in c.get("/").text
+        again = c.get("/").text
+        assert "Nothing new since you last looked" in again and "Next scan" in again
 
 
 async def test_an_anilist_only_series_is_found_on_mangadex_by_its_link(services, mock):

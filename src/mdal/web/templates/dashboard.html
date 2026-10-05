@@ -1,65 +1,83 @@
 {% extends "base.html" %}
 {% block title %}Home{% endblock %}
 {% block content %}
-<div class="page-head">
-  <h1>Home</h1>
+{%- macro cover_tile(t) -%}
+  <li><a href="{{ t.href }}">
+    {% if t.cover %}<img src="{{ t.cover }}" alt="" loading="lazy" referrerpolicy="no-referrer"
+      {% if t.fallback %}data-fallback="{{ t.fallback }}" {% endif %}onerror="if(this.dataset.fallback&&this.src!==this.dataset.fallback){this.src=this.dataset.fallback}else{this.onerror=null;this.removeAttribute('src');this.classList.add('broken')}">
+    {% else %}<span class="tile-noimg"></span>{% endif %}
+    <span class="tile-title" title="{{ t.title }}">{{ t.title }}</span></a>
+    {% if t.progress is not none %}<span class="progress" aria-hidden="true"><span style="width: {{ '%.0f' | format(100 * t.progress) }}%"></span></span>{% endif %}
+    <span class="muted small">{{ t.note or t.meta }}</span></li>
+{%- endmacro -%}
+
+<header class="home-hello">
+  <h1>{{ greeting }}{% if name %}, {{ name }}{% endif %}</h1>
+  <p class="lede">{% if summary.entries %}{{ summary.entries | num }} series on your list · {{ summary.reading | num }} reading · {{ summary.ranked | num }} ranked{% if summary.new_picks %} · <a href="/discover/new">{{ summary.new_picks }} new pick{{ "s" if summary.new_picks != 1 }} waiting</a>{% endif %}
+    {% else %}Run your first sync to bring in your MangaDex library and lists.{% endif %}</p>
+</header>
+
+<div class="home-top">
+  <section class="panel home-sync">
+    <div class="block-head"><h2>Sync</h2>{% if run %}<a class="small" href="/history">History</a>{% endif %}</div>
+    {% include "_sync_status.html" %}
+  </section>
+  <section class="panel home-needs">
+    <h2>Needs you</h2>
+    {% if needs %}
+    <ul class="needs-list">
+      {% for n, label, href in needs %}<li><a href="{{ href }}"><span class="needs-count">{{ n | num }}</span> {{ label }}</a></li>{% endfor %}
+    </ul>
+    {% else %}<p class="all-clear">All caught up.</p><p class="muted small">Nothing to review, and your lists agree.</p>{% endif %}
+  </section>
 </div>
 
+{% if continue_reading %}
 <section class="block">
-  <div class="block-head"><h2>Latest sync</h2>{% if run %}<a class="small" href="/history">Sync history</a>{% endif %}</div>
-  <div class="panel">{% include "_sync_status.html" %}</div>
+  <div class="block-head"><h2>Continue reading</h2><a class="small" href="/stats/entries?status=CURRENT">Everything you're reading</a></div>
+  <ul class="tiles home-tiles">{% for t in continue_reading %}{{ cover_tile(t) }}{% endfor %}</ul>
 </section>
+{% endif %}
 
 <section class="block">
   <div class="block-head"><h2>New releases for you</h2><a class="small" href="/discover/new">New releases</a></div>
-  <div class="panel stack">
   {% if digest %}
-    <p><strong>{{ digest | length }} new pick{{ "s" if digest | length != 1 }}</strong> since you last looked
-      <span class="muted small">· scanned {{ scan.finished_at | when }}</span></p>
-    <ul class="digest">
-      {% for d in digest[:6] %}<li><a href="{{ d.href }}">
-        {% if d.cover %}<img src="{{ d.cover }}" alt="" width="92" height="131" loading="lazy" referrerpolicy="no-referrer"
-          onerror="this.onerror=null;this.removeAttribute('src');this.classList.add('broken')">{% else %}<span class="digest-noimg" aria-hidden="true"></span>{% endif %}
-        <span class="digest-title">{{ d.title }}</span></a><span class="muted small">{{ d.meta }}</span></li>{% endfor %}
-    </ul>
+    <p class="muted small">{{ digest_total }} new pick{{ "s" if digest_total != 1 }} since you last looked · scanned {{ scan.finished_at | when }}</p>
+    <ul class="tiles home-tiles">{% for t in digest %}{{ cover_tile(t) }}{% endfor %}</ul>
   {% elif scan_running %}
     <p><span class="badge state-fetching">scanning</span> {{ scan.detail }}</p>
   {% elif scan.finished_at %}
-    <p class="muted">Nothing new since you last looked. Scanned {{ scan.finished_at | when }}.</p>
+    <p class="muted">Nothing new since you last looked.
+      {% if next_scan %}Next scan {{ next_scan.isoformat(timespec="seconds") | when }}.{% else %}Background scans are off (<a href="/settings#tunables">Settings</a>).{% endif %}</p>
   {% else %}
-    <p class="muted">MangaDex hasn't been scanned yet. <a href="/discover/new">Scan it now</a>.</p>
+    <p class="muted">MangaDex hasn't been scanned for new series yet. <a href="/discover/new">Scan it now</a>.</p>
   {% endif %}
-  <p class="muted small">{% if next_scan %}Next scan {{ next_scan.isoformat(timespec="seconds") | when }}, in the background while Shiori runs.
-    {% else %}Background scans are off. <a href="/settings#tunables">Turn them on in Settings</a>.{% endif %}</p>
+</section>
+
+{% if ready %}
+<section class="block">
+  <div class="block-head"><h2>Ready to binge</h2><a class="small" href="/list/binge">All finished series you stopped</a></div>
+  <ul class="tiles home-tiles">{% for t in ready %}{{ cover_tile(t) }}{% endfor %}</ul>
+</section>
+{% endif %}
+
+<section class="block">
+  <h2 class="visually-hidden">Shortcuts</h2>
+  <div class="shortcuts">
+    <a class="shortcut" href="/list/rank"><strong>Rank what you've read</strong>
+      <span class="muted small">{{ ranked | num }} ranked · {{ unranked | num }} to go</span></a>
+    <a class="shortcut" href="/discover/ask"><strong>Ask what to read next</strong>
+      <span class="muted small">Your local model, from series you haven't read</span></a>
+    <a class="shortcut" href="/discover"><strong>For you</strong>
+      <span class="muted small">Recommendations from your whole list</span></a>
+    <a class="shortcut" href="/stats/year"><strong>Your year in review</strong>
+      <span class="muted small">What you finished, started and loved</span></a>
   </div>
 </section>
 
-<section class="block">
-  <h2>Open items</h2>
-  <ul class="items">
-    <li><span class="item-label">Matches to review</span>
-      {% if nav.review %}<a href="/review">{{ nav.review | num }} series</a>{% else %}<span class="muted">None</span>{% endif %}</li>
-    <li><span class="item-label">Matched series missing from your AniList list</span>
-      {% if nav.not_on_list %}<a href="/not-listed">{{ nav.not_on_list | num }} series</a>{% else %}<span class="muted">None</span>{% endif %}</li>
-    <li><span class="item-label">Different status on MangaDex and AniList</span>
-      {% if mismatches %}<a href="/stats/entries?mismatch=1">{{ mismatches | num }} series</a>{% else %}<span class="muted">None</span>{% endif %}</li>
-  </ul>
-</section>
-
-<section class="block">
-  <h2>Accounts</h2>
-  <div class="panel">
-    <dl class="facts">
-      <dt>AniList</dt>
-      <dd>{% if auth.anilist %}<span class="badge ok">connected</span>{% if auth.anilist_user %} as {{ auth.anilist_user }}{% endif %}
-        {% else %}<span class="badge err">not connected</span> · <a href="/settings#anilist">AniList settings</a>{% endif %}</dd>
-      <dt>MyAnimeList</dt>
-      <dd>{% if auth.mal %}<span class="badge ok">connected</span>{% if auth.mal_user %} as {{ auth.mal_user }}{% endif %}
-        {% else %}<span class="badge">not connected</span> · <a href="/settings#myanimelist">MyAnimeList settings</a>{% endif %}</dd>
-      <dt>MangaDex</dt>
-      <dd>{% if auth.mangadex %}<span class="badge ok">configured</span> for {{ auth.mangadex_user }}
-        {% else %}<span class="badge err">missing credentials</span> · <a href="/settings#mangadex">MangaDex settings</a>{% endif %}</dd>
-    </dl>
-  </div>
-</section>
+<footer class="home-accounts small">
+  <span class="{{ 'ok' if auth.anilist else 'off' }}">AniList {% if auth.anilist %}· {{ auth.anilist_user or "connected" }}{% else %}· <a href="/settings#anilist">connect</a>{% endif %}</span>
+  <span class="{{ 'ok' if auth.mal else 'off' }}">MyAnimeList {% if auth.mal %}· {{ auth.mal_user or "connected" }}{% else %}· <a href="/settings#myanimelist">connect</a>{% endif %}</span>
+  <span class="{{ 'ok' if auth.mangadex else 'off' }}">MangaDex {% if auth.mangadex %}· {{ auth.mangadex_user }}{% else %}· <a href="/settings#mangadex">add credentials</a>{% endif %}</span>
+</footer>
 {% endblock %}
