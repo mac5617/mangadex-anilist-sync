@@ -671,15 +671,6 @@ button.rank-choice .rank-title { text-align: center; }
   line-height: 1.5; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--surface); color: var(--fg); }
 .notes-form textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 
-.series-score { display: flex; align-items: center; gap: .6rem; }
-/* One row in any width: field (shrinks), "/ 10", Save. No number spinners: in Chrome and Firefox they sit on top of
-   the digits in a field this narrow (arrow keys still step the value). */
-.score-form { display: grid; grid-template-columns: minmax(3.5rem, 6rem) auto auto; align-items: center; gap: .5rem; justify-content: start; }
-.score-form input { width: 100%; min-width: 0; box-sizing: border-box; padding: .4rem .55rem; font: inherit; font-variant-numeric: tabular-nums;
-  border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--surface); color: var(--fg);
-  -moz-appearance: textfield; appearance: textfield; }
-.score-form input::-webkit-outer-spin-button, .score-form input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-.score-form button { white-space: nowrap; }
 .sort-pick { display: flex; flex-wrap: wrap; gap: .3rem; align-items: center; }
 .sort-pick a { padding: .25rem .65rem; border: 1px solid var(--line-strong); border-radius: 999px; color: var(--muted); font-size: .88rem; }
 .sort-pick a[aria-current="page"] { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
@@ -723,19 +714,31 @@ button:focus-visible, .button:focus-visible { outline: 2px solid var(--accent); 
 .is-done::after { content: "✓"; margin-left: .2rem; font-weight: 700; }
 @media (prefers-reduced-motion: reduce) { .is-busy::after { animation: none; border-right-color: currentColor; opacity: .5; } }
 
-/* ---- Your score (series page): the score as a word, one tap for 1-10, an exact field for decimals ---- */
+/* ---- Your score (series page): a badge with the score's word, one slider, one Save ---- */
+.score-box { display: flex; flex-direction: column; gap: .7rem; }
 .score-head { display: flex; align-items: center; gap: .75rem; }
-.score-head .score-badge { width: 3.4rem; height: 3.4rem; font-size: 1.3rem; flex: none; }
-.score-badge.empty { color: var(--faint); border-color: var(--line-strong); background: var(--surface-2); }
-.score-words { display: flex; flex-direction: column; gap: .1rem; line-height: 1.25; }
+.score-head .score-badge { width: 3.4rem; height: 3.4rem; font-size: 1.25rem; flex: none; transition: color .15s, background-color .15s; }
+.score-badge.empty { border: 2px dashed var(--line-strong); background: transparent; }
+.score-words { display: flex; flex-direction: column; gap: .1rem; line-height: 1.25; min-width: 0; }
 .score-words strong { font-size: 1.05rem; }
 .just-saved .score-badge { animation: score-pop .45s ease-out; }
-@keyframes score-pop { 0% { transform: scale(.8); } 60% { transform: scale(1.08); } 100% { transform: scale(1); } }
+@keyframes score-pop { 0% { transform: scale(.85); } 60% { transform: scale(1.06); } 100% { transform: scale(1); } }
 @media (prefers-reduced-motion: reduce) { .just-saved .score-badge { animation: none; } }
-.score-pick { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .3rem; }
-button.score-pill { justify-content: center; padding: .4rem 0; border-radius: 6px; font-variant-numeric: tabular-nums;
-  background: var(--surface); color: var(--fg); border: 1px solid var(--line-strong); font-weight: 600; }
-button.score-pill:hover { background: var(--surface-2); border-color: var(--accent); }
-button.score-pill.chosen { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
-.score-form { grid-template-columns: auto minmax(3.5rem, 5.5rem) auto; }
-.score-rank { display: flex; flex-direction: column; gap: .2rem; }
+.score-slider { --tone: var(--accent); width: 100%; margin: .2rem 0 0; height: 1.25rem; background: transparent; cursor: pointer;
+  -webkit-appearance: none; appearance: none; }
+.score-slider:disabled { cursor: not-allowed; opacity: .5; }
+.score-slider::-webkit-slider-runnable-track { height: 6px; border-radius: 3px;
+  background: linear-gradient(to right, var(--tone) var(--fill), var(--surface-2) var(--fill)); }
+.score-slider::-moz-range-track { height: 6px; border-radius: 3px; background: var(--surface-2); }
+.score-slider::-moz-range-progress { height: 6px; border-radius: 3px; background: var(--tone); }
+.score-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; margin-top: -6px; border-radius: 50%;
+  background: var(--surface); border: 3px solid var(--tone); }
+.score-slider::-moz-range-thumb { width: 12px; height: 12px; border-radius: 50%; background: var(--surface); border: 3px solid var(--tone); }
+.score-slider:focus-visible { outline: none; }
+.score-slider:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px var(--accent-soft); }
+.score-slider.tone-none { --tone: var(--line-strong); }
+.score-slider.tone-liked { --tone: var(--ok); } .score-slider.tone-fine { --tone: var(--warn); } .score-slider.tone-disliked { --tone: var(--err); }
+.score-scale { display: flex; justify-content: space-between; margin-top: -.45rem; font-size: .72rem; color: var(--faint);
+  font-variant-numeric: tabular-nums; }
+.score-save { align-self: stretch; justify-content: center; }
+.score-save[disabled] { opacity: 1; background: var(--surface-2); border-color: var(--line); color: var(--muted); cursor: default; }

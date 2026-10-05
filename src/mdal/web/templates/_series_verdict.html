@@ -2,35 +2,26 @@
 <div id="series-verdict" class="series-verdict panel">
 {% if s.entry %}
   {%- set current = s.entry.score / 10 if s.entry.score else none -%}
-  {%- set whole = (current | round | int) if current else none -%}
-  {%- set band = s.ranked.tier if s.ranked else ("liked" if current and current >= 6.8 else "fine" if current and current >= 4 else "disliked" if current else "") -%}
+  {%- set band = "liked" if current and current >= 6.8 else "fine" if current and current >= 4 else "disliked" if current else "" -%}
   <h2>Your score</h2>
-  <div class="score-head{% if score_ok %} just-saved{% endif %}">
-    {% if current %}<span class="score-badge tier-{{ band }}">{{ "%g" | format(current) }}</span>
-    <span class="score-words"><strong>{{ score_words[whole] }}</strong>
-      <span class="muted small">{% if s.ranked %}#{{ s.ranked.place }} in “{{ s.ranked.label }}”{% else %}out of 10{% endif %}</span></span>
-    {% else %}<span class="score-badge empty" aria-hidden="true">–</span>
-    <span class="score-words"><strong>Not scored yet</strong><span class="muted small">{% if s.ranked %}#{{ s.ranked.place }} in “{{ s.ranked.label }}”, saving…{% else %}Tap a number{% endif %}</span></span>{% endif %}
-  </div>
-
-  <div class="score-pick" role="group" aria-label="Score out of 10">
-    {% for n in range(1, 11) %}
-    <button type="button" class="score-pill{% if whole == n %} chosen{% endif %}" title="{{ n }} · {{ score_words[n] }}"
-      aria-pressed="{{ 'true' if whole == n else 'false' }}"{% if not anilist %} disabled{% endif %}
-      hx-post="/series/{{ kind }}/{{ ident }}/score" hx-vals='{"score": "{{ n }}"}' hx-target="#series-verdict" hx-swap="outerHTML">{{ n }}</button>
-    {% endfor %}
-  </div>
-
-  <form class="score-form" hx-post="/series/{{ kind }}/{{ ident }}/score" hx-target="#series-verdict" hx-swap="outerHTML">
-    <label for="series-score" class="small muted">Exact</label>
-    <input id="series-score" name="score" type="number" min="0.1" max="10" step="0.1" inputmode="decimal"
-      value="{{ '%g' | format(current) if current else '' }}" placeholder="8.4" required>
-    <button class="secondary"{% if not anilist %} disabled title="Connect AniList in Settings first"{% endif %}>Save</button>
+  <form class="score-box{% if score_ok %} just-saved{% endif %}" hx-post="/series/{{ kind }}/{{ ident }}/score"
+    hx-target="#series-verdict" hx-swap="outerHTML" data-score-words='{{ score_words | tojson }}' data-saved="{{ '%g' | format(current) if current else '' }}">
+    <div class="score-head">
+      <output class="score-badge {{ 'tier-' ~ band if band else 'empty' }}" for="series-score" data-score-badge>{{ "%g" | format(current) if current else "" }}</output>
+      <span class="score-words">
+        <strong data-score-word>{{ score_words[current | round | int] if current else "Not scored yet" }}</strong>
+        <span class="muted small">{% if s.ranked %}#{{ s.ranked.place }} in “{{ s.ranked.label }}”{% elif current %}out of 10{% else %}Drag to score{% endif %}</span>
+      </span>
+    </div>
+    <label for="series-score" class="visually-hidden">Score out of 10</label>
+    <input id="series-score" class="score-slider{% if not current %} tone-none{% endif %}" name="score" type="range" min="1" max="10" step="0.1"
+      value="{{ '%g' | format(current) if current else '7' }}" style="--fill: {{ ((current or 7) - 1) / 9 * 100 }}%"
+      {% if not anilist %}disabled{% endif %}>
+    <div class="score-scale" aria-hidden="true"><span>1</span><span>5</span><span>10</span></div>
+    <button class="score-save" disabled{% if not anilist %} title="Connect AniList in Settings first"{% endif %}>Save score</button>
   </form>
   {% if score_note %}<p class="notice {{ 'ok' if score_ok else 'err' }} small" role="status">{{ score_note }}</p>{% endif %}
-
-  <p class="score-rank small"><a href="/list/rank?media_id={{ s.al_id }}">{{ "Rank it again by comparing" if s.ranked else "Rank it by comparing" }} →</a>
-    {% if s.ranked %}<span class="muted">A score you set here takes it out of your ranking.</span>{% endif %}</p>
+  <p class="small"><a href="/list/rank?media_id={{ s.al_id }}">{{ "Rank it again by comparing" if s.ranked else "Rank it by comparing" }}</a></p>
 {% else %}
   <h2>Your rating</h2>
   {% if s.verdict %}<p class="small"><strong>{{ s.verdict.label }}</strong>
