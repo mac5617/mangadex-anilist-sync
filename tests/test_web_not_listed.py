@@ -60,3 +60,14 @@ def test_add_refused_while_sync_running(client, services, fake):  # noqa: F811
 
 def test_nav_points_here(client):
     assert 'href="/not-listed"' in client.get("/").text
+
+
+def test_series_page_adds_to_anilist(client, services, fake):  # noqa: F811
+    page = client.get("/series/al/3").text
+    assert "Add to AniList" in page and 'id="add-progress"' in page and 'value="7"' in page
+    response = client.post("/series/al/3/add", data={"status": "COMPLETED", "progress": "7"})
+    assert response.status_code == 200 and "Added to AniList as Completed, progress 7." in response.text
+    assert len(fake.mutations) == 1 and "On your list" in response.text      # the panel now edits the entry
+    assert "Unlisted series (2)" in client.get("/not-listed").text
+    refused = client.post("/series/al/2/add", data={"status": "COMPLETED", "progress": "51"}).text
+    assert "exceeds AniList" in refused and len(fake.mutations) == 1

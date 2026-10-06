@@ -18,7 +18,7 @@ from mdal.recommend.fresh import english_meta
 from mdal.recommend.series import big_cover, series_url
 from mdal.stats import entry_rows
 from mdal.clients.myanimelist import MalError
-from mdal.sync.list_edit import EDIT_STATUSES, ListEditError, save_scores, set_status
+from mdal.sync.list_edit import ListEditError, save_scores, set_status
 from mdal.sync.mal_list_edit import mirror_scores, mirror_status, on_mal
 from mdal.web.app import get_services, render, templates
 
@@ -246,7 +246,7 @@ def stalled_page(request: Request) -> HTMLResponse:
 async def change_status(request: Request, media_id: int, status: str = Form(...)) -> HTMLResponse:
     """Mark a stalled series Paused or Dropped on AniList."""
     svc = get_services(request)
-    if status not in EDIT_STATUSES:
+    if status not in ("PAUSED", "DROPPED"):   # what Stalled offers
         raise HTTPException(400, "Only Paused or Dropped can be set here.")
     try:
         await set_status(svc.anilist, svc.repo, media_id, status)

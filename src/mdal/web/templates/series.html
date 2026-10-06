@@ -17,9 +17,7 @@
     <header class="series-head">
       <h1>{{ s.title }}{% if s.adult %} <span class="badge">adult</span>{% endif %}</h1>
       {% if s.alt_titles %}<p class="muted small series-alt">{{ s.alt_titles | join(" · ") }}</p>{% endif %}
-      {% if s.entry or s.md_status %}<p class="series-yours">
-        {% if s.entry %}<span class="badge ok">On your AniList list</span> {{ s.entry.status }}{% if s.entry.progress %} · {{ s.entry.progress }} ch read{% endif %}{% if s.entry.score %} · scored {{ s.entry.score | num }}{% endif %}{% endif %}
-        {% if s.md_status %}<span class="muted"> · MangaDex: {{ s.md_status }}</span>{% endif %}</p>{% endif %}
+      {% include "_series_yours.html" %}
     </header>
 
     {% if s.facts %}<dl class="series-facts">

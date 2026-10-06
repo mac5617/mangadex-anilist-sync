@@ -167,8 +167,9 @@ class SeriesPages:
             "genres": genres, "tags": tags, "staff": staff, "authors": authors, "facts": facts, "links": links,
             "adult": bool(media["is_adult"]) if media and media["is_adult"] is not None else
                      bool(new and new["content_rating"] in ("erotica", "pornographic")),
-            "entry": {"status": LIST_STATUS.get(entry["status"], entry["status"]), "progress": entry["progress"],
-                      "score": entry["score"]} if entry else None,
+            "entry": {"status": LIST_STATUS.get(entry["status"], entry["status"]), "status_code": entry["status"],
+                      "progress": entry["progress"], "score": entry["score"]} if entry else None,
+            "md_id": md_id,
             "md_status": MD_STATUS_LABELS.get(lib["reading_status"] or "none") if lib else None,
             "verdict": {"verdict": verdict["verdict"], "label": VERDICTS[verdict["verdict"]], "source": verdict["source"],
                         "at": verdict["created_at"]} if verdict else None,

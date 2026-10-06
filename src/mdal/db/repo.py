@@ -427,7 +427,7 @@ class Repo:
 
     # ---- edits to your AniList list (sync/list_edit.py) --------------------------
     def update_al_entry(self, media_id: int, **fields: Any) -> None:
-        allowed = {"score", "status", "notes"}
+        allowed = {"score", "status", "notes", "progress"}
         if not fields or set(fields) - allowed:
             raise ValueError(f"only {allowed} can be edited")
         with self.conn:

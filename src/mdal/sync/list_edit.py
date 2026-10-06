@@ -1,8 +1,9 @@
-"""Edits to your AniList list outside syncs: scores (List → Rank) and Paused/Dropped (List → Stalled).
+"""Edits to your AniList list outside syncs: scores (List → Rank), Paused/Dropped (List → Stalled) and the
+status you pick on a series page.
 
 Like writer.py and add_entry.py, this module may contain a mutation. Its rules:
 - it only edits an entry that exists, addressed by its entry `id` (never `mediaId`), so nothing can be added;
-- it sends only `scoreRaw` (1-100), `notes`, or one of the literal statuses PAUSED and DROPPED;
+- it sends only `scoreRaw` (1-100), `notes`, or one of the literal statuses in EDIT_STATUSES (never Rereading);
 - every change is logged in list_edit, and the local copy of the entry follows what AniList answered.
 SaveMediaListEntry with absolute values is idempotent, so the client's retry of a failure is safe.
 """
@@ -17,8 +18,8 @@ from mdal.db.repo import Repo
 
 log = logging.getLogger(__name__)
 
-SELECTION = "{ id mediaId status score(format: POINT_100) }"
-EDIT_STATUSES = ("PAUSED", "DROPPED")
+SELECTION = "{ id mediaId status progress score(format: POINT_100) }"
+EDIT_STATUSES = ("CURRENT", "COMPLETED", "PAUSED", "DROPPED", "PLANNING")
 
 
 class ListEditError(Exception):
@@ -108,8 +109,9 @@ async def save_notes(client: AniListClient, repo: Repo, media_id: int, notes: st
     repo.log_edit(media_id, entry["entry_id"], "notes", entry["notes"], notes, "done")
 
 
-async def set_status(client: AniListClient, repo: Repo, media_id: int, status: str) -> None:
-    """Mark one entry Paused or Dropped. Raises ListEditError when it can't."""
+async def set_status(client: AniListClient, repo: Repo, media_id: int, status: str) -> dict[str, Any]:
+    """Set one entry's status. Returns the entry as AniList saved it (it may fill in progress on Completed).
+    Raises ListEditError when it can't."""
     query = status_document(status)
     entry = _entry(repo, media_id)
     try:
@@ -118,5 +120,9 @@ async def set_status(client: AniListClient, repo: Repo, media_id: int, status: s
         repo.log_edit(media_id, entry["entry_id"], "status", entry["status"], status, "failed", str(exc))
         raise ListEditError(f"AniList refused the change: {exc}") from exc
     result = data.get("SaveMediaListEntry") or {}
-    repo.update_al_entry(media_id, status=result.get("status") or status)
+    saved = {"status": result.get("status") or status}
+    if result.get("progress") is not None:
+        saved["progress"] = result["progress"]
+    repo.update_al_entry(media_id, **saved)
     repo.log_edit(media_id, entry["entry_id"], "status", entry["status"], status, "done")
+    return saved

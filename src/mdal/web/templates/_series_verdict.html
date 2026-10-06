@@ -1,6 +1,37 @@
 {%- set kind, ident = s.key.split(":", 1) -%}
 <div id="series-verdict" class="series-verdict panel">
 {% if s.entry %}
+  <form class="list-status" hx-post="/series/{{ kind }}/{{ ident }}/status" hx-target="#series-verdict" hx-swap="outerHTML">
+    <h2 id="list-status-label">On your list</h2>
+    <div class="field-row">
+      <select id="list-status" name="status" aria-labelledby="list-status-label"{% if not anilist %} disabled{% endif %}>
+        {% if s.entry.status_code not in list_statuses | map("first") %}<option selected disabled>{{ s.entry.status }}</option>{% endif %}
+        {% for code, label in list_statuses %}<option value="{{ code }}"{% if code == s.entry.status_code %} selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+      <button class="secondary"{% if not anilist %} disabled title="Connect AniList in Settings first"{% endif %}>Save</button>
+    </div>
+  </form>
+  {% if status_note %}<p class="notice {{ 'ok' if status_ok else 'err' }} small" role="status">{{ status_note }}</p>{% endif %}
+  <hr class="panel-rule">
+{% elif add %}
+  <form class="list-add" hx-post="/series/{{ kind }}/{{ ident }}/add" hx-target="#series-verdict" hx-swap="outerHTML">
+    <h2>Add to AniList</h2>
+    <div class="field-row">
+      <label for="add-status" class="visually-hidden">Status</label>
+      <select id="add-status" name="status"{% if not anilist %} disabled{% endif %}>
+        {% for code, label in add_statuses %}<option value="{{ code }}"{% if code == add.default_status %} selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+      <label for="add-progress" class="visually-hidden">Chapters read</label>
+      <input id="add-progress" name="progress" type="number" min="0"{% if add.chapters %} max="{{ add.chapters }}"{% endif %} value="{{ add.progress }}" inputmode="numeric">
+    </div>
+    <p class="muted small">{% if add.proposed is not none %}Chapters read, from your MangaDex reads{% if add.over_total %} (capped at AniList's {{ add.chapters }}){% endif %}.{% else %}Chapters read: nothing read on MangaDex yet.{% endif %}</p>
+    <button{% if not anilist %} disabled title="Connect AniList in Settings first"{% endif %}>Add to AniList</button>
+  </form>
+  {% if status_note %}<p class="notice {{ 'ok' if status_ok else 'err' }} small" role="status">{{ status_note }}</p>{% endif %}
+  <hr class="panel-rule">
+{% endif %}
+{% if oob_yours %}{% include "_series_yours.html" %}{% endif %}
+{% if s.entry %}
   {%- set current = s.entry.score / 10 if s.entry.score else none -%}
   {%- set band = "liked" if current and current >= 6.8 else "fine" if current and current >= 4 else "disliked" if current else "" -%}
   <h2>Your score</h2>

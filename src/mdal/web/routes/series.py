@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from typing import Any
 
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
@@ -12,9 +13,12 @@ from mdal.clients.myanimelist import MalError
 from mdal.recommend.feedback import VERDICTS
 from mdal.recommend.ratings import rate
 from mdal.recommend.series import series_url
-from mdal.sync.list_edit import ListEditError, read_notes, save_notes
+from mdal.sync import add_entry
+from mdal.sync.list_edit import EDIT_STATUSES, ListEditError, read_notes, save_notes, set_status
 from mdal.sync.list_edit import save_scores
-from mdal.sync.mal_list_edit import mirror_scores
+from mdal.sync.mal_list_edit import mirror_scores, mirror_status, on_mal
+from mdal.sync.orchestrator import refresh_item
+from mdal.sync.rules import STATUS_LABELS
 from mdal.sync.mal_writer import MalCommentsError, save_comments
 from mdal.recommend import ranking
 from mdal.web.app import get_services, render, templates
@@ -42,8 +46,7 @@ def series_page(request: Request, kind: str, ident: str) -> HTMLResponse:
     if s is None:
         raise HTTPException(404, "Shiori doesn't know this series yet.")
     svc = get_services(request)
-    return render(request, "series.html", {"s": s, "verdicts": VERDICTS, "anilist": bool(svc.anilist_token()),
-                                           "mal_default": svc.mirror_to_mal(), "score_words": SCORE_WORDS})
+    return render(request, "series.html", {"s": s, "mal_default": svc.mirror_to_mal(), **panel_context(svc, s)})
 
 
 # async: the lookups await the API clients on the event loop.
@@ -73,14 +76,84 @@ def series_rate(request: Request, kind: str, ident: str, verdict: str = Form("")
     return verdict_panel(request, key)
 
 
+def panel_context(svc: Any, s: dict[str, Any]) -> dict[str, Any]:
+    """What the side panel needs besides the series: statuses to pick, or an add-to-AniList proposal."""
+    add = add_entry.proposal(svc.repo, s["md_id"]) if not s["entry"] and s["md_id"] else None
+    return {"verdicts": VERDICTS, "anilist": bool(svc.anilist_token()), "score_words": SCORE_WORDS,
+            "list_statuses": [(code, STATUS_LABELS[code]) for code in EDIT_STATUSES], "add": add,
+            "add_statuses": [(code, STATUS_LABELS[code]) for code in add_entry.ADD_STATUSES]}
+
+
 def verdict_panel(request: Request, key: str, **extra) -> HTMLResponse:
     svc = get_services(request)
-    return templates.TemplateResponse(request, "_series_verdict.html", {
-        "s": svc.series.view(key), "verdicts": VERDICTS, "anilist": bool(svc.anilist_token()),
-        "score_words": SCORE_WORDS, **extra})
+    s = svc.series.view(key)
+    return templates.TemplateResponse(request, "_series_verdict.html", {"s": s, **panel_context(svc, s), **extra})
 
 
 # async: awaits the AniList and MyAnimeList clients.
+@router.post("/series/{kind}/{ident}/status", response_class=HTMLResponse)
+async def series_status(request: Request, kind: str, ident: str, status: str = Form(...)) -> HTMLResponse:
+    """Set the status of a series on your list (and on MyAnimeList when list edits are mirrored there)."""
+    key = series_key(kind, ident)
+    svc = get_services(request)
+    s = svc.series.view(key)
+    if s is None or not s["entry"]:
+        raise HTTPException(404, "This series isn't on your AniList list.")
+    if status not in EDIT_STATUSES:
+        raise HTTPException(400, "That status can't be set here.")
+
+    def answer(note: str, ok: bool) -> HTMLResponse:
+        return verdict_panel(request, key, status_note=note, status_ok=ok, oob_yours=True)
+
+    if status == s["entry"]["status_code"]:
+        return answer(f"Already {STATUS_LABELS[status]}.", True)
+    if svc.orchestrator.lock.locked():
+        return answer("A sync is running; change the status after it finishes.", False)
+    media_id = s["al_id"]
+    try:
+        saved = await set_status(svc.anilist, svc.repo, media_id, status)
+    except (ListEditError, AniListError) as exc:
+        return answer(f"AniList didn't save it: {exc}", False)
+    note = f"Marked {STATUS_LABELS[status]} on AniList"
+    if saved.get("progress") is not None and saved["progress"] != s["entry"]["progress"]:
+        note += f" (it set progress to {saved['progress']})"
+    if svc.mirror_to_mal() and media_id in on_mal(svc.repo, [media_id]):
+        try:
+            problem = await mirror_status(svc.mal, svc.repo, media_id, status)
+        except MalError as exc:
+            problem = str(exc)
+        if problem:
+            return answer(f"{note}; MyAnimeList: {problem}.", False)
+        note += " and MyAnimeList"
+    return answer(note + ".", True)
+
+
+@router.post("/series/{kind}/{ident}/add", response_class=HTMLResponse)
+async def series_add(request: Request, kind: str, ident: str, status: str = Form(...),
+                     progress: int = Form(...)) -> HTMLResponse:
+    """Add a matched series to your AniList list (the same add as Matches → Unlisted)."""
+    key = series_key(kind, ident)
+    svc = get_services(request)
+    s = svc.series.view(key)
+    if s is None or s["entry"] or not s["md_id"]:
+        raise HTTPException(404, "This series can't be added from here.")
+
+    def answer(note: str, ok: bool) -> HTMLResponse:
+        return verdict_panel(request, key, status_note=note, status_ok=ok, oob_yours=ok)
+
+    if svc.orchestrator.lock.locked():
+        return answer("A sync is running; add it after it finishes.", False)
+    try:
+        entry = await add_entry.add(svc.repo, svc.anilist, s["md_id"], status, progress, svc.orchestrator.user_id)
+    except add_entry.AddEntryError as exc:
+        return answer(str(exc), False)
+    except AniListError as exc:
+        return answer(f"AniList error: {exc}", False)
+    refresh_item(svc.repo, s["md_id"])
+    label = STATUS_LABELS.get(entry["status"], entry["status"])
+    return answer(f"Added to AniList as {label}, progress {entry['progress']}.", True)
+
+
 @router.post("/series/{kind}/{ident}/score", response_class=HTMLResponse)
 async def series_score(request: Request, kind: str, ident: str, score: str = Form("")) -> HTMLResponse:
     """A score for a series on your list, saved to AniList (and MyAnimeList when mirroring). A ranked series

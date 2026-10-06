@@ -538,6 +538,12 @@ button.prompt-chip:focus-visible { outline: 2px solid var(--accent); outline-off
 .series-tags li.genre { background: var(--accent-soft); color: var(--fg); }
 .series-verdict { display: flex; flex-direction: column; gap: .5rem; }
 .series-verdict h2 { font-size: .95rem; }
+.list-status, .list-add { display: flex; flex-direction: column; gap: .45rem; }
+.field-row { display: flex; gap: .4rem; }
+.field-row select { flex: 1; min-width: 0; }
+.list-add input[type=number] { width: 4.5rem; flex: none; }
+.list-add > button { align-self: stretch; justify-content: center; }
+.panel-rule { border: 0; border-top: 1px solid var(--line); margin: .35rem 0 .2rem; width: 100%; }
 .series-verdict h3.verdict-sub { font-size: .85rem; margin-top: .6rem; padding-top: .8rem; border-top: 1px solid var(--line); }
 .verdict-buttons { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; }
 button.verdict { background: var(--surface); color: var(--fg); border: 1px solid var(--line-strong); padding: .28rem .6rem; font-size: .84rem; font-weight: 500; }

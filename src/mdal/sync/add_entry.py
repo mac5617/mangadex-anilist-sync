@@ -45,39 +45,54 @@ class NotListedRow:
 
 def not_listed_rows(repo: Repo) -> list[NotListedRow]:
     """Matched series whose media is not on the list, with a proposed progress from the latest read data."""
-    rows: list[NotListedRow] = []
     mapped = repo.not_on_list()
     media = repo.media([m["al_media_id"] for m in mapped])
     md_rows = {r["md_id"]: r for r in repo.md_manga()}
-    for m in mapped:
-        md, al = md_rows[m["md_id"]], media.get(m["al_media_id"])
-        reads = repo.read_chapters(m["md_id"])
-        chapters = [r["chapter"] for r in reads if r["missing"] in (0, None) and r["chapter"] is not None]
-        al_info = AlMediaInfo(al["chapters"] if al else None, al["status"] if al else None)
-        md_info = MdInfo(md["pub_status"], md["last_chapter"], bool(md["chapter_numbers_reset"]), md["reading_status"])
-        d = evaluate(chapters, len(reads) - len(chapters), None, al_info, md_info, repo.get_setting("jump_limit"))
-        proposed = d.md_progress
-        total = al_info.chapters
-        over = proposed is not None and total is not None and proposed > total
-        progress = (total if over else proposed) or 0
-        title = titles.pick(al["romaji"], al["english"], al["native"]) if al else None
-        rows.append(NotListedRow(
-            md_id=m["md_id"],
-            md_title=md["title"],
-            md_url=f"https://mangadex.org/title/{m['md_id']}",
-            md_cover_file=md["cover_file"],
-            media_id=m["al_media_id"],
-            al_title=title or f"AniList {m['al_media_id']}",
-            al_url=(al["site_url"] if al else None) or f"https://anilist.co/manga/{m['al_media_id']}",
-            cover=al["cover_url"] if al else None,
-            chapters=total,
-            proposed=proposed,
-            progress=progress,
-            over_total=over,
-            default_status="COMPLETED" if completion_default(al_info, md_info, progress) else "CURRENT",
-            unresolved=d.unresolved,
-        ))
-    return rows
+    return [_row(repo, m, md_rows[m["md_id"]], media.get(m["al_media_id"])) for m in mapped]
+
+
+def proposal(repo: Repo, md_id: str) -> NotListedRow | None:
+    """The add proposal for one series (series page), or None when it can't be added from here."""
+    mapping = repo.get_mapping(md_id)
+    if mapping is None or mapping["state"] not in ("auto", "confirmed") or mapping["al_media_id"] is None:
+        return None
+    if mapping["al_media_id"] in repo.al_entries():
+        return None
+    md = next((r for r in repo.md_manga() if r["md_id"] == md_id), None)
+    if md is None:
+        return None
+    m = {"md_id": md_id, "al_media_id": mapping["al_media_id"]}
+    return _row(repo, m, md, repo.media([mapping["al_media_id"]]).get(mapping["al_media_id"]))
+
+
+def _row(repo: Repo, m: Any, md: Any, al: Any) -> NotListedRow:
+    """One matched series not on the list: progress proposed from your reads, capped at AniList's total."""
+    reads = repo.read_chapters(m["md_id"])
+    chapters = [r["chapter"] for r in reads if r["missing"] in (0, None) and r["chapter"] is not None]
+    al_info = AlMediaInfo(al["chapters"] if al else None, al["status"] if al else None)
+    md_info = MdInfo(md["pub_status"], md["last_chapter"], bool(md["chapter_numbers_reset"]), md["reading_status"])
+    d = evaluate(chapters, len(reads) - len(chapters), None, al_info, md_info, repo.get_setting("jump_limit"))
+    proposed = d.md_progress
+    total = al_info.chapters
+    over = proposed is not None and total is not None and proposed > total
+    progress = (total if over else proposed) or 0
+    title = titles.pick(al["romaji"], al["english"], al["native"]) if al else None
+    return NotListedRow(
+        md_id=m["md_id"],
+        md_title=md["title"],
+        md_url=f"https://mangadex.org/title/{m['md_id']}",
+        md_cover_file=md["cover_file"],
+        media_id=m["al_media_id"],
+        al_title=title or f"AniList {m['al_media_id']}",
+        al_url=(al["site_url"] if al else None) or f"https://anilist.co/manga/{m['al_media_id']}",
+        cover=al["cover_url"] if al else None,
+        chapters=total,
+        proposed=proposed,
+        progress=progress,
+        over_total=over,
+        default_status="COMPLETED" if completion_default(al_info, md_info, progress) else "CURRENT",
+        unresolved=d.unresolved,
+    )
 
 
 def add_document(status: str) -> str:

@@ -1,0 +1,10 @@
+<p class="series-yours" id="series-yours"{% if oob_yours %} hx-swap-oob="true"{% endif %}>
+  {%- set parts = [] -%}
+  {%- if s.entry -%}
+    {%- set _ = parts.append(s.entry.status) -%}
+    {%- if s.entry.progress %}{% set _ = parts.append(s.entry.progress ~ " ch read") %}{% endif -%}
+    {%- if s.entry.score %}{% set _ = parts.append("scored " ~ (s.entry.score | num)) %}{% endif -%}
+  {%- endif -%}
+  {%- if s.entry %}<span class="badge ok">On your AniList list</span> {{ parts | join(" · ") }}{% endif -%}
+  {%- if s.md_status %}<span class="muted">{% if s.entry %} · {% endif %}MangaDex: {{ s.md_status }}</span>{% endif -%}
+</p>

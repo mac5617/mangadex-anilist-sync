@@ -32,7 +32,8 @@ LIST_FIELDS = "list_status,num_chapters,status"
 LIST_PAGE = 1000          # the documented maximum for user lists
 REFRESH_MARGIN = 24 * 3600  # refresh a day before expiry
 WRITE_STATUSES = ("reading", "completed")  # the only statuses a sync sends
-EDIT_STATUSES = ("on_hold", "dropped")      # the only statuses a list edit sends (List → Stalled)
+# the only statuses a list edit sends (List → Stalled, series pages); never rereading
+EDIT_STATUSES = ("reading", "completed", "on_hold", "dropped", "plan_to_read")
 
 
 class MalError(Exception):
@@ -249,8 +250,8 @@ class MalClient:
         return await self._request("PATCH", f"/manga/{int(mal_id)}/my_list_status", data={"comments": comments})
 
     async def edit_entry(self, mal_id: int, *, score: int | None = None, status: str | None = None) -> dict[str, Any]:
-        """A list edit outside syncs: a score (1-10) or on_hold/dropped. Callers must check the entry is on your
-        list first: MyAnimeList creates the entry when it isn't."""
+        """A list edit outside syncs: a score (1-10) or one of EDIT_STATUSES. Callers must check the entry is on
+        your list first: MyAnimeList creates the entry when it isn't."""
         form: dict[str, Any] = {}
         if score is not None:
             if not 1 <= int(score) <= 10:

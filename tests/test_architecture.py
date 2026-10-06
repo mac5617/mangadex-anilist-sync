@@ -81,8 +81,9 @@ def test_mal_writer_status_literals():
 
 def test_list_edit_status_literals():
     text = (SRC / "sync" / "list_edit.py").read_text(encoding="utf-8")
-    # Outside syncs, the only statuses Shiori sets are Paused and Dropped (List → Stalled).
-    assert set(re.findall(r"\b(COMPLETED|CURRENT|PLANNING|PAUSED|DROPPED|REPEATING)\b", text)) == {"PAUSED", "DROPPED"}
+    # Outside syncs, statuses are set by hand (Stalled, series pages): never Rereading.
+    assert set(re.findall(r"\b(COMPLETED|CURRENT|PLANNING|PAUSED|DROPPED|REPEATING)\b", text)) == {
+        "CURRENT", "COMPLETED", "PAUSED", "DROPPED", "PLANNING"}
     assert "mediaId:" not in text   # entries are addressed by id only, so nothing can be created
 
 
@@ -96,7 +97,7 @@ def test_mal_comments_only_from_mal_writer():
 
 def test_mal_list_edit_literals():
     text = (SRC / "sync" / "mal_list_edit.py").read_text(encoding="utf-8")
-    # A list edit only ever sets on_hold or dropped on MyAnimeList, and only for entries it read first.
+    # A list edit sets the status you picked, and only on entries it read first (never rereading).
     sent = set(re.findall(r'"(reading|completed|on_hold|dropped|plan_to_read)"', text))
-    assert sent == {"on_hold", "dropped"}
+    assert sent == {"reading", "completed", "on_hold", "dropped", "plan_to_read"} and "is_rereading" not in text
     assert "my_list_status(" in text and "update_list_status" not in text and "update_comments" not in text

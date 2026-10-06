@@ -64,10 +64,11 @@ def test_stalled_and_binge():
     assert [(e["media_id"], e["left"]) for e in ready] == [(3, 5), (1, 30), (4, None)]
 
 
-def test_list_edit_only_sends_paused_or_dropped():
-    assert "status: PAUSED" in status_document("PAUSED")
-    with pytest.raises(ListEditError):
-        status_document("COMPLETED")
+def test_list_edit_status_whitelist():
+    assert "status: PAUSED" in status_document("PAUSED") and "status: COMPLETED" in status_document("COMPLETED")
+    for refused in ("REPEATING", "COMPLETED) { id } x: SaveMediaListEntry(id: 1", ""):
+        with pytest.raises(ListEditError):
+            status_document(refused)
 
 
 # ---- pages, with a fake AniList that records what's sent ----------------------------------------------
@@ -87,7 +88,8 @@ class FakeLists:
                 data[f"m{i}"] = {"id": v[f"e{i}"], "mediaId": 0, "status": "COMPLETED", "score": v[f"s{i}"]}
         else:
             status = re.search(r"status: (\w+)", body["query"]).group(1)
-            data["SaveMediaListEntry"] = {"id": v["e"], "mediaId": 0, "status": status, "score": 0}
+            data["SaveMediaListEntry"] = {"id": v["e"], "mediaId": 0, "status": status, "score": 0,
+                                          "progress": 100 if status == "COMPLETED" else None}  # AniList fills in the total
         return httpx.Response(200, json={"data": data})
 
 
@@ -190,3 +192,20 @@ def test_series_page_score_and_notes_for_any_series(services, lists):
         assert "Try after finishing Berserk" in c.get("/series/al/50").text
         c.post("/series/al/50/notes", data={"notes": ""})
         assert services.repo.series_note("al:50") is None
+
+
+def test_series_page_sets_status(services, lists):
+    with TestClient(create_app(services), follow_redirects=False) as c:
+        page = c.get("/series/al/6").text
+        assert "On your list" in page and '<option value="CURRENT" selected>Reading</option>' in page
+        assert "REPEATING" not in page
+        done = c.post("/series/al/6/status", data={"status": "COMPLETED"}).text
+        assert "Marked Completed on AniList (it set progress to 100)." in done
+        assert 'id="series-yours" hx-swap-oob="true"' in done and "Completed · 100 ch read" in done   # header follows
+        entry = services.repo.al_entries()[6]
+        assert (entry["status"], entry["progress"]) == ("COMPLETED", 100)
+        sent = lists.sent[-1]["query"]
+        assert "SaveMediaListEntry(id: $e, status: COMPLETED)" in sent and "mediaId:" not in sent
+        assert "Already Completed." in c.post("/series/al/6/status", data={"status": "COMPLETED"}).text
+        assert c.post("/series/al/6/status", data={"status": "REPEATING"}).status_code == 400
+        assert c.post("/series/al/99/status", data={"status": "PAUSED"}).status_code == 404

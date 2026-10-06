@@ -1,10 +1,11 @@
-"""List edits mirrored to MyAnimeList: scores (List → Rank) and Paused/Dropped (List → Stalled).
+"""List edits mirrored to MyAnimeList: scores (List → Rank), Paused/Dropped (List → Stalled) and the status
+picked on a series page.
 
 The AniList edit (sync/list_edit.py) comes first; this repeats it on MyAnimeList for series on your
 MAL list. Rules:
 - only an entry already on your MyAnimeList list is edited: each edit reads the entry first
   (MyAnimeList's save would otherwise create it), so an edit costs 2 requests;
-- it sends only a score (MyAnimeList scores are whole numbers, 1-10) or the status on_hold or dropped;
+- it sends only a score (MyAnimeList scores are whole numbers, 1-10) or one of the statuses in MAL_STATUS;
 - a score whose whole number didn't change isn't sent;
 - every change is logged in list_edit with site 'mal'.
 """
@@ -19,7 +20,8 @@ from mdal.db.repo import Repo
 
 log = logging.getLogger(__name__)
 
-MAL_STATUS = {"PAUSED": "on_hold", "DROPPED": "dropped"}
+MAL_STATUS = {"CURRENT": "reading", "COMPLETED": "completed", "PAUSED": "on_hold", "DROPPED": "dropped",
+              "PLANNING": "plan_to_read"}
 
 
 def mal_score(score_100: int) -> int:
@@ -70,7 +72,7 @@ async def mirror_scores(mal: MalClient, repo: Repo, scores: dict[int, int]) -> t
 
 
 async def mirror_status(mal: MalClient, repo: Repo, media_id: int, status: str) -> str | None:
-    """Repeat Paused/Dropped on MyAnimeList. Returns None when done or not applicable, else why it failed."""
+    """Repeat a status change on MyAnimeList. Returns None when done or not applicable, else why it failed."""
     if status not in MAL_STATUS:
         raise ValueError(f"refusing to mirror status {status!r}")
     ids = on_mal(repo, [media_id])
