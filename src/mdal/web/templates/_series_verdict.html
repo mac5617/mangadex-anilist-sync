@@ -22,18 +22,18 @@
   </form>
   {% if score_note %}<p class="notice {{ 'ok' if score_ok else 'err' }} small" role="status">{{ score_note }}</p>{% endif %}
   <p class="small"><a href="/list/rank?media_id={{ s.al_id }}">{{ "Rank it again by comparing" if s.ranked else "Rank it by comparing" }}</a></p>
-{% else %}
-  <h2>Your rating</h2>
+{% endif %}
+{%- set choices = verdicts if not s.entry else {"loved": verdicts.loved, "liked": verdicts.liked, "disliked": verdicts.disliked} %}
+  {% if s.entry %}<h3 class="verdict-sub">How it felt</h3>{% else %}<h2>Your rating</h2>{% endif %}
   {% if s.verdict %}<p class="small"><strong>{{ s.verdict.label }}</strong>
     <span class="muted">· {% if s.verdict.source == "ask" %}from Ask{% elif s.verdict.source == "hide" %}from Not interested{% else %}saved{% endif %} {{ s.verdict.at | when }}</span></p>
-  {% else %}<p class="muted small">Rate it and recommendations learn from it.</p>{% endif %}
+  {% elif not s.entry %}<p class="muted small">Rate it and recommendations learn from it.</p>{% endif %}
   <div class="verdict-buttons" role="group" aria-label="Your rating">
-    {% for v, label in verdicts.items() %}
+    {% for v, label in choices.items() %}
     <button type="button" class="verdict{% if s.verdict and s.verdict.verdict == v %} chosen{% endif %}" aria-pressed="{{ 'true' if s.verdict and s.verdict.verdict == v else 'false' }}"
       hx-post="/series/{{ kind }}/{{ ident }}/rate" hx-vals='{"verdict": "{{ v }}"}' hx-target="#series-verdict" hx-swap="outerHTML">{{ label }}</button>
     {% endfor %}
     {% if s.verdict %}<button type="button" class="link-button small" hx-post="/series/{{ kind }}/{{ ident }}/rate" hx-vals='{"verdict": "clear"}'
       hx-target="#series-verdict" hx-swap="outerHTML">Clear rating</button>{% endif %}
   </div>
-{% endif %}
 </div>

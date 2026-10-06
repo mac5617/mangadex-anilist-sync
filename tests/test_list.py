@@ -173,6 +173,10 @@ def test_series_page_score_and_notes_for_any_series(services, lists):
     with TestClient(create_app(services)) as c:
         page = c.get("/series/al/2").text
         assert "Your score" in page and "#1 in “I liked it”" in page
+        # list series keep Loved / Liked / Didn't like beside the score (Not interested and Read it don't apply)
+        assert "How it felt" in page and '"verdict": "liked"' in page and '"verdict": "not_interested"' not in page
+        liked = c.post("/series/al/2/rate", data={"verdict": "liked"}).text
+        assert "Your score" in liked and 'class="verdict chosen" aria-pressed="true"' in liked
         done = c.post("/series/al/2/score", data={"score": "7.5"}).text
         assert "Saved 7.5/10 to AniList." in done and services.repo.al_entries()[2]["score"] == 75
         assert 2 not in {r["media_id"] for r in services.repo.ranking()}       # typed score: out of the ranking
