@@ -90,3 +90,58 @@ def test_resume_button_and_endpoint(client, services, run_id, fake):
 
 def test_resume_rejected_for_diffed_run(client, run_id):
     assert client.post(f"/sync/{run_id}/resume").status_code == 409
+
+
+def mal_run(services):
+    """A MyAnimeList sync waiting for approval, beside the AniList one: one update for series "w"."""
+    repo = services.repo
+    rid = repo.create_run("diffed", "mal")
+    repo.replace_items(rid, [{"run_id": rid, "md_id": "w", "al_media_id": 1, "al_entry_id": 9001, "mal_id": 9001,
+                              "al_progress": 5, "md_progress": 12, "action": "write", "reason": "read to 12 on MangaDex"}])
+    return rid
+
+
+def test_both_sites_on_one_page_and_one_approval(client, services, run_id):
+    m = mal_run(services)
+    written = []
+
+    async def fake_write(rid):                       # stands in for the AniList and MyAnimeList writers
+        written.append(rid)
+        services.repo.update_run(rid, state="done", finished_at="t")
+
+    services.orchestrator._write_phase = fake_write
+    page = client.get(f"/sync/{m}").text
+    assert "Changes to approve" in page and "Write selected to AniList and MyAnimeList" in page
+    assert f'value="{run_id}:w"' in page and f'value="{m}:w"' in page        # the same series, once per site
+    est = client.post(f"/sync/{run_id}/estimate", data={"sel": [f"{run_id}:w", f"{m}:w"]}).text
+    assert "2 selected" in est and "AniList and MyAnimeList requests" in est
+
+    response = client.post(f"/sync/{m}/approve", data={"sel": [f"{run_id}:w", f"{m}:w"]})
+    assert response.status_code == 303
+    for _ in range(50):
+        if len(written) == 2:
+            break
+        client.get("/sync/status")
+    assert written == [run_id, m]                                              # AniList first, then MyAnimeList
+    assert services.repo.get_run(run_id)["approved_at"] and services.repo.get_run(m)["approved_at"]
+
+
+def test_a_site_with_nothing_ticked_is_closed(client, services, run_id):
+    m = mal_run(services)
+    written = []
+
+    async def fake_write(rid):
+        written.append(rid)
+        services.repo.update_run(rid, state="done", finished_at="t")
+
+    services.orchestrator._write_phase = fake_write
+    assert client.post(f"/sync/{run_id}/approve", data={"sel": [f"{m}:w"]}).status_code == 303
+    for _ in range(50):
+        if written:
+            break
+        client.get("/sync/status")
+    assert written == [m]
+    a = services.repo.get_run(run_id)
+    assert (a["state"], a["phase_detail"]) == ("done", "nothing selected to write")
+    nothing = client.post(f"/sync/{m}/approve", data={})                        # nothing open any more
+    assert nothing.status_code == 400

@@ -42,7 +42,7 @@ def test_dashboard_with_active_run_polls(client, services, mock):
 def test_dashboard_with_diffed_run(client, services, mock):
     run_id = seed_diffed_run(services.repo)
     html = client.get("/").text
-    assert f'href="/sync/{run_id}"' in html and f"AniList changes (sync #{run_id})" in html
+    assert f'href="/sync/{run_id}"' in html and "Review changes" in html
     assert 'hx-trigger="every 2s"' not in html
     assert len(mock.calls) == 0
 

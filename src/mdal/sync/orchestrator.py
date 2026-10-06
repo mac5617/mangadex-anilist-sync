@@ -79,9 +79,11 @@ RESUMABLE = ("writing", "verifying", "failed", "halted")
 
 
 def validate_approval(
-    repo: Repo, run_id: int, selected: Iterable[str], completing: Iterable[str], overrides: Iterable[str]
+    repo: Repo, run_id: int, selected: Iterable[str], completing: Iterable[str], overrides: Iterable[str],
+    allow_empty: bool = False,
 ) -> list[tuple[str, int]]:
-    """Returns [(md_id, status_approved)] to approve, or raises ApprovalError."""
+    """Returns [(md_id, status_approved)] to approve, or raises ApprovalError. `allow_empty`: a site with nothing
+    ticked, when several sites are approved together."""
     run = repo.get_run(run_id)
     if run is None or run["state"] != "diffed":
         raise ApprovalError("Only a sync that is waiting for approval can be approved.")
@@ -101,7 +103,7 @@ def validate_approval(
         if status_only and not completes:
             continue  # nothing to send
         approved.append((md_id, completes))
-    if not approved:
+    if not approved and not allow_empty:
         raise ApprovalError("Nothing selected to write.")
     return approved
 
@@ -356,7 +358,7 @@ class SyncOrchestrator:
 
     async def start_sync(self, targets: list[str] | None = None) -> int:
         """Sync each site in turn: AniList, then MyAnimeList, which reuses the MangaDex read the first one did.
-        Each site's changes are reviewed and approved on their own."""
+        Their changes are reviewed together and approved at once (approve_many)."""
         targets = [t for t in (targets if targets is not None else self.sync_targets()) if t in TARGETS]
         if not targets:
             raise SyncStateError("Turn on at least one connected site under Settings → Sync.")
@@ -390,21 +392,47 @@ class SyncOrchestrator:
         self, run_id: int, selected: Iterable[str], completing: Iterable[str], overrides: Iterable[str]
     ) -> int:
         """Validate, mark items pending and start writing. Returns the number of approved items."""
+        return await self.approve_many({run_id: (selected, completing, overrides)})
+
+    async def approve_many(self, choices: dict[int, tuple[Iterable[str], Iterable[str], Iterable[str]]]) -> int:
+        """Approve the changes of several sites at once ({run_id: (selected, completing, overrides)}), then write
+        them one site after another (AniList first), each re-checked and verified as on its own. A site with
+        nothing ticked is closed without writing. Returns the number of approved items."""
         if self.lock.locked() or (self.task and not self.task.done()):
             raise SyncAlreadyRunning("a sync is already running")
-        approved = validate_approval(self.repo, run_id, selected, completing, overrides)
+        several = len(choices) > 1
+        plan = {run_id: validate_approval(self.repo, run_id, *chosen, allow_empty=several)
+                for run_id, chosen in choices.items()}
+        if not any(plan.values()):
+            raise ApprovalError("Nothing selected to write.")
+        order = sorted(plan, key=lambda r: (TARGETS.index(self.repo.get_run(r)["target"]), r))
         await self.lock.acquire()
         try:
-            self.repo.update_items(run_id, [
-                (md_id, {"approved": 1, "write_state": "pending", "status_approved": completes})
-                for md_id, completes in approved
-            ])
-            self.repo.update_run(run_id, state="writing", approved_at=now_iso(), phase_detail="starting")
+            for run_id in order:
+                if not plan[run_id]:
+                    self.repo.update_run(run_id, state="done", approved_at=now_iso(), finished_at=now_iso(),
+                                         phase_detail="nothing selected to write")
+                    continue
+                self.repo.update_items(run_id, [
+                    (md_id, {"approved": 1, "write_state": "pending", "status_approved": completes})
+                    for md_id, completes in plan[run_id]
+                ])
+                self.repo.update_run(run_id, state="writing", approved_at=now_iso(),
+                                     phase_detail="starting" if run_id == order[0] else "waiting for the site before")
         except BaseException:
             self.lock.release()
             raise
-        self.task = asyncio.create_task(self._guarded(run_id, self._write_phase))
-        return len(approved)
+        to_write = [r for r in order if plan[r]]
+        self.task = asyncio.create_task(self._write_all(to_write))
+        return sum(len(v) for v in plan.values())
+
+    async def _write_all(self, run_ids: list[int]) -> None:
+        """Write approved sites in turn under one lock; one site failing doesn't stop the next."""
+        try:
+            for run_id in run_ids:
+                await self._run_body(run_id, self._write_phase)
+        finally:
+            self.lock.release()
 
     def can_resume(self, run_id: int) -> bool:
         r = self.repo.get_run(run_id)
@@ -469,7 +497,8 @@ class SyncOrchestrator:
             s.mangadex.request_counter = None
             s.mal.request_counter = None
 
-    async def _guarded(self, run_id: int, body: Callable[[int], Awaitable[None]]) -> None:
+    async def _run_body(self, run_id: int, body: Callable[[int], Awaitable[None]]) -> None:
+        """One phase of one run, with its requests counted; errors end that run (halted or failed)."""
         try:
             with self._counting(run_id):
                 await body(run_id)
@@ -479,6 +508,10 @@ class SyncOrchestrator:
         except Exception as exc:
             log.exception("sync %s failed", run_id)
             self.repo.update_run(run_id, state="failed", error=failure_message(exc), finished_at=now_iso())
+
+    async def _guarded(self, run_id: int, body: Callable[[int], Awaitable[None]]) -> None:
+        try:
+            await self._run_body(run_id, body)
         finally:
             self.lock.release()
             # Sync covering both sites: once this site's changes are ready, read the next one's.

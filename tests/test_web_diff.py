@@ -54,11 +54,11 @@ def test_filters(client, run_id):
 
 def test_checkbox_states(client, run_id):
     html = client.get(f"/sync/{run_id}").text
-    assert re.search(r'name="sel" value="w"[^>]*checked', row(html, "w"))
+    assert re.search(r'name="sel" value="\d+:w"[^>]*checked', row(html, "w"))
     implausible = row(html, "i")
     assert 'name="sel"' in implausible and "checked" not in implausible and "disabled" not in implausible
     exceeds = row(html, "x")
-    assert re.search(r'name="sel" value="x"[^>]*disabled', exceeds)
+    assert re.search(r'name="sel" value="\d+:x"[^>]*disabled', exceeds)
     assert 'name="sel"' not in row(html, "k")
 
 
@@ -66,7 +66,7 @@ def test_status_column(client, run_id):
     html = client.get(f"/sync/{run_id}").text
     c = row(html, "c")
     assert "Reading → Completed (AniList: finished, 120 ch)" in c
-    assert re.search(r'name="mc" value="c"\s*checked', c)
+    assert re.search(r'name="mc" value="\d+:c"\s*checked', c)
     s = row(html, "s")
     assert "50 (unchanged)" in s
     assert "110 → 120" in c
@@ -89,14 +89,14 @@ def test_writes_and_adds_preselected_flags_not(client, services, run_id):
     services.repo.set_setting("first_write_done", False)  # no longer matters
     html = client.get(f"/sync/{run_id}?f=all").text
     for md_id in ("w", "c", "s"):
-        assert re.search(rf'name="sel" value="{md_id}"[^>]*checked', row(html, md_id))
+        assert re.search(rf'name="sel" value="\d+:{md_id}"[^>]*checked', row(html, md_id))
     assert "checked" not in row(html, "i").split('name="mc"')[0]
     assert "3 selected" in html
 
 
 def test_implausible_rows_have_override(client, run_id):
     html = client.get(f"/sync/{run_id}").text
-    assert 'name="ov" value="i"' in row(html, "i")
+    assert re.search(r'name="ov" value="\d+:i"', row(html, "i"))
     assert 'name="ov"' not in row(html, "w")
 
 
@@ -158,10 +158,10 @@ def test_add_rows(client, services, run_id):
     assert "New entries (2)" in html
     a = row(html, "w2")
     assert "new → 7" in a and "New entry: Reading" in a
-    assert re.search(r'name="sel" value="w2"[^>]*checked', a)
+    assert re.search(r'name="sel" value="\d+:w2"[^>]*checked', a)
     c = row(html, "w3")
     assert "New entry → Completed (AniList: finished, 120 ch); untick to add as Reading" in c
-    assert re.search(r'name="mc" value="w3"\s*checked', c)
+    assert re.search(r'name="mc" value="\d+:w3"\s*checked', c)
 
 
 def test_rows_show_mangadex_cover(client, run_id):

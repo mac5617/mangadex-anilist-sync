@@ -20,9 +20,10 @@
     <p class="notice warn">Sync #{{ resumable }} stopped while writing. Resuming sends only the rows not yet written.</p>
   {% endif %}
   <div class="row">
-    {% for site_name, diff_id in open_diffs %}
-      <a class="button" href="/sync/{{ diff_id }}">{{ site_name }} changes (sync #{{ diff_id }})</a>
-    {% endfor %}
+    {% if open_diffs %}
+      <a class="button" href="/sync/{{ open_diffs[0][1] }}">Review changes</a>
+      <span class="muted small">{{ open_diffs | map("first") | join(" and ") }}, approved together</span>
+    {% endif %}
     {% if resumable and not active %}
       <button hx-post="/sync/{{ resumable }}/resume" hx-target="#sync-status" hx-swap="outerHTML">Resume</button>
     {% endif %}

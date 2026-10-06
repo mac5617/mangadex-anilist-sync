@@ -1,11 +1,16 @@
 {% extends "base.html" %}
-{% block title %}Sync #{{ run.run_id }} · {{ site }}{% endblock %}
+{% block title %}{% if runs | length > 1 %}Changes to approve{% else %}Sync #{{ run.run_id }} · {{ site }}{% endif %}{% endblock %}
 {% block content %}
 {% with section = "sync" %}{% include "_subnav.html" %}{% endwith %}
 <div class="page-head">
   <div>
+    {% if runs | length > 1 %}
+    <h1>Changes to approve {% for r in runs %}<span class="site-tag">{{ site_names[r.target] }}</span> {% endfor %}</h1>
+    {% for r in runs %}{% if r.phase_detail %}<p class="lede"><strong>{{ site_names[r.target] }}</strong> (sync #{{ r.run_id }}): {{ r.phase_detail }}</p>{% endif %}{% endfor %}
+    {% else %}
     <h1>Sync #{{ run.run_id }} <span class="site-tag">{{ site }}</span> <span class="badge state-{{ run.state }}">{{ run.state }}</span></h1>
     {% if run.phase_detail %}<p class="lede">{{ run.phase_detail }}</p>{% endif %}
+    {% endif %}
   </div>
   <div class="page-actions">
     {% if run.state == "diffed" %}
@@ -49,7 +54,8 @@
   {% if approvable %}
   <div class="actions-bar">
     <button type="submit" id="approve" formaction="/sync/{{ run.run_id }}/approve" formmethod="post">Write selected to {{ site }}</button>
-    <span class="muted small">Updates and new entries start selected; flagged rows need a tick and an override.</span>
+    <span class="muted small">Updates and new entries start selected; flagged rows need a tick and an override.{% if runs | length > 1 %}
+      {{ site }} are written one after the other.{% endif %}</span>
   </div>
   {% elif run.approved_at %}
   <p class="muted">This sync has been written. <a href="/history/{{ run.run_id }}">Sync #{{ run.run_id }} results</a></p>

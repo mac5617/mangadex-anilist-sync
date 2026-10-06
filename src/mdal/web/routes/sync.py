@@ -101,6 +101,7 @@ def sync_status(request: Request) -> HTMLResponse:
 
 @dataclass(frozen=True)
 class DiffRow:
+    run_id: int
     md_id: str
     md_title: str
     md_url: str
@@ -147,6 +148,7 @@ def diff_rows(repo: Repo, run_id: int) -> list[DiffRow]:
             status_label = "New entry: Reading"
         selectable = r["action"] in ("write", "add", "flag") and r["flag_kind"] != "exceeds_total"
         rows.append(DiffRow(
+            run_id=run_id,
             md_id=r["md_id"],
             md_title=r["md_title"] or r["md_id"],
             md_url=MANGADEX_TITLE_URL.format(r["md_id"]),
@@ -208,6 +210,49 @@ def default_estimate(repo: Repo, rows: list[DiffRow], target: str = "anilist") -
     )
 
 
+def combine(parts: list[Estimate]) -> Estimate:
+    """Several sites' estimates as one line ("≈ 3 AniList and 5 MyAnimeList requests" reads as the sum)."""
+    if len(parts) == 1:
+        return parts[0]
+    return Estimate(sum(p.selected for p in parts), sum(p.to_complete for p in parts),
+                    sum(p.requests for p in parts), sum(p.seconds for p in parts),
+                    " and ".join(p.site for p in parts))
+
+
+def group(repo: Repo, run: Any) -> list[Any]:
+    """The runs shown on one changes page: every site waiting for approval, or just this run once it's past that."""
+    if run["state"] != "diffed":
+        return [run]
+    return [d for t in TARGETS if (d := open_diff(repo, t))] or [run]
+
+
+def choices(form: Any, runs: list[Any], default_run: int) -> dict[int, tuple[list[str], list[str], list[str]]]:
+    """Form ticks ("run:md_id", or a bare md_id meaning this page's run) per run, for every run on the page."""
+    ids = {r["run_id"] for r in runs}
+    out: dict[int, tuple[list[str], list[str], list[str]]] = {i: ([], [], []) for i in ids}
+    for n, key in enumerate(("sel", "mc", "ov")):
+        for value in form.getlist(key):
+            run_s, sep, md_id = str(value).partition(":")
+            run_id = int(run_s) if sep and run_s.isdigit() else default_run
+            if not sep:
+                md_id = str(value)
+            if run_id in out:
+                out[run_id][n].append(md_id)
+    return out
+
+
+def estimates(repo: Repo, runs: list[Any], picked: dict[int, tuple[list[str], list[str], list[str]]] | None) -> Estimate:
+    parts = []
+    for run in runs:
+        rows = diff_rows(repo, run["run_id"])
+        if picked is None:
+            parts.append(default_estimate(repo, rows, run["target"]))
+        else:
+            sel, mc, _ = picked[run["run_id"]]
+            parts.append(compute_estimate(repo, rows, sel, mc, run["target"]))
+    return combine(parts)
+
+
 def _run_or_404(repo: Repo, run_id: int) -> Any:
     run = repo.get_run(run_id)
     if run is None:
@@ -233,13 +278,17 @@ def _diff_page(request: Request, run_id: int, f: str | None = None, error: str |
     svc = get_services(request)
     repo = svc.repo
     run = _run_or_404(repo, run_id)
-    rows = diff_rows(repo, run_id)
+    runs = group(repo, run)
+    rows = [row for r in runs for row in diff_rows(repo, r["run_id"])]
+    if len(runs) > 1:   # a series' AniList and MyAnimeList rows side by side
+        rows.sort(key=lambda r: (r.md_title.casefold(), [x["run_id"] for x in runs].index(r.run_id)))
     counts = _counts(rows)
     if f not in FILTERS:  # no tab asked for: open on the first one with something in it
         f = next((k for k in ("write", "add", "flag", "skip") if counts[k]), "write")
     return render(request, "diff.html", {
-        "run": run, "rows": rows, "counts": counts, "est": default_estimate(repo, rows, run["target"]),
-        "site": SITE_NAMES[run["target"]],
+        "run": run, "runs": runs, "rows": rows, "counts": counts, "est": estimates(repo, runs, None),
+        "site": " and ".join(SITE_NAMES[r["target"]] for r in runs),
+        "site_names": SITE_NAMES,
         "filter": f,
         "approvable": run["state"] == "diffed",
         "restorable": svc.orchestrator.can_restore(run_id),
@@ -250,10 +299,11 @@ def _diff_page(request: Request, run_id: int, f: str | None = None, error: str |
 def _row_update(request: Request, run_id: int, md_id: str, status_code: int = 200) -> HTMLResponse:
     """The changed row, plus the summary tiles and tab counts swapped out-of-band."""
     repo = get_services(request).repo
-    rows = diff_rows(repo, run_id)
-    row = next((r for r in rows if r.md_id == md_id), None)
+    run = repo.get_run(run_id)
+    rows = [row for r in group(repo, run) for row in diff_rows(repo, r["run_id"])]
+    row = next((r for r in rows if r.run_id == run_id and r.md_id == md_id), None)
     return templates.TemplateResponse(request, "_diff_row_update.html", {
-        "r": row, "run": repo.get_run(run_id), "counts": _counts(rows), "approvable": True,
+        "r": row, "run": run, "counts": _counts(rows), "approvable": True,
     }, status_code=status_code)
 
 
@@ -309,10 +359,10 @@ def diff_page(request: Request, run_id: int, f: str | None = None) -> HTMLRespon
 @router.post("/sync/{run_id}/approve", response_class=HTMLResponse)
 async def approve(request: Request, run_id: int) -> Response:
     svc = get_services(request)
-    _run_or_404(svc.repo, run_id)
+    run = _run_or_404(svc.repo, run_id)
     form = await request.form()
     try:
-        await svc.orchestrator.approve(run_id, form.getlist("sel"), form.getlist("mc"), form.getlist("ov"))
+        await svc.orchestrator.approve_many(choices(form, group(svc.repo, run), run_id))
     except (ApprovalError, SyncAlreadyRunning) as exc:
         return _diff_page(request, run_id, str(form.get("f") or "write"), error=str(exc), status_code=400)
     return RedirectResponse("/", status_code=303)
@@ -334,16 +384,21 @@ async def diff_estimate(request: Request, run_id: int) -> HTMLResponse:
     repo = get_services(request).repo
     run = _run_or_404(repo, run_id)
     form = await request.form()
-    est = compute_estimate(repo, diff_rows(repo, run_id), form.getlist("sel"), form.getlist("mc"), run["target"])
+    runs = group(repo, run)
+    est = estimates(repo, runs, choices(form, runs, run_id))
     return templates.TemplateResponse(request, "_estimate.html", {"est": est})
 
 
 @router.post("/sync/{run_id}/discard", response_class=HTMLResponse)
 def diff_discard(request: Request, run_id: int) -> HTMLResponse:
     svc = get_services(request)
+    run = _run_or_404(svc.repo, run_id)
+    runs = group(svc.repo, run)
     try:
-        svc.orchestrator.discard(run_id)
+        for r in runs:
+            svc.orchestrator.discard(r["run_id"])
     except SyncStateError as exc:
         return render(request, "message.html", {"error": str(exc), "back": f"/sync/{run_id}"}, status_code=409)
-    return render(request, "message.html", {"message": f"Sync #{run_id} discarded. Nothing was written.", "back": "/",
+    names = " and ".join(f"#{r['run_id']}" for r in runs)
+    return render(request, "message.html", {"message": f"Sync {names} discarded. Nothing was written.", "back": "/",
                                             "restore": run_id})
