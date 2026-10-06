@@ -144,6 +144,18 @@ async def test_status_only_progress_moved_is_dropped(fast, fake):
     assert items["md00"]["write_state"] == "dropped"
 
 
+async def test_status_only_keeps_a_higher_count(fast, fake):
+    # marked Completed on MangaDex at 28 while AniList is at 30: send the status, never the lower number
+    run_id = seed(fast, fake, [
+        {"md_progress": 28, "al_progress": 30, "chapters": 36, "set_status": "COMPLETED"},
+        {"md_progress": 8, "al_progress": 2},
+    ])
+    items = await approve_all(fast, run_id)
+    assert items["md00"]["write_state"] == "done"
+    assert {a["id"]: a for a in sent_aliases(fake)}[100] == {"id": 100, "status": "COMPLETED"}
+    assert fake.entry(100)["progress"] == 30 and fake.entry(100)["status"] == "COMPLETED"
+
+
 async def test_progress_plus_completion_becomes_status_only(fast, fake):
     run_id = seed(fast, fake, [
         {"md_progress": 120, "al_progress": 110, "now": 120, "chapters": 120, "set_status": "COMPLETED"},

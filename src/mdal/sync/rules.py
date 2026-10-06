@@ -1,7 +1,9 @@
 """Progress rules (architecture §8). Pure: no I/O, no DB.
 
 This is the core safety logic: never lower progress, never write past a known total,
-flag anything implausible, and only ever propose the status COMPLETED.
+flag anything implausible, and only ever propose the status COMPLETED: when the last chapter read is the
+final one, or when you marked the series Completed on MangaDex yourself (some series run on past the
+ending, so the last chapter read is not always the last chapter).
 """
 
 from __future__ import annotations
@@ -18,6 +20,7 @@ STATUS_LABELS = {
     "DROPPED": "Dropped", "PAUSED": "Paused", "REPEATING": "Rereading",
 }
 OUTLIER_FACTOR, OUTLIER_GAP = 2, 20
+MARKED = "your MangaDex status"   # status_source of a completion you asked for on MangaDex
 
 
 @dataclass(frozen=True)
@@ -40,6 +43,7 @@ class MdInfo:
     pub_status: str | None = None
     last_chapter: str | None = None
     chapter_numbers_reset: bool = False
+    reading_status: str | None = None   # yours on MangaDex: "completed", "reading", ...
 
 
 @dataclass(frozen=True)
@@ -86,6 +90,8 @@ def completion_info(media: AlMediaInfo, md: MdInfo) -> Completion:
 def completion_default(media: AlMediaInfo, md: MdInfo, md_progress: int | None) -> bool:
     """Whether "add to AniList" (story 17) should default to Completed."""
     c = completion_info(media, md)
+    if md.reading_status == "completed" and md_progress is not None and (c.total is None or md_progress <= c.total):
+        return True
     return c.known_complete and md_progress is not None and md_progress == c.total
 
 
@@ -133,10 +139,14 @@ def evaluate(
 
     al = entry.progress if entry else None
     c = completion_info(media, md)
-    complete = c.known_complete and md_progress == c.total and (entry is None or entry.status != "COMPLETED")
+    at_end = c.known_complete and md_progress == c.total
+    # Marked Completed on MangaDex: your call, whatever the totals say (a reread on the list stays a reread).
+    marked = md.reading_status == "completed" and not at_end and (entry is None or entry.status != "REPEATING")
+    complete = (at_end or marked) and (entry is None or entry.status != "COMPLETED")
+    source = c.source if at_end else MARKED
 
     hints: list[str] = []
-    if c.total is not None and md_progress == c.total and not c.known_complete:
+    if c.total is not None and md_progress == c.total and not c.known_complete and not marked:
         hints.append(f"at last known chapter, but {media.source} lists the series as {media.status or 'unknown'}; status unchanged")
     if entry is not None and entry.status == "PLANNING" and not complete:
         hints.append("status is Planning; will remain Planning")
@@ -146,7 +156,7 @@ def evaluate(
             action, reason, md_progress=md_progress, al_progress=al, flag_kind=flag_kind,
             hint="; ".join(hints) or None,
             set_status="COMPLETED" if completing else None,
-            status_source=c.source if completing else None,
+            status_source=source if completing else None,
             unresolved=unresolved, total=c.total,
         )
 
@@ -165,8 +175,10 @@ def evaluate(
 
     # 6. Never lower; status-only completion
     if md_progress <= al:
-        if complete and al == md_progress:
+        if complete and al == md_progress and at_end:
             return item("write", "at final chapter; mark completed")
+        if complete and marked:
+            return item("write", f"marked Completed on MangaDex; {site} has {al}, so only the status changes")
         return item("skip", f"{site} at/ahead", completing=False)
 
     # 7. Totals
@@ -187,6 +199,8 @@ def evaluate(
 
 def completion_label(entry_status: str | None, status_source: str | None, total: int | None, site: str = "AniList") -> str:
     """e.g. "Reading → Completed (AniList: finished, 120 ch)" for the diff screen."""
+    if status_source == MARKED:
+        return f"{_label(entry_status)} → Completed (marked Completed on MangaDex)"
     source = f"{site}: finished, total from MangaDex" if status_source == "MangaDex" else f"{status_source or site}: finished"
     return f"{_label(entry_status)} → Completed ({source}, {total} ch)"
 

@@ -164,7 +164,8 @@ def diff_rows(repo: Repo, run_id: int) -> list[DiffRow]:
             unresolved=r["unresolved_reads"],
             set_status=r["set_status"],
             status_label=status_label,
-            status_only=bool(r["set_status"]) and r["md_progress"] is not None and r["md_progress"] == r["al_progress"],
+            status_only=bool(r["set_status"]) and r["md_progress"] is not None and r["al_progress"] is not None
+            and r["md_progress"] <= r["al_progress"],
             selectable=selectable,
             checked=bool(r["approved"]) if r["write_state"] != "none" else r["action"] in ("write", "add"),
             complete_checked=bool(r["status_approved"]),

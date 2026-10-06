@@ -82,7 +82,7 @@ def recheck(item: Any, adding: bool, entry: Any, site: str = "AniList") -> dict[
     if is_status_only(item):
         if status == "COMPLETED":
             fields.update(write_state="dropped", verify_note=f"dropped: already COMPLETED on {site}")
-        elif now != item["md_progress"]:
+        elif now < item["md_progress"]:   # status-only sends no progress, so a higher count is kept as it is
             fields.update(write_state="dropped", verify_note=f"dropped: {site} progress moved to {now}")
     elif now >= item["md_progress"]:
         if completing and now == item["md_progress"]:

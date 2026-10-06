@@ -54,7 +54,7 @@ def not_listed_rows(repo: Repo) -> list[NotListedRow]:
         reads = repo.read_chapters(m["md_id"])
         chapters = [r["chapter"] for r in reads if r["missing"] in (0, None) and r["chapter"] is not None]
         al_info = AlMediaInfo(al["chapters"] if al else None, al["status"] if al else None)
-        md_info = MdInfo(md["pub_status"], md["last_chapter"], bool(md["chapter_numbers_reset"]))
+        md_info = MdInfo(md["pub_status"], md["last_chapter"], bool(md["chapter_numbers_reset"]), md["reading_status"])
         d = evaluate(chapters, len(reads) - len(chapters), None, al_info, md_info, repo.get_setting("jump_limit"))
         proposed = d.md_progress
         total = al_info.chapters

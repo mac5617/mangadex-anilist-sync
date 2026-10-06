@@ -154,7 +154,7 @@ def _evaluated(
     chapters = [r["chapter"] for r in reads if r["missing"] in (0, None) and r["chapter"] is not None]
     d = evaluate(
         chapters, len(reads) - len(chapters), entry, media,
-        MdInfo(row["pub_status"], row["last_chapter"], bool(row["chapter_numbers_reset"])),
+        MdInfo(row["pub_status"], row["last_chapter"], bool(row["chapter_numbers_reset"]), row["reading_status"]),
         jump_limit, site,
     )
     action, reason = d.action, d.reason

@@ -174,6 +174,46 @@ def test_planning_hint():
     assert ev(["3"], al=5, status="PLANNING").hint == "status is Planning; will remain Planning"
 
 
+# ---- marked Completed on MangaDex (series that run on past the ending) -----------------------------------
+
+DONE_ON_MD = MdInfo(reading_status="completed")
+FIN36 = AlMediaInfo(chapters=36, status="FINISHED")
+
+
+def test_marked_completed_adds_as_completed_before_the_last_chapter():
+    d = ev(["28"], entry=False, media=FIN36, md=DONE_ON_MD)
+    assert (d.action, d.md_progress, d.set_status, d.status_source) == ("add", 28, "COMPLETED", "your MangaDex status")
+    assert "add as Completed at 28" in d.reason
+    assert status_change_label(d, "CURRENT") == "Reading → Completed (marked Completed on MangaDex)"
+
+
+def test_marked_completed_writes_progress_and_status():
+    d = ev(["28"], al=20, media=FIN36, md=DONE_ON_MD)
+    assert (d.action, d.md_progress, d.set_status) == ("write", 28, "COMPLETED")
+
+
+def test_marked_completed_with_anilist_ahead_changes_only_the_status():
+    d = ev(["28"], al=30, media=FIN36, md=DONE_ON_MD)
+    assert (d.action, d.md_progress, d.al_progress, d.set_status) == ("write", 28, 30, "COMPLETED")
+    assert "only the status changes" in d.reason
+
+
+def test_marked_completed_leaves_completed_and_rereads_alone():
+    assert ev(["28"], al=28, status="COMPLETED", media=FIN36, md=DONE_ON_MD).action == "skip"
+    d = ev(["28"], al=28, status="REPEATING", media=FIN36, md=DONE_ON_MD)
+    assert (d.action, d.set_status) == ("skip", None)
+
+
+def test_marked_completed_still_flags_past_the_total():
+    d = ev(["40"], al=20, media=FIN36, md=DONE_ON_MD)
+    assert (d.action, d.flag_kind, d.set_status) == ("flag", "exceeds_total", None)
+
+
+def test_other_mangadex_statuses_change_nothing():
+    d = ev(["28"], entry=False, media=FIN36, md=MdInfo(reading_status="reading"))
+    assert d.set_status is None and "add as Reading at 28" in d.reason
+
+
 # ---- helpers ----------------------------------------------------------------
 
 
@@ -182,6 +222,7 @@ def test_completion_default():
     assert completion_default(FIN100, MdInfo(), 99) is False
     assert completion_default(AlMediaInfo(100, "RELEASING"), MdInfo(), 100) is False
     assert completion_default(FIN_NULL, MD_DONE, 120) is True
+    assert completion_default(AlMediaInfo(36, "FINISHED"), MdInfo(reading_status="completed"), 28) is True
 
 
 def test_status_change_label():
