@@ -16,6 +16,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from mdal import titles
 from mdal.db.repo import Repo
+from mdal.recommend.series import series_url
 from mdal.services import Services
 from mdal.sync.estimate import estimate
 from mdal.sync.orchestrator import (
@@ -103,6 +104,7 @@ class DiffRow:
     md_id: str
     md_title: str
     md_url: str
+    page: str              # the series page in Shiori
     cover: str | None
     al_title: str | None   # the series on the run's site (AniList or MyAnimeList)
     al_url: str | None
@@ -148,6 +150,7 @@ def diff_rows(repo: Repo, run_id: int) -> list[DiffRow]:
             md_id=r["md_id"],
             md_title=r["md_title"] or r["md_id"],
             md_url=MANGADEX_TITLE_URL.format(r["md_id"]),
+            page=series_url(f"al:{r['al_media_id']}" if r["al_media_id"] else f"md:{r['md_id']}"),
             cover=md_cover_url(r["md_id"], r["cover_file"]),
             al_title=title,
             al_url=url,

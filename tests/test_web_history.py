@@ -40,6 +40,7 @@ def test_drill_down_shows_write_state_and_notes(client, services):
     html = client.get(f"/history/{run_id}").text
     row = re.search(r'<tr class="r-write w-done">.*?</tr>', html, re.S).group(0)
     assert "status changed by AniList: CURRENT→COMPLETED" in row and "t1" in row
+    assert 'class="md-title" href="/series/al/1"' in row and 'href="https://mangadex.org/title/w"' in row   # title opens the series page
     assert "not approved" in html
     assert 'name="sel"' not in html  # read-only
     assert 'class="r-skip' not in html and "1 unchanged series not shown." in html   # skipped rows stay out

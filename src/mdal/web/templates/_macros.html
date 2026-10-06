@@ -7,13 +7,16 @@
   {%- else %}<span class="thumb placeholder{% if size %} {{ size }}{% endif %}" aria-hidden="true">no cover</span>{% endif %}
 {%- endmacro %}
 
-{% macro series(md_title, md_url, cover, al_title=None, al_url=None, extra=None, site="AniList") -%}
+{% macro series(md_title, md_url, cover, al_title=None, al_url=None, extra=None, site="AniList", page=None) -%}
   <div class="series">
     {{ thumb(cover) }}
     <div class="series-text">
-      <a class="md-title" href="{{ md_url }}" target="_blank" rel="noopener noreferrer">{{ md_title }}</a>
-      {% if al_url %}<span class="al-title">{{ site }}: <a href="{{ al_url }}" target="_blank" rel="noopener noreferrer">{{ al_title or "open" }}</a></span>
-      {% else %}<span class="al-title">{{ "No AniList match" if site == "AniList" else "No " ~ site ~ " link" }}</span>{% endif %}
+      {% if page %}<a class="md-title" href="{{ page }}">{{ md_title }}</a>
+      {% else %}<a class="md-title" href="{{ md_url }}" target="_blank" rel="noopener noreferrer">{{ md_title }}</a>{% endif %}
+      {% if al_url %}<span class="al-title">{{ site }}: <a href="{{ al_url }}" target="_blank" rel="noopener noreferrer">{{ al_title or "open" }}</a>
+        {%- if page %} · <a href="{{ md_url }}" target="_blank" rel="noopener noreferrer">MangaDex ↗</a>{% endif %}</span>
+      {% else %}<span class="al-title">{{ "No AniList match" if site == "AniList" else "No " ~ site ~ " link" }}
+        {%- if page %} · <a href="{{ md_url }}" target="_blank" rel="noopener noreferrer">MangaDex ↗</a>{% endif %}</span>{% endif %}
       {% if extra %}<span class="al-title">{{ extra }}</span>{% endif %}
     </div>
   </div>
