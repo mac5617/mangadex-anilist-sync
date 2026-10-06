@@ -67,7 +67,8 @@ def test_mal_writes_only_from_mal_writer():
     offenders = [
         str(p.relative_to(ROOT))
         for p in python_files()
-        if p not in allowed and re.search(r"update_list_status|my_list_status|\"PATCH\"", p.read_text(encoding="utf-8"))
+        if p not in allowed and re.search(r"update_list_status|add_to_list|my_list_status|\"PATCH\"",
+                                          p.read_text(encoding="utf-8"))
     ]
     assert offenders == []
 
@@ -77,6 +78,11 @@ def test_mal_writer_status_literals():
     # "completed" for approved completions; "reading" only for brand-new entries.
     sent = set(re.findall(r'status\s*=\s*"(\w+)"', text))
     assert sent == {"reading", "completed"}
+    # A series-page add sends the status you picked (never rereading), and only after reading the entry.
+    from mdal.sync.mal_writer import MAL_ADD
+    assert set(MAL_ADD.values()) == {"reading", "completed", "on_hold", "dropped", "plan_to_read"}
+    add = text[text.index("async def add_by_hand"):text.index("def is_mal_add")]
+    assert add.index("my_list_status(") < add.index("add_to_list(") and "if entry is not None" in add
 
 
 def test_list_edit_status_literals():

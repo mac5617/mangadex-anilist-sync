@@ -71,3 +71,44 @@ def test_series_page_adds_to_anilist(client, services, fake):  # noqa: F811
     assert "Unlisted series (2)" in client.get("/not-listed").text
     refused = client.post("/series/al/2/add", data={"status": "COMPLETED", "progress": "51"}).text
     assert "exceeds AniList" in refused and len(fake.mutations) == 1
+
+
+def test_series_page_add_goes_to_myanimelist_too(client, services, fake, mock):  # noqa: F811
+    from tests.factories import al_media_row, connect_mal
+    from tests.test_mal_mirror import FakeMal
+    from mdal.clients.myanimelist import API_URL as MAL_URL
+
+    services.mal_queue.set_interval(0)
+    connect_mal(services)
+    services.repo.set_setting("sync_targets", ["anilist", "mal"])
+    services.repo.upsert_media([al_media_row(3, "Releasing", id_mal=703)])
+    mal = FakeMal(set())
+    mock.get(url__regex=rf"{MAL_URL}/manga/\d+(\?|$)").mock(side_effect=mal.get)
+    mock.patch(url__regex=rf"{MAL_URL}/manga/\d+/my_list_status").mock(side_effect=mal.patch)
+
+    assert "Add to AniList and MyAnimeList" in client.get("/series/al/3").text
+    done = client.post("/series/al/3/add", data={"status": "CURRENT", "progress": "7"}).text
+    assert "Added to AniList as Reading, progress 7. Added to MyAnimeList too, progress 7." in done
+    assert mal.edits == [(703, {"status": "reading", "num_chapters_read": "7"})]
+
+
+def test_listed_series_can_be_added_to_myanimelist(client, services, fake, mock):  # noqa: F811
+    from tests.factories import al_media_row, connect_mal
+    from tests.test_mal_mirror import FakeMal
+    from mdal.clients.myanimelist import API_URL as MAL_URL
+
+    services.mal_queue.set_interval(0)
+    connect_mal(services)
+    services.repo.set_setting("sync_targets", ["anilist", "mal"])
+    services.repo.upsert_media([al_media_row(1, "Listed", id_mal=701)])       # on AniList (CURRENT, 1), not on MAL
+    mal = FakeMal(set())
+    mock.get(url__regex=rf"{MAL_URL}/manga/\d+(\?|$)").mock(side_effect=mal.get)
+    mock.patch(url__regex=rf"{MAL_URL}/manga/\d+/my_list_status").mock(side_effect=mal.patch)
+
+    page = client.get("/series/al/1").text
+    assert "Add to MyAnimeList" in page and "adds it as Reading at ch. 1" in page
+    done = client.post("/series/al/1/add-mal").text
+    assert "Added to MyAnimeList as Reading, progress 1." in done and "Add to MyAnimeList</button>" not in done
+    assert mal.edits == [(701, {"status": "reading", "num_chapters_read": "1"})]
+    services.repo.set_setting("sync_targets", ["anilist"])                    # MAL not part of Sync: no button
+    assert client.post("/series/al/1/add-mal").status_code == 404

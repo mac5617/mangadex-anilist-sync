@@ -32,7 +32,7 @@ LIST_FIELDS = "list_status,num_chapters,status"
 LIST_PAGE = 1000          # the documented maximum for user lists
 REFRESH_MARGIN = 24 * 3600  # refresh a day before expiry
 WRITE_STATUSES = ("reading", "completed")  # the only statuses a sync sends
-# the only statuses a list edit sends (List → Stalled, series pages); never rereading
+# the only statuses a list edit sends (List → Stalled, series pages), or a series-page add; never rereading
 EDIT_STATUSES = ("reading", "completed", "on_hold", "dropped", "plan_to_read")
 
 
@@ -264,6 +264,16 @@ class MalClient:
         if not form:
             raise ValueError("nothing to send")
         return await self._request("PATCH", f"/manga/{int(mal_id)}/my_list_status", data=form)
+
+    async def add_to_list(self, mal_id: int, *, chapters: int, status: str) -> dict[str, Any]:
+        """Create an entry (a series-page add). Callers must check it isn't on your list first: on a listed
+        series this would overwrite the entry."""
+        if status not in EDIT_STATUSES:
+            raise ValueError(f"refusing to send status {status!r}")
+        if int(chapters) < 0:
+            raise ValueError("chapters cannot be negative")
+        return await self._request("PATCH", f"/manga/{int(mal_id)}/my_list_status",
+                                   data={"status": status, "num_chapters_read": int(chapters)})
 
     async def update_list_status(self, mal_id: int, *, chapters: int | None, status: str | None) -> dict[str, Any]:
         """The sync's MyAnimeList write. Sends chapters read and, optionally, reading/completed."""

@@ -554,6 +554,11 @@ class Repo:
             for row in rows:
                 _upsert(self.conn, "mal_entry", row, ["mal_id"])
 
+    def add_mal_entry(self, row: dict[str, Any]) -> None:
+        """One entry added by hand (series page), until the next full read of your MyAnimeList list."""
+        with self.conn:
+            _upsert(self.conn, "mal_entry", row, ["mal_id"])
+
     def update_mal_entry(self, mal_id: int, **fields: Any) -> None:
         """Keep the local copy of a MAL entry in step after a list edit (score, status)."""
         if not fields or set(fields) - {"score", "status"}:

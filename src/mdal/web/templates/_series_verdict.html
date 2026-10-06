@@ -11,11 +11,14 @@
       <button class="secondary"{% if not anilist %} disabled title="Connect AniList in Settings first"{% endif %}>Save</button>
     </div>
   </form>
+  {% if mal_missing %}<button type="button" class="secondary small" hx-post="/series/{{ kind }}/{{ ident }}/add-mal"
+    hx-target="#series-verdict" hx-swap="outerHTML">Add to MyAnimeList</button>
+  <p class="muted small">Not on your MyAnimeList list yet; adds it as {{ s.entry.status }}{% if s.entry.progress %} at ch. {{ s.entry.progress }}{% endif %}.</p>{% endif %}
   {% if status_note %}<p class="notice {{ 'ok' if status_ok else 'err' }} small" role="status">{{ status_note }}</p>{% endif %}
   <hr class="panel-rule">
 {% elif add %}
   <form class="list-add" hx-post="/series/{{ kind }}/{{ ident }}/add" hx-target="#series-verdict" hx-swap="outerHTML">
-    <h2>Add to AniList</h2>
+    <h2>{{ "Add to your lists" if add_mal else "Add to AniList" }}</h2>
     <div class="field-row">
       <label for="add-status" class="visually-hidden">Status</label>
       <select id="add-status" name="status"{% if not anilist %} disabled{% endif %}>
@@ -25,7 +28,7 @@
       <input id="add-progress" name="progress" type="number" min="0"{% if add.chapters %} max="{{ add.chapters }}"{% endif %} value="{{ add.progress }}" inputmode="numeric">
     </div>
     <p class="muted small">{% if add.proposed is not none %}Chapters read, from your MangaDex reads{% if add.over_total %} (capped at AniList's {{ add.chapters }}){% endif %}.{% else %}Chapters read: nothing read on MangaDex yet.{% endif %}</p>
-    <button{% if not anilist %} disabled title="Connect AniList in Settings first"{% endif %}>Add to AniList</button>
+    <button{% if not anilist %} disabled title="Connect AniList in Settings first"{% endif %}>{{ "Add to AniList and MyAnimeList" if add_mal else "Add to AniList" }}</button>
   </form>
   {% if status_note %}<p class="notice {{ 'ok' if status_ok else 'err' }} small" role="status">{{ status_note }}</p>{% endif %}
   <hr class="panel-rule">

@@ -19,7 +19,7 @@ from mdal.sync.list_edit import save_scores
 from mdal.sync.mal_list_edit import mirror_scores, mirror_status, on_mal
 from mdal.sync.orchestrator import refresh_item
 from mdal.sync.rules import STATUS_LABELS
-from mdal.sync.mal_writer import MalCommentsError, save_comments
+from mdal.sync.mal_writer import MalAddError, MalCommentsError, add_by_hand, save_comments
 from mdal.recommend import ranking
 from mdal.web.app import get_services, render, templates
 
@@ -81,7 +81,17 @@ def panel_context(svc: Any, s: dict[str, Any]) -> dict[str, Any]:
     add = add_entry.proposal(svc.repo, s["md_id"]) if not s["entry"] and s["md_id"] else None
     return {"verdicts": VERDICTS, "anilist": bool(svc.anilist_token()), "score_words": SCORE_WORDS,
             "list_statuses": [(code, STATUS_LABELS[code]) for code in EDIT_STATUSES], "add": add,
+            "add_mal": bool(add and mal_add_id(svc, add.media_id)),
+            "mal_missing": bool(s["entry"] and (m := mal_add_id(svc, s["al_id"])) and m not in svc.repo.mal_entries()),
             "add_statuses": [(code, STATUS_LABELS[code]) for code in add_entry.ADD_STATUSES]}
+
+
+def mal_add_id(svc: Any, media_id: int) -> int | None:
+    """The MyAnimeList id an add also goes to: when Sync covers MyAnimeList and the series has a link there."""
+    if "mal" not in svc.orchestrator.sync_targets():
+        return None
+    media = svc.repo.media([media_id]).get(media_id)
+    return media["id_mal"] if media and media["id_mal"] else None
 
 
 def verdict_panel(request: Request, key: str, **extra) -> HTMLResponse:
@@ -131,7 +141,8 @@ async def series_status(request: Request, kind: str, ident: str, status: str = F
 @router.post("/series/{kind}/{ident}/add", response_class=HTMLResponse)
 async def series_add(request: Request, kind: str, ident: str, status: str = Form(...),
                      progress: int = Form(...)) -> HTMLResponse:
-    """Add a matched series to your AniList list (the same add as Matches → Unlisted)."""
+    """Add a matched series to your AniList list (the same add as Matches → Unlisted), and to your
+    MyAnimeList list when Sync covers MyAnimeList."""
     key = series_key(kind, ident)
     svc = get_services(request)
     s = svc.series.view(key)
@@ -151,7 +162,41 @@ async def series_add(request: Request, kind: str, ident: str, status: str = Form
         return answer(f"AniList error: {exc}", False)
     refresh_item(svc.repo, s["md_id"])
     label = STATUS_LABELS.get(entry["status"], entry["status"])
-    return answer(f"Added to AniList as {label}, progress {entry['progress']}.", True)
+    note = f"Added to AniList as {label}, progress {entry['progress']}"
+    if entry["progress"] != progress:
+        note += f" (AniList filled in its total; you entered {progress})"
+    mal_id = mal_add_id(svc, entry["mediaId"])
+    if mal_id is None:
+        return answer(note + ".", True)
+    try:
+        saved = await add_by_hand(svc.mal, svc.repo, entry["mediaId"], mal_id, status, progress)
+    except (MalAddError, MalError) as exc:
+        return answer(f"{note}. MyAnimeList: {exc}.", False)
+    return answer(f"{note}. Added to MyAnimeList too, progress {saved.get('num_chapters_read', progress)}.", True)
+
+
+@router.post("/series/{kind}/{ident}/add-mal", response_class=HTMLResponse)
+async def series_add_mal(request: Request, kind: str, ident: str) -> HTMLResponse:
+    """Add a series on your AniList list to MyAnimeList too, with AniList's status and chapters read."""
+    key = series_key(kind, ident)
+    svc = get_services(request)
+    s = svc.series.view(key)
+    mal_id = mal_add_id(svc, s["al_id"]) if s and s["entry"] else None
+    if mal_id is None:
+        raise HTTPException(404, "This series can't be added to MyAnimeList from here.")
+
+    def answer(note: str, ok: bool) -> HTMLResponse:
+        return verdict_panel(request, key, status_note=note, status_ok=ok)
+
+    status = s["entry"]["status_code"] if s["entry"]["status_code"] in EDIT_STATUSES else "CURRENT"
+    if svc.orchestrator.lock.locked():
+        return answer("A sync is running; add it after it finishes.", False)
+    try:
+        saved = await add_by_hand(svc.mal, svc.repo, s["al_id"], mal_id, status, s["entry"]["progress"] or 0)
+    except (MalAddError, MalError) as exc:
+        return answer(f"MyAnimeList: {exc}.", False)
+    return answer(f"Added to MyAnimeList as {STATUS_LABELS[status]}, "
+                  f"progress {saved.get('num_chapters_read', s['entry']['progress'] or 0)}.", True)
 
 
 @router.post("/series/{kind}/{ident}/score", response_class=HTMLResponse)
