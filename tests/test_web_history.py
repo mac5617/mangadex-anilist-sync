@@ -42,6 +42,15 @@ def test_drill_down_shows_write_state_and_notes(client, services):
     assert "status changed by AniList: CURRENT→COMPLETED" in row and "t1" in row
     assert "not approved" in html
     assert 'name="sel"' not in html  # read-only
+    assert 'class="r-skip' not in html and "1 unchanged series not shown." in html   # skipped rows stay out
+
+
+def test_drill_down_with_only_skips_says_nothing_changed(client, services):
+    repo = services.repo
+    run_id = repo.create_run("done")
+    repo.replace_items(run_id, [{"run_id": run_id, "md_id": "x", "action": "skip", "reason": "already in sync"}])
+    html = client.get(f"/history/{run_id}").text
+    assert "Nothing changed in this sync." in html and "1 unchanged series not shown." in html
 
 
 def test_add_runs_appear(client, services):

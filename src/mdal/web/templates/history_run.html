@@ -17,6 +17,7 @@
 </div>
 {% if run.phase_detail %}<p>{{ run.phase_detail }}</p>{% endif %}
 {% if run.error %}<p class="notice err">{{ run.error }}</p>{% endif %}
+{% if unchanged %}<p class="muted small">{{ unchanged | num }} unchanged series not shown.</p>{% endif %}
 
 <div class="table-wrap">
 <table class="data diff">
@@ -33,7 +34,7 @@
       <td class="reason">{{ r.reason }}{% if item.verify_note %}<span class="sub"><strong>{{ item.verify_note }}</strong></span>{% endif %}</td>
     </tr>
   {% else %}
-    <tr><td colspan="6" class="empty">No rows in this sync.</td></tr>
+    <tr><td colspan="6" class="empty">{{ "Nothing changed in this sync." if unchanged else "No rows in this sync." }}</td></tr>
   {% endfor %}
   </tbody>
 </table>

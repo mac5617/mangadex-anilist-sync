@@ -46,8 +46,11 @@ def history_run(request: Request, run_id: int) -> HTMLResponse:
     if run is None:
         raise HTTPException(404, "no such sync run")
     states = {i["md_id"]: i for i in repo.items(run_id)}
-    rows = [(row, states[row.md_id]) for row in diff_rows(repo, run_id)]
+    every = diff_rows(repo, run_id)
+    # Skipped series had nothing to change: listing hundreds of them buries the rows that did.
+    rows = [(row, states[row.md_id]) for row in every if row.action != "skip"]
     return render(request, "history_run.html", {
-        "run": run, "rows": rows, "duration": _duration(run["started_at"], run["finished_at"]),
+        "run": run, "rows": rows, "unchanged": len(every) - len(rows),
+        "duration": _duration(run["started_at"], run["finished_at"]),
         "restorable": svc.orchestrator.can_restore(run_id), "site": SITE_NAMES[run["target"]],
     })
