@@ -524,6 +524,8 @@ class SyncOrchestrator:
         if notes:
             detail += f"; {len(notes)} need a look: " + " | ".join(notes[:5])
         repo.update_run(run_id, state="done", phase_detail=detail, finished_at=now_iso())
+        if target == "mal" and counts["done"]:
+            self.services.ranker.start_save()   # series just added to MyAnimeList get the scores you set in Shiori
 
     def md_snapshot_fresh(self) -> bool:
         """Whether the last MangaDex read is recent enough for a MyAnimeList sync to reuse."""

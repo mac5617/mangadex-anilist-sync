@@ -172,6 +172,7 @@ async def series_add(request: Request, kind: str, ident: str, status: str = Form
         saved = await add_by_hand(svc.mal, svc.repo, entry["mediaId"], mal_id, status, progress)
     except (MalAddError, MalError) as exc:
         return answer(f"{note}. MyAnimeList: {exc}.", False)
+    svc.ranker.start_save()   # a score you set in Shiori follows it to MyAnimeList
     return answer(f"{note}. Added to MyAnimeList too, progress {saved.get('num_chapters_read', progress)}.", True)
 
 
@@ -195,6 +196,7 @@ async def series_add_mal(request: Request, kind: str, ident: str) -> HTMLRespons
         saved = await add_by_hand(svc.mal, svc.repo, s["al_id"], mal_id, status, s["entry"]["progress"] or 0)
     except (MalAddError, MalError) as exc:
         return answer(f"MyAnimeList: {exc}.", False)
+    svc.ranker.start_save()
     return answer(f"Added to MyAnimeList as {STATUS_LABELS[status]}, "
                   f"progress {saved.get('num_chapters_read', s['entry']['progress'] or 0)}.", True)
 

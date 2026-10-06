@@ -103,6 +103,7 @@ def create_app(services: Services) -> FastAPI:
     async def lifespan(app: FastAPI):
         services.orchestrator.recover_interrupted()
         schedule = asyncio.create_task(services.releases.run_schedule())
+        services.ranker.start_save()   # scores still waiting for MyAnimeList (e.g. series added there since)
         yield
         schedule.cancel()
         await services.aclose()
