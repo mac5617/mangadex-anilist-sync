@@ -27,7 +27,7 @@
       <span class="ranked-actions small">
         <a href="/list/rank?media_id={{ r.media_id }}">Re-rank</a>
         <button type="button" class="link-button" hx-post="/list/ranking/{{ r.media_id }}/remove" hx-swap="none"
-          hx-confirm="Take {{ r.title }} out of your ranking? Its AniList score stays as it is.">Remove</button>
+          hx-confirm="Take {{ r.title }} out of your ranking? Its score on {{ edits_to }} stays as it is.">Remove</button>
       </span>
     </li>
 {%- endmacro -%}

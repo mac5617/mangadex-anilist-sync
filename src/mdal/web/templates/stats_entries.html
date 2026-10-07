@@ -35,15 +35,17 @@
           <div class="series-text">
             <a class="md-title" href="/series/al/{{ r.media_id }}">{{ r.title }}</a>
             <span class="al-title">{{ r.start_year or "?" }} · {{ pub_labels.get(r.pub, r.pub or "?") }}{% if r.chapters %} · {{ r.chapters | num }} ch{% endif %}
-              · <a href="{{ r.site_url or ('https://anilist.co/manga/' ~ r.media_id) }}" target="_blank" rel="noopener noreferrer">AniList ↗</a></span>
+              · <a href="{{ r.site_url or ('https://anilist.co/manga/' ~ r.media_id) }}" target="_blank" rel="noopener noreferrer">AniList ↗</a>
+              {%- if r.id_mal %} · <a href="https://myanimelist.net/manga/{{ r.id_mal }}" target="_blank" rel="noopener noreferrer">MyAnimeList ↗</a>{% endif %}</span>
           </div>
         </div>
       </td>
-      <td class="al-col"><span class="badge">{{ status_labels.get(r.status, r.status) }}</span>{% if r.completed_at %}<span class="sub">completed {{ r.completed_at }}</span>{% elif r.started_at %}<span class="sub">started {{ r.started_at }}</span>{% endif %}</td>
+      <td class="al-col"><span class="badge">{{ status_labels.get(r.status, r.status) }}</span>{% if r.completed_at %}<span class="sub">completed {{ r.completed_at }}</span>{% elif r.started_at %}<span class="sub">started {{ r.started_at }}</span>{% endif %}
+        {%- if r.mal_status and (r.mal_status != r.status or r.mal_progress != r.progress) %}<span class="sub">MyAnimeList: {{ status_labels.get(r.mal_status, r.mal_status) }}{% if r.mal_progress != r.progress %}, {{ r.mal_progress | num }} ch{% endif %}</span>{% endif %}</td>
       <td class="num">{{ r.progress | num }}{% if r.chapters %} / {{ r.chapters | num }}{% endif %}</td>
       <td class="num">{% if r.chapters %}{{ [100, (100 * (r.progress or 0) / r.chapters) | round | int] | min }}%
         <span class="meter"><span style="width: {{ [100, 100 * (r.progress or 0) / r.chapters] | min }}%"></span></span>{% else %}<span class="muted">—</span>{% endif %}</td>
-      <td class="num">{{ r.score | num if r.score else "—" }}</td>
+      <td class="num">{{ "%g" | format(r.score / 10) if r.score else "—" }}</td>
       <td class="genres">{{ r.genres[:3] | join(", ") }}{% if r.genres | length > 3 %} +{{ r.genres | length - 3 }}{% endif %}</td>
       <td class="md-col">{% if r.md_url %}<a href="{{ r.md_url }}" target="_blank" rel="noopener noreferrer">{{ md_labels.get(r.md_status, r.md_status) }}</a>{% else %}<span class="muted">not in library</span>{% endif %}</td>
       <td class="num">{{ r.updated_at | date_from_unix }}</td>

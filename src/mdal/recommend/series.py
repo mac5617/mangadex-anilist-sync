@@ -170,6 +170,7 @@ class SeriesPages:
             "entry": {"status": LIST_STATUS.get(entry["status"], entry["status"]), "status_code": entry["status"],
                       "progress": entry["progress"], "score": entry["score"]} if entry else None,
             "md_id": md_id,
+            "mal_entry": self._mal_entry(media),
             "md_status": MD_STATUS_LABELS.get(lib["reading_status"] or "none") if lib else None,
             "verdict": {"verdict": verdict["verdict"], "label": VERDICTS[verdict["verdict"]], "source": verdict["source"],
                         "at": verdict["created_at"]} if verdict else None,
@@ -183,6 +184,16 @@ class SeriesPages:
             "mu": mu, "english": english_meta(mu), "looked_up": self.looked_up(key), "problems": self.problems(key),
             "readers": self._readers(key),
         }
+
+    def _mal_entry(self, media: Any) -> dict[str, Any] | None:
+        """Your MyAnimeList entry for this series, as last read (only while MyAnimeList is connected)."""
+        if not (media and media["id_mal"] and self.services.mal.connected):
+            return None
+        e = self.repo.mal_entries().get(media["id_mal"])
+        if e is None:
+            return None
+        return {"status": LIST_STATUS.get(e["status"], e["status"]), "status_code": e["status"],
+                "progress": e["progress"], "score": e["score"]}
 
     def _ranked(self, al_id: int) -> dict[str, Any] | None:
         """Where it sits in your ranking (List → Rank), if it's ranked."""

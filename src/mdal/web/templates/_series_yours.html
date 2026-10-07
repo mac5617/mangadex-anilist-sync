@@ -1,10 +1,18 @@
+{#- Your lists for this series: AniList and MyAnimeList on one line when they agree, each side when they don't. -#}
+{%- macro entry_text(e, score_out_of=100) -%}
+  {%- set parts = [e.status] -%}
+  {%- if e.progress %}{% set _ = parts.append(e.progress ~ " ch read") %}{% endif -%}
+  {%- if e.score %}{% set _ = parts.append("scored " ~ ((e.score / 10) | num if score_out_of == 100 else e.score)) %}{% endif -%}
+  {{ parts | join(" · ") }}
+{%- endmacro -%}
 <p class="series-yours" id="series-yours"{% if oob_yours %} hx-swap-oob="true"{% endif %}>
-  {%- set parts = [] -%}
-  {%- if s.entry -%}
-    {%- set _ = parts.append(s.entry.status) -%}
-    {%- if s.entry.progress %}{% set _ = parts.append(s.entry.progress ~ " ch read") %}{% endif -%}
-    {%- if s.entry.score %}{% set _ = parts.append("scored " ~ (s.entry.score | num)) %}{% endif -%}
+  {%- set al, mal = s.entry, s.mal_entry -%}
+  {%- set same = al and mal and al.status_code == mal.status_code and al.progress == mal.progress -%}
+  {%- if same -%}
+    <span class="badge ok">On AniList and MyAnimeList</span> {{ entry_text(al) }}
+  {%- else -%}
+    {%- if al %}<span class="badge ok">On AniList</span> {{ entry_text(al) }}{% endif -%}
+    {%- if mal %}{% if al %}<span class="list-sep" aria-hidden="true"></span>{% endif %}<span class="badge ok">On MyAnimeList</span> {{ entry_text(mal, 10) }}{% endif -%}
   {%- endif -%}
-  {%- if s.entry %}<span class="badge ok">On your AniList list</span> {{ parts | join(" · ") }}{% endif -%}
-  {%- if s.md_status %}<span class="muted">{% if s.entry %} · {% endif %}MangaDex: {{ s.md_status }}</span>{% endif -%}
+  {%- if s.md_status %}{% if al or mal %}<span class="list-sep" aria-hidden="true"></span>{% endif %}<span class="muted">MangaDex: {{ s.md_status }}</span>{% endif -%}
 </p>

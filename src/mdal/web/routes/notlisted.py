@@ -4,6 +4,9 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 
 from mdal.clients.anilist import AniListError
+from mdal.clients.myanimelist import MalError
+from mdal.sync.mal_writer import MalAddError, add_by_hand
+from mdal.web.routes.series import mal_add_id
 from mdal.sync import add_entry
 from mdal.sync.orchestrator import refresh_item
 from mdal.sync.rules import STATUS_LABELS
@@ -27,6 +30,7 @@ def not_listed(request: Request) -> HTMLResponse:
     return render(request, "notlisted.html", {
         "rows": add_entry.not_listed_rows(svc.repo),
         "statuses": add_entry.ADD_STATUSES, "labels": STATUS_LABELS,
+        "with_mal": "mal" in svc.orchestrator.sync_targets(),
     })
 
 
@@ -43,4 +47,13 @@ async def add(request: Request, md_id: str, status: str = Form(...), progress: i
         return _row_response(request, md_id, error=f"AniList error: {exc}", status_code=502)
     refresh_item(svc.repo, md_id)
     label = STATUS_LABELS.get(entry["status"], entry["status"])
-    return _row_response(request, md_id, done=f"Added to AniList as {label}, progress {entry['progress']}.")
+    done = f"Added to AniList as {label}, progress {entry['progress']}."
+    mal_id = mal_add_id(svc, entry["mediaId"])
+    if mal_id is not None:
+        try:
+            await add_by_hand(svc.mal, svc.repo, entry["mediaId"], mal_id, status, progress)
+            done = f"Added to AniList and MyAnimeList as {label}, progress {entry['progress']}."
+            svc.ranker.start_save()
+        except (MalAddError, MalError) as exc:
+            done += f" MyAnimeList: {exc}."
+    return _row_response(request, md_id, done=done)

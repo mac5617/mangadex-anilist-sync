@@ -93,8 +93,12 @@ def get_services(request: Request) -> Services:
 
 def render(request: Request, name: str, context: dict[str, Any] | None = None, status_code: int = 200) -> HTMLResponse:
     """TemplateResponse plus the nav counts every full page shows."""
-    repo = get_services(request).repo
-    ctx = {"nav": {"review": repo.review_count(), "not_on_list": len(repo.not_on_list())}, **(context or {})}
+    svc = get_services(request)
+    repo = svc.repo
+    # where list edits (scores, statuses, notes) go: named in page copy so it says what really happens
+    edits_to = "AniList and MyAnimeList" if svc.mirror_to_mal() else "AniList"
+    ctx = {"nav": {"review": repo.review_count(), "not_on_list": len(repo.not_on_list())}, "edits_to": edits_to,
+           **(context or {})}
     return templates.TemplateResponse(request, name, ctx, status_code=status_code)
 
 

@@ -130,3 +130,20 @@ async def test_add_by_hand_only_adds_what_is_not_listed(setup):
         await add_by_hand(services.mal, services.repo, 4, 504, "REPEATING", 3)
     assert len(mal.edits) == 1
     assert ("mal", "status", "done") in {(e["site"], e["field"], e["state"]) for e in services.repo.list_edits()}
+
+
+def test_series_header_merges_lists_that_agree(setup):
+    services, _ = setup
+    services.repo.replace_mal_entries([
+        {"mal_id": 501, "status": "CURRENT", "progress": 10, "score": None, "fetched_at": "x"},     # same as AniList
+        {"mal_id": 502, "status": "COMPLETED", "progress": 18, "score": 9, "fetched_at": "x"}])    # differs
+    with TestClient(create_app(services)) as c:
+        same = c.get("/series/al/1").text
+        assert "On AniList and MyAnimeList</span> Reading · 10 ch read" in same
+        differs = c.get("/series/al/2").text
+        assert "On AniList</span> Reading · 20 ch read" in differs
+        assert "On MyAnimeList</span> Completed · 18 ch read · scored 9" in differs
+        only_al = c.get("/series/al/4").text                                       # not on the MAL list
+        assert "On AniList</span>" in only_al and "On MyAnimeList" not in only_al
+        stalled = c.get("/list/stalled").text                                      # edits go to both: copy says so
+        assert "updates AniList and MyAnimeList" in stalled and "Dropped on AniList and MyAnimeList?" in stalled

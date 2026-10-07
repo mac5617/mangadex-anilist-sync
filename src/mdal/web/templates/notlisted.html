@@ -5,8 +5,9 @@
 <div class="page-head">
   <div>
     <h1>Unlisted series ({{ rows | length }})</h1>
-    <p class="lede">Series matched to AniList that aren't on your AniList list. Syncs list them as new entries; here each one can be
-      added on its own with a status and progress of your choice. Your AniList list is checked again before each add.</p>
+    <p class="lede">Series matched to AniList that aren't on your AniList list. A sync adds them for you; here you can add one at a
+      time with the status and progress you choose{% if with_mal %}, to AniList and MyAnimeList{% endif %}. Your list is checked again
+      before each add{% if with_mal %}, and a series already on MyAnimeList is left as it is there{% endif %}.</p>
   </div>
 </div>
 <div class="table-wrap">

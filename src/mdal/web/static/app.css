@@ -538,6 +538,7 @@ button.prompt-chip:focus-visible { outline: 2px solid var(--accent); outline-off
 .series-tags li.genre { background: var(--accent-soft); color: var(--fg); }
 .series-verdict { display: flex; flex-direction: column; gap: .5rem; }
 .series-verdict h2 { font-size: .95rem; }
+.series-yours .list-sep { display: inline-block; width: 1px; height: .9em; margin: 0 .6rem; vertical-align: -.1em; background: var(--line-strong); }
 .list-status, .list-add { display: flex; flex-direction: column; gap: .45rem; }
 .field-row { display: flex; gap: .4rem; }
 .field-row select { flex: 1; min-width: 0; }
