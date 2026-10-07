@@ -113,10 +113,10 @@ def test_both_sites_on_one_page_and_one_approval(client, services, run_id):
     page = client.get(f"/sync/{m}").text
     assert "Changes to approve" in page and "Write selected to AniList and MyAnimeList" in page
     assert f'value="{run_id}:w"' in page and f'value="{m}:w"' in page        # the same series, once per site
-    est = client.post(f"/sync/{run_id}/estimate", data={"sel": [f"{run_id}:w", f"{m}:w"]}).text
+    est = client.post(f"/sync/{run_id}/estimate", data={"runs": [run_id, m], "sel": [f"{run_id}:w", f"{m}:w"]}).text
     assert "2 selected" in est and "AniList and MyAnimeList requests" in est
 
-    response = client.post(f"/sync/{m}/approve", data={"sel": [f"{run_id}:w", f"{m}:w"]})
+    response = client.post(f"/sync/{m}/approve", data={"runs": [run_id, m], "sel": [f"{run_id}:w", f"{m}:w"]})
     assert response.status_code == 303
     for _ in range(50):
         if len(written) == 2:
@@ -135,7 +135,7 @@ def test_a_site_with_nothing_ticked_is_closed(client, services, run_id):
         services.repo.update_run(rid, state="done", finished_at="t")
 
     services.orchestrator._write_phase = fake_write
-    assert client.post(f"/sync/{run_id}/approve", data={"sel": [f"{m}:w"]}).status_code == 303
+    assert client.post(f"/sync/{run_id}/approve", data={"runs": [run_id, m], "sel": [f"{m}:w"]}).status_code == 303
     for _ in range(50):
         if written:
             break
@@ -145,3 +145,35 @@ def test_a_site_with_nothing_ticked_is_closed(client, services, run_id):
     assert (a["state"], a["phase_detail"]) == ("done", "nothing selected to write")
     nothing = client.post(f"/sync/{m}/approve", data={})                        # nothing open any more
     assert nothing.status_code == 400
+
+
+def test_changes_that_arrive_after_the_page_loaded_are_left_waiting(client, services, run_id):
+    """The page showed only AniList; MyAnimeList's changes landed before Write: they stay waiting, unseen ones
+    are never closed."""
+    written = []
+
+    async def fake_write(rid):
+        written.append(rid)
+        services.repo.update_run(rid, state="done", finished_at="t")
+
+    services.orchestrator._write_phase = fake_write
+    page = client.get(f"/sync/{run_id}").text
+    assert f'name="runs" value="{run_id}"' in page
+    m = mal_run(services)                                           # arrives while the page is open
+    others = client.get(f"/sync/{run_id}/others?shown={run_id}").text
+    assert "MyAnimeList has changes too" in others and "Show them here" in others
+    assert client.post(f"/sync/{run_id}/approve", data={"runs": [run_id], "sel": [f"{run_id}:w"]}).status_code == 303
+    for _ in range(50):
+        if written:
+            break
+        client.get("/sync/status")
+    assert written == [run_id]
+    assert services.repo.get_run(m)["state"] == "diffed"            # still there to review
+    assert "Review changes" in client.get("/").text
+
+
+def test_page_says_when_a_site_is_still_being_read(client, services, run_id):
+    services.orchestrator.queued = ["mal"]
+    page = client.get(f"/sync/{run_id}").text
+    assert "MyAnimeList is still being read" in page and 'hx-trigger="every 3s"' in page
+    services.orchestrator.queued = []

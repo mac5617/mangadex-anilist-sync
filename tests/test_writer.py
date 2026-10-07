@@ -395,3 +395,14 @@ async def test_add_failure_is_reported(fast, fake):
     items = await approve_all(fast, run_id)
     assert items["md00"]["write_state"] == "failed"
     assert items["md01"]["write_state"] == "done"
+
+
+
+def test_verify_accepts_a_total_filled_in_on_completion():
+    from mdal.sync.writer import verify_note
+    item = {"md_progress": 25, "al_progress": 25, "set_status": "COMPLETED", "status_approved": 1, "al_status_before": "CURRENT"}
+    note, problem = verify_note(item, {"progress": 26, "status": "COMPLETED"})
+    assert (note, problem) == ("verified; AniList filled in its total of 26 chapters", False)
+    note, problem = verify_note({**item, "set_status": None, "status_approved": 0, "md_progress": 30},
+                                {"progress": 26, "status": "CURRENT"})
+    assert problem and "progress is 26, expected 30" in note       # without a completion it's still a problem

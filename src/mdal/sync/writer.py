@@ -95,11 +95,15 @@ def recheck(item: Any, adding: bool, entry: Any, site: str = "AniList") -> dict[
 def verify_note(item: Any, entry: Any, site: str = "AniList") -> tuple[str, bool]:
     """Compare one written item with its re-read entry. Returns (note, has_problems)."""
     problems: list[str] = []
+    notes: list[str] = []
     if entry is None:
         problems.append("entry missing after write")
     else:
         expected_progress = item["al_progress"] if is_status_only(item) else item["md_progress"]
-        if entry["progress"] != expected_progress:
+        filled_in = sends_completion(item) and entry["status"] == "COMPLETED" and entry["progress"] > expected_progress
+        if filled_in:   # the site sets progress to its own chapter total when a series is marked Completed
+            notes.append(f"{site} filled in its total of {entry['progress']} chapters")
+        elif entry["progress"] != expected_progress:
             problems.append(f"progress is {entry['progress']}, expected {expected_progress}")
         if item["al_status_before"] is None:  # added by this run
             expected_status = "COMPLETED" if sends_completion(item) else "CURRENT"
@@ -109,7 +113,9 @@ def verify_note(item: Any, entry: Any, site: str = "AniList") -> tuple[str, bool
             expected_status = "COMPLETED" if sends_completion(item) else item["al_status_before"]
             if entry["status"] != expected_status:
                 problems.append(f"status changed by {site}: {item['al_status_before']}→{entry['status']}")
-    return ("; ".join(problems) if problems else "verified"), bool(problems)
+    if problems:
+        return "; ".join(problems), True
+    return "; ".join(["verified", *notes]), False
 
 
 def with_note(previous: str | None, note: str) -> str:

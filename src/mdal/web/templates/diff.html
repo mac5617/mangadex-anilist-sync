@@ -25,9 +25,11 @@
     re-checked before anything is written, but the MangaDex progress is from {{ run.started_at | when }}.</p>
 {% endif %}
 
+{% if run.state == "diffed" %}{% with shown = runs | map(attribute="run_id") | join(",") %}{% include "_diff_others.html" %}{% endwith %}{% endif %}
 {% include "_diff_stats.html" %}
 
 <form id="diff-form" hx-post="/sync/{{ run.run_id }}/estimate" hx-trigger="change" hx-target="#estimate" hx-swap="outerHTML">
+  {% for r in runs %}<input type="hidden" name="runs" value="{{ r.run_id }}">{% endfor %}
   {% for f in ["write", "add", "flag", "skip", "all"] %}
     <input type="radio" name="f" id="f-{{ f }}" value="{{ f }}" class="tab-radio"{% if filter == f %} checked{% endif %}>
   {% endfor %}

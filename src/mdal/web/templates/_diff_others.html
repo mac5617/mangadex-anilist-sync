@@ -1,0 +1,8 @@
+{#- Other sites in the same Sync: still being read (polls), or ready to review together. -#}
+<div id="diff-others"{% if reading %} hx-get="/sync/{{ run.run_id }}/others?shown={{ shown }}" hx-trigger="every 3s" hx-swap="outerHTML"{% endif %}>
+  {%- if reading %}<p class="notice warn small"><span class="spinner" aria-hidden="true"></span>
+    {{ reading | join(" and ") }} {{ "is" if reading | length == 1 else "are" }} still being read; {{ "its" if reading | length == 1 else "their" }} changes will appear here to approve together.
+    Writing now only writes what's shown.</p>
+  {%- elif ready %}<p class="notice ok small">{{ ready | join(" and ") }} {{ "has" if ready | length == 1 else "have" }} changes too.
+    <a href="/sync/{{ run.run_id }}">Show them here</a> to approve everything together.</p>{% endif -%}
+</div>

@@ -227,8 +227,10 @@ def group(repo: Repo, run: Any) -> list[Any]:
 
 
 def choices(form: Any, runs: list[Any], default_run: int) -> dict[int, tuple[list[str], list[str], list[str]]]:
-    """Form ticks ("run:md_id", or a bare md_id meaning this page's run) per run, for every run on the page."""
-    ids = {r["run_id"] for r in runs}
+    """Form ticks ("run:md_id", or a bare md_id meaning this page's run) per run, for the runs the page showed
+    (its `runs` fields). A site whose changes arrived after the page loaded is left waiting, never closed unseen."""
+    shown = {int(v) for v in form.getlist("runs") if str(v).isdigit()} or {default_run}
+    ids = {r["run_id"] for r in runs} & shown
     out: dict[int, tuple[list[str], list[str], list[str]]] = {i: ([], [], []) for i in ids}
     for n, key in enumerate(("sel", "mc", "ov")):
         for value in form.getlist(key):
@@ -239,6 +241,16 @@ def choices(form: Any, runs: list[Any], default_run: int) -> dict[int, tuple[lis
             if run_id in out:
                 out[run_id][n].append(md_id)
     return out
+
+
+def still_reading(svc: Any, runs: list[Any]) -> list[str]:
+    """Sites whose changes aren't ready yet (a Sync covering both reads them one after the other)."""
+    shown = {r["target"] for r in runs}
+    sites = [t for t in svc.orchestrator.queued if t not in shown]
+    active = svc.orchestrator.active_run()
+    if active and active["state"] in ("fetching", "resolving", "diffing") and active["target"] not in shown:
+        sites.insert(0, active["target"])
+    return [SITE_NAMES[t] for t in dict.fromkeys(sites)]
 
 
 def estimates(repo: Repo, runs: list[Any], picked: dict[int, tuple[list[str], list[str], list[str]]] | None) -> Estimate:
@@ -289,6 +301,7 @@ def _diff_page(request: Request, run_id: int, f: str | None = None, error: str |
         "run": run, "runs": runs, "rows": rows, "counts": counts, "est": estimates(repo, runs, None),
         "site": " and ".join(SITE_NAMES[r["target"]] for r in runs),
         "site_names": SITE_NAMES,
+        "reading": still_reading(svc, runs) if run["state"] == "diffed" else [],
         "filter": f,
         "approvable": run["state"] == "diffed",
         "restorable": svc.orchestrator.can_restore(run_id),
@@ -354,6 +367,18 @@ def restore(request: Request, run_id: int) -> Response:
 @router.get("/sync/{run_id}", response_class=HTMLResponse)
 def diff_page(request: Request, run_id: int, f: str | None = None) -> HTMLResponse:
     return _diff_page(request, run_id, f)
+
+
+@router.get("/sync/{run_id}/others", response_class=HTMLResponse)
+def diff_others(request: Request, run_id: int, shown: str = "") -> HTMLResponse:
+    """The changes page's note about other sites: still being read, or ready to show here."""
+    svc = get_services(request)
+    run = _run_or_404(svc.repo, run_id)
+    ids = {int(x) for x in shown.split(",") if x.isdigit()}
+    runs = [r for r in group(svc.repo, run) if r["run_id"] in ids] or [run]
+    ready = [SITE_NAMES[r["target"]] for r in group(svc.repo, run) if r["run_id"] not in ids]
+    return templates.TemplateResponse(request, "_diff_others.html", {
+        "run": run, "shown": shown, "reading": still_reading(svc, runs), "ready": ready})
 
 
 @router.post("/sync/{run_id}/approve", response_class=HTMLResponse)
