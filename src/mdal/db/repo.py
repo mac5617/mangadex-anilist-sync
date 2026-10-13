@@ -42,7 +42,8 @@ SETTING_DEFAULTS: dict[str, Any] = {
     # New releases: the embedding model for description matching, the scan's language, its last run and picks.
     "embed_model": "qwen3-embedding:0.6b",
     "new_language": "en",    # only series with chapters in this language
-    "new_status": None,      # {state, detail, error, started_at, finished_at, requests}
+    "new_status": None,      # {state, detail, error, started_at, finished_at, scanned_at (last success), requests}
+    "new_check": None,       # the hourly check of the newest releases: {at, state, added, requests, error}
     "new_llm": None,         # {model, picks: [{md_id, reason}], created_at, error}
     "new_scan_hours": 24,    # scan MangaDex in the background this often; 0 = only when asked
     "new_seen": [],
@@ -372,6 +373,19 @@ class Repo:
                 _upsert(self.conn, "md_new", row, ["md_id"])
             self.conn.execute("DELETE FROM md_follow")
             self.conn.executemany("INSERT OR IGNORE INTO md_follow(md_id) VALUES (?)", [(i,) for i in follows])
+
+    def merge_new_releases(self, rows: list[dict[str, Any]]) -> list[str]:
+        """The hourly check's finds: new series are added; known ones only get their latest chapter (their
+        description match is kept). Returns the ids added."""
+        known = {r[0] for r in self.conn.execute("SELECT md_id FROM md_new")}
+        with self.conn:
+            for row in rows:
+                if row["md_id"] in known:
+                    self.conn.execute("UPDATE md_new SET last_chapter=?, latest_chapter_id=?, fetched_at=? WHERE md_id=?",
+                                      (row["last_chapter"], row["latest_chapter_id"], row["fetched_at"], row["md_id"]))
+                else:
+                    _upsert(self.conn, "md_new", row, ["md_id"])
+        return [row["md_id"] for row in rows if row["md_id"] not in known]
 
     def new_releases(self) -> list[sqlite3.Row]:
         return self.conn.execute("SELECT * FROM md_new").fetchall()

@@ -38,7 +38,8 @@ TUNABLES = (
     Tunable("mangaupdates_rps", "MangaUpdates requests per second", float, 0.2, 2,
             "MangaUpdates publishes no limit; series pages and scans use a few requests each."),
     Tunable("new_scan_hours", "Scan MangaDex for new releases every (hours)", int, 0, 168,
-            "0 turns the background scan off. About 25 MangaDex requests per scan."),
+            "About 25 MangaDex requests per scan. In between, the newest releases are checked every hour (usually "
+            "1–2 requests). 0 turns both off."),
     Tunable("match_auto", "Auto-accept score", float, 0, 1),
     Tunable("match_review", "Review score", float, 0, 1, "Below this, a series is unmatched."),
     Tunable("match_margin", "Auto-accept margin over the runner-up", float, 0, 0.5),

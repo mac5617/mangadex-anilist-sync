@@ -284,8 +284,14 @@ you thought of it, Ask saves that as a rating. **New conversation** clears it. A
 10 to 60 seconds per answer.
 
 **Background scans.** While Shiori runs, it scans MangaDex again when the last scan is older than
-**Settings → Scan MangaDex for new releases every (hours)** (default 24; 0 turns it off). It never starts during
-a sync or a MangaDex cooldown. Home shows the picks you haven't seen on New releases yet.
+**Settings → Scan MangaDex for new releases every (hours)** (default 24; 0 turns it off). A scan that fails is
+tried again an hour later. In between, Shiori checks the newest releases every hour: it reads MangaDex's latest
+page, and the next one only while there's something new on it, so a quiet hour costs one or two requests. New
+finds are scored like the rest; the model sees them on the next full scan. Neither starts during a sync or a
+MangaDex cooldown, and after the computer wakes from sleep Shiori waits three minutes for the network first.
+
+**Home → New releases for you** always shows your best matches: picks you haven't seen on New releases yet come
+first, marked **New**.
 
 ### Series pages
 

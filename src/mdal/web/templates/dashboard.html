@@ -41,13 +41,13 @@
 
 <section class="block">
   <div class="block-head"><h2>New releases for you</h2><a class="small" href="/discover/new">New releases</a></div>
-  {% if digest %}
-    <p class="muted small">{{ digest_total }} new pick{{ "s" if digest_total != 1 }} since you last looked · scanned {{ scan.finished_at | when }}</p>
-    <ul class="tiles home-tiles">{% for t in digest %}{{ cover_tile(t) }}{% endfor %}</ul>
+  {% if releases %}
+    <p class="muted small">{% if unseen %}{{ unseen }} new since you last looked{% else %}Your best matches{% endif %}{% if looked %} · checked MangaDex {{ looked | when }}{% endif %}</p>
+    <ul class="tiles home-tiles">{% for t in releases %}{{ cover_tile(t) }}{% endfor %}</ul>
   {% elif scan_running %}
     <p><span class="badge state-fetching">scanning</span> {{ scan.detail }}</p>
   {% elif scan.finished_at %}
-    <p class="muted">Nothing new since you last looked.
+    <p class="muted">{% if scan.state == "failed" %}The last scan failed: {{ scan.error }}{% else %}Nothing on MangaDex for you right now.{% endif %}
       {% if next_scan %}Next scan {{ next_scan.isoformat(timespec="seconds") | when }}.{% else %}Background scans are off (<a href="/settings#tunables">Settings</a>).{% endif %}</p>
   {% else %}
     <p class="muted">MangaDex hasn't been scanned for new series yet. <a href="/discover/new">Scan it now</a>.</p>

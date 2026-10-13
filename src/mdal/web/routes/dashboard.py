@@ -53,14 +53,15 @@ def dashboard(request: Request) -> HTMLResponse:
 
     ranked = len(repo.ranking())
     unranked = len(svc.ranker.queue())
-    digest = [{"title": r.title, "cover": r.cover, "fallback": None, "href": series_url(f"md:{r.md_id}"),
-               "note": " · ".join(r.meta()[:2]), "progress": None}
-              for r in svc.releases.digest()]
+    releases = [{"title": r.title, "cover": r.cover, "fallback": None, "href": series_url(f"md:{r.md_id}"),
+                 "note": " · ".join((["New"] if new else []) + r.meta()[:2]), "progress": None}
+                for r, new in svc.releases.home(DIGEST)]
+    unseen = len(svc.releases.digest())
     context = {
         "greeting": greeting(datetime.now()),
         "name": repo.get_setting("anilist_user_name"),
         "summary": {"entries": len(entries), "reading": sum(1 for e in entries if e["status"] == "CURRENT"),
-                    "ranked": ranked, "new_picks": len(digest)},
+                    "ranked": ranked, "new_picks": unseen},
         "auth": {
             "anilist": bool(svc.anilist_token()),
             "anilist_user": repo.get_setting("anilist_user_name"),
@@ -73,7 +74,7 @@ def dashboard(request: Request) -> HTMLResponse:
         **status_context(svc),
         "needs": needs,
         "continue_reading": continue_reading, "ready": ready,
-        "digest": digest[:DIGEST], "digest_total": len(digest),
+        "releases": releases, "unseen": unseen, "looked": svc.releases.last_looked(),
         "scan": svc.releases.status(), "next_scan": svc.releases.next_scan(), "scan_running": svc.releases.busy,
         "ranked": ranked, "unranked": unranked,
     }

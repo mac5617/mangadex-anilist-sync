@@ -229,6 +229,58 @@ async def test_scan_excludes_what_you_have_and_ranks_by_description(services, wo
     assert sum(len(json.loads(c.request.content)["input"]) for c in model["embed"].calls) == embedded
 
 
+def _latest(n, title, chapter, **kw):
+    m = md_manga(n, title, **kw)
+    m["attributes"]["latestUploadedChapter"] = chapter
+    return m
+
+
+async def test_the_hourly_check_reads_only_until_nothing_changed(services, mock):
+    from mdal.fetch.mangadex_new import fetch_latest
+
+    services.mangadex_queue.set_interval(0)
+    mock.post(TOKEN_URL).respond(200, json={"access_token": "md-access-1111", "refresh_token": "md-refresh-1111"})
+    pages = {0: [_latest(i, f"Series {i}", f"ch{i}") for i in range(100)],
+             100: [_latest(i, f"Series {i}", f"ch{i}") for i in range(100, 200)]}
+
+    def manga(request):
+        p = request.url.params
+        data = pages.get(int(p["offset"]), []) if p.get("order[latestUploadedChapter]") else []
+        return httpx.Response(200, json={"result": "ok", "data": data, "total": 1000})
+
+    route = mock.get(f"{API_URL}/manga").mock(side_effect=manga)
+    added, requests = await fetch_latest(services.mangadex, services.repo, "en")
+    assert len(added) == 200 and requests == 4         # 2 changed pages, a 3rd (empty) one; 1 page of newest series
+    services.repo.set_similarity({uuid(5): (0.9, ["Loved 1"])})
+
+    pages[0] = [_latest(500, "Brand New", "chA")] + [_latest(i, f"Series {i}", f"ch{i}") for i in range(99)]
+    pages[0][6] = _latest(5, "Series 5", "ch5-next")   # a known series with a new chapter
+    route.calls.reset()
+    added, requests = await fetch_latest(services.mangadex, services.repo, "en")
+    assert added == [uuid(500)]
+    assert requests == 3                               # page 1 changed, page 2 didn't: stop; newest series: 1
+    row = {r["md_id"]: r for r in services.repo.new_releases()}[uuid(5)]
+    assert row["latest_chapter_id"] == "ch5-next" and row["similarity"] == 0.9   # its description match is kept
+
+
+async def test_the_hourly_check_puts_new_finds_on_home(services, world, mock):
+    ollama(mock, {"picks": [{"n": 1, "reason": "Curses."}]})
+    await scan(services)
+    services.releases.mark_seen([uuid(1), uuid(2), uuid(8), uuid(9)])
+    UPDATED.insert(0, md_manga(10, "Another Curse", tags=["Horror", "Gore"], description="A curse spreads in a horror town."))
+    try:
+        services.releases.start_check()
+        await services.releases.task
+    finally:
+        UPDATED.pop(0)
+    check = services.releases.check()
+    assert check["state"] == "done" and check["added"] == 1, check
+    assert [r.md_id for r in services.releases.digest()] == [uuid(10)]
+    home = services.releases.home(6)
+    assert home[0] == (next(r for r in services.releases.recs()[1] if r.md_id == uuid(10)), True)
+    assert services.releases.status()["state"] == "done"            # the scan's own status is left alone
+
+
 async def test_scan_without_embedding_model_still_ranks_by_tags(services, world, mock):
     ollama(mock, {"picks": []}, embedder=False)
     await scan(services)

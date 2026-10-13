@@ -3,6 +3,9 @@
 A scan: makes sure your list has descriptions (one AniList request if not), reads the latest
 MangaDex series and your follows, compares descriptions with the embedding model when one is
 installed, then asks the chat model to pick. Pages only read what was stored.
+
+Between scans, an hourly check reads only MangaDex's newest pages (stopping at the first page with nothing
+new) and adds what it finds to Home, scored the same way; the model is asked again on the next scan.
 """
 
 from __future__ import annotations
@@ -24,7 +27,7 @@ from mdal.fetch.anilist_list import fetch_list, plain_text
 from mdal.fetch.anilist_recs import fetch_neighbours
 from mdal.fetch.mal_recs import anilist_by_mal, mal_recommendations
 from mdal.clients.myanimelist import MalError
-from mdal.fetch.mangadex_new import fetch_new_releases
+from mdal.fetch.mangadex_new import fetch_latest, fetch_new_releases
 from mdal.fetch.mangaupdates import lookup_mu
 from mdal.clients.mangaupdates import MangaUpdatesError
 from mdal.matching.normalize import normalize
@@ -46,6 +49,9 @@ DISLIKED_SHELF = 40
 EMBED_BATCH = 32
 MIN_TITLE = 4           # shorter normalised titles are too generic to exclude by
 SCHEDULE_START, SCHEDULE_CHECK = 120.0, 600.0   # seconds: first check after start-up, then every 10 minutes
+WAKE_GRACE = 180.0      # seconds to wait after the computer wakes, so the network is back before MangaDex is asked
+CHECK_EVERY = timedelta(hours=1)        # the newest releases, between scans
+RETRY_AFTER = timedelta(hours=1)        # a failed scan is tried again this soon, not a whole interval later
 SEEN_KEEP = 2000
 FOLLOW_UP = 0.35        # weight of the previous question when picking the shortlist
 ANCHOR = 0.7            # weight of a named series' description against the question's own wording
@@ -132,48 +138,115 @@ class NewReleases:
 
     # ---- the background scan and the Home digest -------------------------------------
     def next_scan(self) -> datetime | None:
-        """When the background scan is next due; None when it's off."""
+        """When the background scan is next due; None when it's off. A failed scan is retried after RETRY_AFTER."""
         hours = self.repo.get_setting("new_scan_hours")
         if not hours:
             return None
-        last = self.status().get("finished_at") or self.status().get("started_at")
-        return datetime.fromisoformat(last) + timedelta(hours=hours) if last else datetime.now(UTC)
+        s = self.status()
+        ok = s.get("scanned_at") or (s.get("finished_at") if s.get("state") == "done" else None)
+        due = datetime.fromisoformat(ok) + timedelta(hours=hours) if ok else datetime.now(UTC)
+        if s.get("state") == "failed" and s.get("finished_at"):
+            due = max(due, datetime.fromisoformat(s["finished_at"]) + RETRY_AFTER)
+        return due
 
-    def scan_due(self) -> bool:
+    def check(self) -> dict[str, Any]:
+        """The last hourly check: {at, state, added, requests, error}."""
+        return self.repo.get_setting("new_check") or {}
+
+    def last_looked(self) -> str | None:
+        """When MangaDex was last read for new releases, by a scan or the hourly check."""
+        times = [self.status().get("scanned_at"), self.check().get("at") if self.check().get("state") == "done" else None]
+        return max((t for t in times if t), default=None)
+
+    def _mangadex_free(self) -> bool:
+        """Nothing else is using MangaDex, and no cooldown is on."""
         s = self.services
-        due = self.next_scan()
-        if due is None or datetime.now(UTC) < due or self.busy or not s.settings.mangadex_username:
+        if self.busy or not s.settings.mangadex_username:
             return False
         if s.orchestrator.lock.locked() or (s.orchestrator.task and not s.orchestrator.task.done()):
             return False                               # a sync is using MangaDex
         cooldown = s.mangadex_guard.cooldown()
         return not (cooldown and cooldown[0] > time.time())
 
-    async def run_schedule(self, sleep=asyncio.sleep) -> None:
-        """Runs for the app's lifetime: starts a scan whenever one is due."""
+    def scan_due(self) -> bool:
+        due = self.next_scan()
+        return due is not None and datetime.now(UTC) >= due and self._mangadex_free()
+
+    def check_due(self) -> bool:
+        """The hourly check runs while background scans are on, once a scan has stored something to add to."""
+        if not self.repo.get_setting("new_scan_hours") or not self.status().get("scanned_at"):
+            return False
+        last = self.check().get("at")
+        return (not last or datetime.now(UTC) >= datetime.fromisoformat(last) + CHECK_EVERY) and self._mangadex_free()
+
+    async def run_schedule(self, sleep=asyncio.sleep, clock=time.time) -> None:
+        """Runs for the app's lifetime: starts a scan whenever one is due, and the hourly check in between.
+        After the computer wakes from sleep it waits a little first: asked straight away, MangaDex is unreachable
+        and the client pauses all MangaDex requests for an hour, syncs included."""
         await sleep(SCHEDULE_START)
         while True:
             try:
                 if self.scan_due():
                     log.info("starting the scheduled new-release scan")
                     self.start_scan(scheduled=True)
+                elif self.check_due():
+                    self.start_check()
             except Exception:
                 log.exception("scheduled scan check failed")
+            before = clock()
             await sleep(SCHEDULE_CHECK)
+            if clock() - before > SCHEDULE_CHECK + 60:
+                log.info("the computer was asleep; waiting %.0f s for the network", WAKE_GRACE)
+                await sleep(WAKE_GRACE)
+
+    def start_check(self) -> None:
+        if self.busy:
+            raise ScanBusy("A scan is already running.")
+        self.task = asyncio.create_task(self._check())
+
+    async def _check(self) -> None:
+        s, repo = self.services, self.repo
+        started = now_iso()
+        try:
+            added, requests = await fetch_latest(s.mangadex, repo, repo.get_setting("new_language"))
+            if added:
+                await self._compare_descriptions(say=lambda _msg: None)
+                self._update_digest()
+            log.info("new-release check: %s new series (%s MangaDex requests)", len(added), requests)
+            repo.set_setting("new_check", {"at": started, "state": "done", "added": len(added), "requests": requests})
+        except Exception as exc:
+            if isinstance(exc, MangaDexError):
+                log.warning("new-release check failed: %s", exc)
+            else:
+                log.exception("new-release check failed")
+            repo.set_setting("new_check", {"at": started, "state": "failed", "error": str(exc)})
+
+    def _picks(self, recs: list[NewRec]) -> list[str]:
+        """The model's picks, then the best-scored series (the hourly check's finds land here)."""
+        llm = [p["md_id"] for p in (self.repo.get_setting("new_llm") or {}).get("picks") or []]
+        return list(dict.fromkeys(llm + [r.md_id for r in fresh.ranked_new(recs, fresh.PICKS)]))
 
     def _update_digest(self) -> None:
-        """The scan's picks you haven't seen on New releases yet, for Home."""
-        picks = [p["md_id"] for p in (self.repo.get_setting("new_llm") or {}).get("picks") or []]
-        if not picks:
-            _, recs = self.recs()
-            picks = [r.md_id for r in fresh.ranked_new(recs, fresh.PICKS)]
+        """The picks you haven't seen on New releases yet, for Home. Ones still waiting stay."""
+        _, recs = self.recs()
         seen = set(self.repo.get_setting("new_seen") or [])
-        self.repo.set_setting("new_digest", {"at": now_iso(), "md_ids": [m for m in picks if m not in seen]})
+        waiting = (self.repo.get_setting("new_digest") or {}).get("md_ids") or []
+        picks = [m for m in dict.fromkeys(waiting + self._picks(recs)) if m not in seen]
+        self.repo.set_setting("new_digest", {"at": now_iso(), "md_ids": picks})
 
     def mark_seen(self, md_ids: list[str]) -> None:
         seen = [m for m in self.repo.get_setting("new_seen") or [] if m not in md_ids] + md_ids
         self.repo.set_setting("new_seen", seen[-SEEN_KEEP:])
         self.repo.set_setting("new_digest", None)
+
+    def home(self, n: int) -> list[tuple[NewRec, bool]]:
+        """Home's new releases: the picks you haven't seen first (True), then your best matches, so it is never
+        empty while MangaDex has something for you."""
+        _, recs = self.recs()
+        by_id = {r.md_id: r for r in recs}
+        unseen = [m for m in (self.repo.get_setting("new_digest") or {}).get("md_ids") or [] if m in by_id]
+        order = dict.fromkeys(unseen + self._picks(recs))
+        return [(by_id[m], m in unseen) for m in order if m in by_id][:n]
 
     def digest(self) -> list[NewRec]:
         """New picks since you last opened New releases, best first (still not read, hidden or rated)."""
@@ -209,7 +282,7 @@ class NewReleases:
             if note := await self._english_releases():
                 notes.append(note)
             self._update_digest()
-            self._status(state="done", finished_at=now_iso(), error=None,
+            self._status(state="done", finished_at=now_iso(), scanned_at=now_iso(), error=None,
                          detail=f"{len(recs)} of {found} series are new to you ({requests} MangaDex requests)"
                          + "".join(f"; {n}" for n in notes))
         except (MangaDexError, AniListError) as exc:
@@ -290,15 +363,16 @@ class NewReleases:
                 info[ref] = (w, e["title"])
         return texts, info
 
-    async def _compare_descriptions(self) -> str | None:
+    async def _compare_descriptions(self, say=None) -> str | None:
         """Store each new series' description match. Returns a note when it was skipped."""
+        say = say or (lambda msg: self._status(detail=msg))
         model = await self.embed_model()
         if model is None:
             return f"description matching skipped (install {self.repo.get_setting('embed_model')} in Ollama)"
         texts, info = self._shelf_texts()
         if not texts:
             return "description matching skipped (no descriptions on your list yet)"
-        self._status(detail=f"comparing descriptions with {model}")
+        say(f"comparing descriptions with {model}")
         rows = [r for r in self.repo.new_releases() if r["description"]]
         new_texts = {f"md:{r['md_id']}": fresh.doc_text(r["title"], [t["name"] for t in json.loads(r["tags"])], r["description"])
                      for r in rows}

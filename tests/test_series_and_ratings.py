@@ -212,13 +212,56 @@ async def test_schedule_starts_a_scan(services, monkeypatch):
     assert started == [True, True] and sleeps[0] == 120.0
 
 
-async def test_home_shows_new_picks_until_you_look(scanned):
+async def test_home_marks_new_picks_and_keeps_showing_releases_after_you_look(scanned):
     with client_for(scanned) as c:
         home = c.get("/").text
-        assert "4 new picks since you last looked" in home and f"/series/md/{uuid(1)}" in home
+        assert "4 new since you last looked" in home and f"/series/md/{uuid(1)}" in home and ">New · " in home
         c.get("/discover/new")
         again = c.get("/").text
-        assert "Nothing new since you last looked" in again and "Next scan" in again
+        assert "Your best matches" in again and f"/series/md/{uuid(1)}" in again and ">New · " not in again
+
+
+def test_a_failed_scan_is_retried_within_the_hour_not_a_day_later(services):
+    r = services.releases
+    now = datetime.now(UTC)
+    services.repo.set_setting("new_status", {"state": "failed", "finished_at": (now - timedelta(minutes=10)).isoformat(),
+                                             "scanned_at": (now - timedelta(days=5)).isoformat()})
+    assert not r.scan_due() and r.next_scan() == now - timedelta(minutes=10) + timedelta(hours=1)
+    services.repo.set_setting("new_status", {"state": "failed", "finished_at": (now - timedelta(minutes=61)).isoformat()})
+    assert r.scan_due()
+
+
+def test_the_hourly_check_runs_between_scans(services):
+    r = services.releases
+    now = datetime.now(UTC)
+    assert not r.check_due()                                     # nothing scanned yet: the full scan comes first
+    services.repo.set_setting("new_status", {"state": "done", "finished_at": now.isoformat(), "scanned_at": now.isoformat()})
+    assert r.check_due() and not r.scan_due()
+    services.repo.set_setting("new_check", {"at": (now - timedelta(minutes=30)).isoformat(), "state": "done"})
+    assert not r.check_due()
+    services.repo.set_setting("new_check", {"at": (now - timedelta(minutes=61)).isoformat(), "state": "failed"})
+    assert r.check_due()
+    services.repo.set_setting("new_scan_hours", 0)
+    assert not r.check_due()                                     # off with the background scan
+
+
+async def test_the_schedule_waits_for_the_network_after_sleep(services, monkeypatch):
+    from mdal.recommend.releases import SCHEDULE_CHECK, WAKE_GRACE
+
+    monkeypatch.setattr(type(services.releases), "scan_due", lambda self: False)
+    monkeypatch.setattr(type(services.releases), "check_due", lambda self: False)
+    now = [0.0]
+    sleeps = []
+
+    async def fake_sleep(seconds):
+        sleeps.append(seconds)
+        now[0] += seconds + (8 * 3600 if len(sleeps) == 2 else 0)   # the computer sleeps through the 2nd wait
+        if len(sleeps) > 4:
+            raise RuntimeError("stop")
+
+    with pytest.raises(RuntimeError):
+        await services.releases.run_schedule(sleep=fake_sleep, clock=lambda: now[0])
+    assert sleeps == [120.0, SCHEDULE_CHECK, WAKE_GRACE, SCHEDULE_CHECK, SCHEDULE_CHECK]
 
 
 async def test_an_anilist_only_series_is_found_on_mangadex_by_its_link(services, mock):
