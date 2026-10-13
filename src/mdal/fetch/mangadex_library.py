@@ -1,15 +1,18 @@
-"""MangaDex library, details, read markers and chapter numbers (architecture §6, story 07)."""
+"""MangaDex library, details, read markers, your ratings and chapter numbers (architecture §6, story 07)."""
 
 from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
 from mdal.clients.mangadex import ALL_CONTENT_RATINGS, IDS_PER_REQUEST, MangaDexClient, MangaDexError
 from mdal.db.repo import Repo, now_iso
+
+log = logging.getLogger(__name__)
 
 TITLE_PREFERENCE = ("en", "ja-ro", "ko-ro", "zh-ro")
 PERMANENTLY_MISSING = 2  # md_chapter.missing: 0 resolved, 1 missed once, 2 give up
@@ -93,6 +96,26 @@ async def _fetch_reads(client: MangaDexClient, ids: list[str]) -> dict[str, list
     return reads
 
 
+async def _fetch_ratings(client: MangaDexClient, ids: list[str]) -> dict[str, int]:
+    """Your MangaDex ratings (1-10) by manga id. A plain refusal leaves them unknown instead of failing the sync;
+    a block, rate limit or dropped connection still halts it."""
+    ratings: dict[str, int] = {}
+    for start in range(0, len(ids), IDS_PER_REQUEST):
+        try:
+            body = await client.get("/rating", {"manga[]": ids[start : start + IDS_PER_REQUEST]})
+        except MangaDexError as exc:
+            if type(exc) is not MangaDexError:
+                raise
+            log.warning("MangaDex ratings not read: %s", exc)
+            return {}
+        found = body.get("ratings")
+        for md_id, value in (found.items() if isinstance(found, dict) else ()):  # MangaDex sends [] when empty
+            rating = value.get("rating") if isinstance(value, dict) else None
+            if isinstance(rating, int) and 1 <= rating <= 10:
+                ratings[md_id] = rating
+    return ratings
+
+
 async def fetch_library(
     client: MangaDexClient,
     repo: Repo,
@@ -115,6 +138,11 @@ async def fetch_library(
 
     progress("reading read markers")
     reads = {md_id: chs for md_id, chs in (await _fetch_reads(client, ids)).items() if md_id in known}
+
+    progress("reading your ratings")
+    ratings = await _fetch_ratings(client, ids)
+    for row in rows:
+        row["rating"] = ratings.get(row["md_id"])
     repo.replace_md_snapshot(rows, reads)
     summary.series = len(rows)
     summary.read_ids = sum(len(v) for v in reads.values())

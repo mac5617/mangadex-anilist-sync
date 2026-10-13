@@ -169,6 +169,9 @@ The header has four sections:
      Skipped until your MangaDex progress for that series changes.
    - **Skipped**: already up to date, not matched, or dismissed.
    - Rows that would finish a series have a **mark completed** box, ticked by default.
+   - A series you rated on MangaDex gets a **score** box (ticked by default) when neither AniList nor
+     MyAnimeList has a score for it, so your MangaDex rating fills in the gap. A series with nothing else to
+     change shows up under Updates for the score alone. If you score it yourself before writing, yours stays.
 4. **Write selected to AniList.** Updates and new entries start selected; untick anything to leave out. The
    line above the table estimates the AniList requests and time. Results, including a check of each row
    against AniList afterwards, are under **Sync → History**.
@@ -188,7 +191,8 @@ waiting for approval stays open while you run a MyAnimeList sync, and the other 
 - **Totals.** For series on your MyAnimeList list, the chapter total and finished status come from
   MyAnimeList. For new entries they come from AniList until the series is on your list.
 - **What is sent.** One request per entry: the chapters read, plus `completed` for approved completions or
-  `reading` for new entries. Score, dates, volumes and other statuses are never touched.
+  `reading` for new entries, and your MangaDex rating where the entry has no score (see **score** above).
+  Dates, volumes and other statuses are never touched.
 - **MangaDex reuse.** A MyAnimeList sync started within 10 minutes of the last MangaDex read uses that read
   instead of asking MangaDex again, so syncing both sites back to back costs MangaDex nothing extra.
 

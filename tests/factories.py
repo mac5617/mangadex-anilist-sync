@@ -30,6 +30,7 @@ class FakeSeries:
     cover: str | None = "cover.jpg"
     content_rating: str = "safe"
     reads: list[str] = field(default_factory=list)  # chapter ids
+    rating: int | None = None                       # yours on MangaDex, 1-10
 
 
 @dataclass
@@ -77,6 +78,12 @@ class FakeMangaDex:
         grouped = {i: self.series[i].reads for i in ids if i in self.series and self.series[i].reads}
         return httpx.Response(200, json={"result": "ok", "data": grouped})
 
+    def _rating(self, request: httpx.Request) -> httpx.Response:
+        ids = request.url.params.get_list("manga[]")
+        ratings = {i: {"rating": self.series[i].rating, "createdAt": "2026-10-01T00:00:00+00:00"}
+                   for i in ids if i in self.series and self.series[i].rating is not None}
+        return httpx.Response(200, json={"result": "ok", "ratings": ratings or []})  # MangaDex sends [] when empty
+
     def _chapter(self, request: httpx.Request) -> httpx.Response:
         params = request.url.params
         include_unavailable = params.get("includeUnavailable") == "1"
@@ -102,6 +109,7 @@ class FakeMangaDex:
         self.routes["read"] = router.get(f"{API_URL}/manga/read").mock(side_effect=self._read)
         self.routes["manga"] = router.get(f"{API_URL}/manga").mock(side_effect=self._manga)
         self.routes["chapter"] = router.get(f"{API_URL}/chapter").mock(side_effect=self._chapter)
+        self.routes["rating"] = router.get(f"{API_URL}/rating").mock(side_effect=self._rating)
         return self
 
     def data_calls(self) -> dict[str, int]:
@@ -186,7 +194,7 @@ class FakeAniList:
                     self.lists.append({"name": "Added", "isCustomList": False, "entries": []})
                 group = next(g for g in self.lists if g["name"] == "Added")
                 group["entries"].append({"id": new_id, "status": args["status"], "progress": args["progress"],
-                                         "media": self._public(self.catalogue[media_id])})
+                                         "score": args.get("scoreRaw") or 0, "media": self._public(self.catalogue[media_id])})
                 self.applied.append((new_id, args))
                 data[alias] = {"id": new_id, "mediaId": media_id, "progress": args["progress"], "status": args["status"]}
                 continue
@@ -204,6 +212,8 @@ class FakeAniList:
                 e["progress"] = args["progress"]
             if "status" in args:
                 e["status"] = args["status"]
+            if "scoreRaw" in args:
+                e["score"] = args["scoreRaw"]
             if entry_id in self.server_status_after_write:
                 e["status"] = self.server_status_after_write[entry_id]
             self.applied.append((entry_id, args))
@@ -217,12 +227,12 @@ class FakeAniList:
         for m in media:
             self.catalogue[m["id"]] = m
 
-    def add_list(self, name: str, entries: list[tuple[int, int, str, int]], custom: bool = False) -> None:
-        """entries: (entry_id, media_id, status, progress)."""
+    def add_list(self, name: str, entries: list[tuple], custom: bool = False) -> None:
+        """entries: (entry_id, media_id, status, progress[, score out of 100])."""
         self.lists.append({
             "name": name, "isCustomList": custom,
-            "entries": [{"id": e, "status": s, "progress": p, "media": self._public(self.catalogue[m])}
-                        for e, m, s, p in entries],
+            "entries": [{"id": e, "status": s, "progress": p, "score": rest[0] if rest else 0,
+                         "media": self._public(self.catalogue[m])} for e, m, s, p, *rest in entries],
         })
 
     @staticmethod
@@ -389,9 +399,9 @@ class FakeMal:
     def add(self, mal_id: int, title: str, chapters: int = 0, status: str = "currently_publishing") -> None:
         self.catalogue[mal_id] = {"title": title, "num_chapters": chapters, "status": status}
 
-    def listed(self, mal_id: int, status: str, read: int, rereading: bool = False) -> None:
+    def listed(self, mal_id: int, status: str, read: int, rereading: bool = False, score: int = 0) -> None:
         self.entries[mal_id] = {"status": status, "num_chapters_read": read, "is_rereading": rereading,
-                                "num_volumes_read": 0, "score": 0, "updated_at": "2026-10-01T00:00:00+00:00"}
+                                "num_volumes_read": 0, "score": score, "updated_at": "2026-10-01T00:00:00+00:00"}
 
     def _list(self, request: httpx.Request) -> httpx.Response:
         params = request.url.params
@@ -418,6 +428,8 @@ class FakeMal:
             entry["status"] = form["status"]
         if "num_chapters_read" in form:
             entry["num_chapters_read"] = int(form["num_chapters_read"])
+        if "score" in form:
+            entry["score"] = int(form["score"])
         return httpx.Response(200, json=entry)
 
     def install(self, router: respx.MockRouter) -> "FakeMal":

@@ -30,9 +30,9 @@ from mdal.fetch.mal_list import fetch_mal_list
 from mdal.fetch.mangadex_library import fetch_library
 from mdal.matching.pipeline import AniListFetch, resolve_all
 from mdal.sync.estimate import estimate
-from mdal.sync.rules import AlEntry, AlMediaInfo, MdInfo, evaluate
+from mdal.sync.rules import AlEntry, AlMediaInfo, MdInfo, evaluate, score_from_md
 from mdal.sync.mal_writer import MalWriter
-from mdal.sync.writer import Writer
+from mdal.sync.writer import Writer, is_status_only
 
 if TYPE_CHECKING:
     from mdal.services import Services
@@ -80,16 +80,16 @@ RESUMABLE = ("writing", "verifying", "failed", "halted")
 
 def validate_approval(
     repo: Repo, run_id: int, selected: Iterable[str], completing: Iterable[str], overrides: Iterable[str],
-    allow_empty: bool = False,
-) -> list[tuple[str, int]]:
-    """Returns [(md_id, status_approved)] to approve, or raises ApprovalError. `allow_empty`: a site with nothing
-    ticked, when several sites are approved together."""
+    scoring: Iterable[str] = (), allow_empty: bool = False,
+) -> list[tuple[str, int, int]]:
+    """Returns [(md_id, status_approved, score_approved)] to approve, or raises ApprovalError. `allow_empty`: a site
+    with nothing ticked, when several sites are approved together."""
     run = repo.get_run(run_id)
     if run is None or run["state"] != "diffed":
         raise ApprovalError("Only a sync that is waiting for approval can be approved.")
     items = {i["md_id"]: i for i in repo.items(run_id)}
-    chosen, marks, ok = set(selected), set(completing), set(overrides)
-    approved: list[tuple[str, int]] = []
+    chosen, marks, ok, scores = set(selected), set(completing), set(overrides), set(scoring)
+    approved: list[tuple[str, int, int]] = []
     for md_id in sorted(chosen):
         item = items.get(md_id)
         if item is None or item["action"] == "skip":
@@ -99,10 +99,10 @@ def validate_approval(
         if item["flag_kind"] == "implausible" and md_id not in ok:
             raise ApprovalError("Tick “override” on flagged rows you want to write anyway.")
         completes = int(item["set_status"] == "COMPLETED" and md_id in marks)
-        status_only = item["md_progress"] is not None and item["al_progress"] is not None and item["md_progress"] <= item["al_progress"]
-        if status_only and not completes:
+        scored = int(item["set_score"] is not None and md_id in scores)
+        if is_status_only(item) and not completes and not scored:
             continue  # nothing to send
-        approved.append((md_id, completes))
+        approved.append((md_id, completes, scored))
     if not approved and not allow_empty:
         raise ApprovalError("Nothing selected to write.")
     return approved
@@ -178,6 +178,18 @@ def _evaluated(
     }
 
 
+def _with_score(item: dict[str, Any], score: int | None, site: str) -> dict[str, Any]:
+    """Offer your MangaDex rating for an entry the site hasn't scored. A row with nothing else to change becomes a
+    score-only update; a dismissed flag stays dismissed, and a row that can't be written stays as it is."""
+    if score is None or item["flag_kind"] == "exceeds_total":
+        return item
+    if item["action"] == "skip":
+        if item["al_entry_id"] is None or item["reason"].startswith(DISMISSED_PREFIX):
+            return item
+        item = {**item, "action": "write", "reason": f"rated {score}/10 on MangaDex; {site} has no score"}
+    return {**item, "set_score": score, "score_approved": 1}
+
+
 def md_mal_link(row: Any) -> int | None:
     """The MyAnimeList id from MangaDex's links, if it is a plain number."""
     try:
@@ -223,6 +235,7 @@ def build_items(repo: Repo, run_id: int, md_ids: set[str] | None = None, target:
     if target == "mal":
         return _build_mal_items(repo, run_id, rows, mappings, media, dismissed, jump_limit)
     entries = repo.al_entries()
+    mal_scores = {mal_id: e["score"] for mal_id, e in repo.mal_entries().items()}
     items: list[dict[str, Any]] = []
     for row in rows:
         md_id = row["md_id"]
@@ -237,7 +250,10 @@ def build_items(repo: Repo, run_id: int, md_ids: set[str] | None = None, target:
         media_row = media.get(al_id)
         entry = AlEntry(entry_row["entry_id"], entry_row["status"], entry_row["progress"]) if entry_row else None
         info = AlMediaInfo(media_row["chapters"] if media_row else None, media_row["status"] if media_row else None)
-        items.append({**base, "al_media_id": al_id, **_evaluated(repo, row, entry, info, jump_limit, dismissed, "AniList")})
+        item = {**base, "al_media_id": al_id, **_evaluated(repo, row, entry, info, jump_limit, dismissed, "AniList")}
+        mal_score = mal_scores.get(media_row["id_mal"]) if media_row and media_row["id_mal"] else None
+        score = score_from_md(row["rating"], entry_row["score"] if entry_row else None, (mal_score or 0) * 10)
+        items.append(_with_score(item, score, "AniList"))
     return items
 
 
@@ -246,6 +262,7 @@ def _build_mal_items(
     dismissed: dict[str, Any], jump_limit: int,
 ) -> list[dict[str, Any]]:
     entries = repo.mal_entries()
+    al_entries = repo.al_entries()
     items: list[dict[str, Any]] = []
     for row in rows:
         md_id = row["md_id"]
@@ -264,7 +281,10 @@ def _build_mal_items(
             info = AlMediaInfo(al["chapters"], al["status"], "AniList")
         else:
             info = AlMediaInfo(None, None, "MyAnimeList")
-        items.append({**base, **_evaluated(repo, row, entry, info, jump_limit, dismissed, "MyAnimeList")})
+        item = {**base, **_evaluated(repo, row, entry, info, jump_limit, dismissed, "MyAnimeList")}
+        al_entry = al_entries.get(al_id) if al_id is not None else None
+        score = score_from_md(row["rating"], (e["score"] or 0) * 10 if e else None, al_entry["score"] if al_entry else None)
+        items.append(_with_score(item, score, "MyAnimeList"))
     return items
 
 
@@ -389,13 +409,14 @@ class SyncOrchestrator:
         return RunStatus(r["run_id"], r["state"], r["phase_detail"], r["error"], r["req_anilist"], r["req_mangadex"])
 
     async def approve(
-        self, run_id: int, selected: Iterable[str], completing: Iterable[str], overrides: Iterable[str]
+        self, run_id: int, selected: Iterable[str], completing: Iterable[str], overrides: Iterable[str],
+        scoring: Iterable[str] = (),
     ) -> int:
         """Validate, mark items pending and start writing. Returns the number of approved items."""
-        return await self.approve_many({run_id: (selected, completing, overrides)})
+        return await self.approve_many({run_id: (selected, completing, overrides, scoring)})
 
-    async def approve_many(self, choices: dict[int, tuple[Iterable[str], Iterable[str], Iterable[str]]]) -> int:
-        """Approve the changes of several sites at once ({run_id: (selected, completing, overrides)}), then write
+    async def approve_many(self, choices: dict[int, tuple[Iterable[str], ...]]) -> int:
+        """Approve the changes of several sites at once ({run_id: (selected, completing, overrides[, scoring])}), then write
         them one site after another (AniList first), each re-checked and verified as on its own. A site with
         nothing ticked is closed without writing. Returns the number of approved items."""
         if self.lock.locked() or (self.task and not self.task.done()):
@@ -414,8 +435,8 @@ class SyncOrchestrator:
                                          phase_detail="nothing selected to write")
                     continue
                 self.repo.update_items(run_id, [
-                    (md_id, {"approved": 1, "write_state": "pending", "status_approved": completes})
-                    for md_id, completes in plan[run_id]
+                    (md_id, {"approved": 1, "write_state": "pending", "status_approved": completes, "score_approved": scored})
+                    for md_id, completes, scored in plan[run_id]
                 ])
                 self.repo.update_run(run_id, state="writing", approved_at=now_iso(),
                                      phase_detail="starting" if run_id == order[0] else "waiting for the site before")

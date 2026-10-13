@@ -31,6 +31,7 @@ from mdal.sync.orchestrator import (
     open_diff,
 )
 from mdal.sync.rules import AlMediaInfo, MdInfo, completion_info, completion_label
+from mdal.sync.writer import is_status_only
 from mdal.web.app import clock, get_services, md_cover_url, render, templates
 
 router = APIRouter()
@@ -123,6 +124,8 @@ class DiffRow:
     selectable: bool
     checked: bool
     complete_checked: bool
+    set_score: int | None
+    score_checked: bool
 
 
 def diff_rows(repo: Repo, run_id: int) -> list[DiffRow]:
@@ -166,11 +169,12 @@ def diff_rows(repo: Repo, run_id: int) -> list[DiffRow]:
             unresolved=r["unresolved_reads"],
             set_status=r["set_status"],
             status_label=status_label,
-            status_only=bool(r["set_status"]) and r["md_progress"] is not None and r["al_progress"] is not None
-            and r["md_progress"] <= r["al_progress"],
+            status_only=bool(r["set_status"] or r["set_score"]) and is_status_only(r),
             selectable=selectable,
             checked=bool(r["approved"]) if r["write_state"] != "none" else r["action"] in ("write", "add"),
             complete_checked=bool(r["status_approved"]),
+            set_score=r["set_score"],
+            score_checked=bool(r["score_approved"]),
         ))
     return rows
 
@@ -182,31 +186,35 @@ class Estimate:
     requests: int
     seconds: int
     site: str = "AniList"
+    to_score: int = 0
 
 
 def compute_estimate(repo: Repo, rows: list[DiffRow], selected: Iterable[str], completing: Iterable[str],
-                     target: str = "anilist") -> Estimate:
+                     target: str = "anilist", scoring: Iterable[str] = ()) -> Estimate:
     """Pure DB/maths: the write-phase cost of the current selection."""
-    chosen, marks = set(selected), set(completing)
-    n = to_complete = 0
+    chosen, marks, scores = set(selected), set(completing), set(scoring)
+    n = to_complete = to_score = 0
     for row in rows:
         if not row.selectable or row.md_id not in chosen:
             continue
         completes = bool(row.set_status) and row.md_id in marks
-        if row.status_only and not completes:
+        scored = row.set_score is not None and row.md_id in scores
+        if row.status_only and not completes and not scored:
             continue  # nothing left to send
         n += 1
         to_complete += completes
+        to_score += scored
     if target == "mal":  # one request per entry
         req, sec = estimate(n, 1, repo.get_setting("mal_rpm"))
     else:
         req, sec = estimate(n, repo.get_setting("anilist_write_batch"), repo.get_setting("anilist_rpm"))
-    return Estimate(n, to_complete, req, sec, SITE_NAMES[target])
+    return Estimate(n, to_complete, req, sec, SITE_NAMES[target], to_score)
 
 
 def default_estimate(repo: Repo, rows: list[DiffRow], target: str = "anilist") -> Estimate:
     return compute_estimate(
-        repo, rows, [r.md_id for r in rows if r.checked], [r.md_id for r in rows if r.complete_checked], target
+        repo, rows, [r.md_id for r in rows if r.checked], [r.md_id for r in rows if r.complete_checked], target,
+        [r.md_id for r in rows if r.score_checked],
     )
 
 
@@ -216,7 +224,7 @@ def combine(parts: list[Estimate]) -> Estimate:
         return parts[0]
     return Estimate(sum(p.selected for p in parts), sum(p.to_complete for p in parts),
                     sum(p.requests for p in parts), sum(p.seconds for p in parts),
-                    " and ".join(p.site for p in parts))
+                    " and ".join(p.site for p in parts), sum(p.to_score for p in parts))
 
 
 def group(repo: Repo, run: Any) -> list[Any]:
@@ -226,13 +234,13 @@ def group(repo: Repo, run: Any) -> list[Any]:
     return [d for t in TARGETS if (d := open_diff(repo, t))] or [run]
 
 
-def choices(form: Any, runs: list[Any], default_run: int) -> dict[int, tuple[list[str], list[str], list[str]]]:
+def choices(form: Any, runs: list[Any], default_run: int) -> dict[int, tuple[list[str], list[str], list[str], list[str]]]:
     """Form ticks ("run:md_id", or a bare md_id meaning this page's run) per run, for the runs the page showed
     (its `runs` fields). A site whose changes arrived after the page loaded is left waiting, never closed unseen."""
     shown = {int(v) for v in form.getlist("runs") if str(v).isdigit()} or {default_run}
     ids = {r["run_id"] for r in runs} & shown
-    out: dict[int, tuple[list[str], list[str], list[str]]] = {i: ([], [], []) for i in ids}
-    for n, key in enumerate(("sel", "mc", "ov")):
+    out: dict[int, tuple[list[str], list[str], list[str], list[str]]] = {i: ([], [], [], []) for i in ids}
+    for n, key in enumerate(("sel", "mc", "ov", "sc")):
         for value in form.getlist(key):
             run_s, sep, md_id = str(value).partition(":")
             run_id = int(run_s) if sep and run_s.isdigit() else default_run
@@ -253,15 +261,15 @@ def still_reading(svc: Any, runs: list[Any]) -> list[str]:
     return [SITE_NAMES[t] for t in dict.fromkeys(sites)]
 
 
-def estimates(repo: Repo, runs: list[Any], picked: dict[int, tuple[list[str], list[str], list[str]]] | None) -> Estimate:
+def estimates(repo: Repo, runs: list[Any], picked: dict[int, tuple[list[str], list[str], list[str], list[str]]] | None) -> Estimate:
     parts = []
     for run in runs:
         rows = diff_rows(repo, run["run_id"])
         if picked is None:
             parts.append(default_estimate(repo, rows, run["target"]))
         else:
-            sel, mc, _ = picked[run["run_id"]]
-            parts.append(compute_estimate(repo, rows, sel, mc, run["target"]))
+            sel, mc, _, sc = picked[run["run_id"]]
+            parts.append(compute_estimate(repo, rows, sel, mc, run["target"], sc))
     return combine(parts)
 
 
@@ -282,6 +290,7 @@ def _counts(rows: list[DiffRow]) -> dict[str, int]:
     counts = {a: sum(r.action == a for r in rows) for a in ("write", "add", "flag", "skip")}
     counts["all"] = len(rows)
     counts["complete"] = sum(1 for r in rows if r.set_status and r.selectable)
+    counts["score"] = sum(1 for r in rows if r.set_score is not None and r.selectable)
     return counts
 
 

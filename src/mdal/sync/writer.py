@@ -2,11 +2,12 @@
 
 This module and `sync/add_entry.py` are the only places that may contain a mutation.
 Safety rules enforced here:
-- updates target an existing list entry by `id` and send only `progress` and, for approved completions,
-  the literal status `COMPLETED`; a status is never changed to anything else;
+- updates target an existing list entry by `id` and send only `progress`, for approved completions the literal
+  status `COMPLETED`, and for an approved MangaDex rating a `scoreRaw`; a status is never changed to anything else;
 - adds (approved `add` rows) create an entry by `mediaId` with the literal status `CURRENT` or `COMPLETED`,
   and are dropped if the re-read shows the series is already on the list (that would be an update in disguise);
-- AniList is re-read right before writing, and anything that would lower progress is dropped;
+- AniList is re-read right before writing, and anything that would lower progress is dropped; a score is only
+  sent to an entry that still has none;
 - each batch's results are committed before the next batch is sent, so a resume never re-sends `done` items.
 SaveMediaListEntry with absolute values is idempotent, so the client's retry of a 5xx/network failure is safe.
 """
@@ -35,6 +36,7 @@ class WriteOp:
     progress: int | None     # None = status-only
     complete: bool           # send status: COMPLETED
     media_id: int | None = None
+    score: int | None = None  # scoreRaw (POINT_100); None = leave the score alone
 
 
 def is_add(item: Any) -> bool:
@@ -42,21 +44,34 @@ def is_add(item: Any) -> bool:
 
 
 def is_status_only(item: Any) -> bool:
-    return item["md_progress"] is not None and item["al_progress"] is not None and item["md_progress"] <= item["al_progress"]
+    """No progress to send: the site is at or ahead (or nothing was read), so only the status or score can change."""
+    return item["al_progress"] is not None and (item["md_progress"] is None or item["md_progress"] <= item["al_progress"])
 
 
 def sends_completion(item: Any) -> bool:
     return item["set_status"] == "COMPLETED" and bool(item["status_approved"])
 
 
+def sends_score(item: Any) -> bool:
+    return item["set_score"] is not None and bool(item["score_approved"])
+
+
+def site_score(item: Any, site: str) -> int:
+    """The MangaDex rating (1-10) in the site's terms: AniList's 100-point scale, MyAnimeList's 1-10."""
+    return item["set_score"] * 10 if site == "AniList" else item["set_score"]
+
+
 def op_for(item: Any) -> WriteOp:
+    score = site_score(item, "AniList") if sends_score(item) else None
     if is_add(item):
-        return WriteOp(item["md_id"], None, item["md_progress"], sends_completion(item), media_id=item["al_media_id"])
+        return WriteOp(item["md_id"], None, item["md_progress"], sends_completion(item), media_id=item["al_media_id"],
+                       score=score)
     return WriteOp(
         md_id=item["md_id"],
         entry_id=item["al_entry_id"],
         progress=None if is_status_only(item) else item["md_progress"],
         complete=sends_completion(item),
+        score=score,
     )
 
 
@@ -65,7 +80,8 @@ def recheck(item: Any, adding: bool, entry: Any, site: str = "AniList") -> dict[
 
     `entry` is the series' list entry as just re-read (None = not on the list). For an add, any entry
     means the series was listed meanwhile: drop it, since saving would update that entry instead.
-    Anything that would lower progress, or a status-only change that no longer applies, is dropped.
+    Anything that would lower progress, or a status-only change that no longer applies, is dropped. A score is
+    kept only while the entry has none; when it's all that is left, the row goes ahead with just the score.
     """
     if adding:
         if entry is None:
@@ -77,16 +93,25 @@ def recheck(item: Any, adding: bool, entry: Any, site: str = "AniList") -> dict[
     now, status = entry["progress"], entry["status"]
     fields: dict[str, Any] = {"al_status_before": status, "al_progress": now}
     completing = sends_completion(item) and status != "COMPLETED"
+    scoring = sends_score(item)
+    if scoring and entry["score"]:
+        fields["score_approved"] = scoring = 0  # scored meanwhile: yours stays
     if status == "COMPLETED" and sends_completion(item):
         fields["status_approved"] = 0  # already completed: nothing to change
+    if item["md_progress"] is None:   # nothing read: only a score was offered
+        if not scoring:
+            fields.update(write_state="dropped", verify_note=f"dropped: the entry has a score on {site} now")
+        return fields
     if is_status_only(item):
-        if status == "COMPLETED":
+        if status == "COMPLETED" and not scoring:
             fields.update(write_state="dropped", verify_note=f"dropped: already COMPLETED on {site}")
         elif now < item["md_progress"]:   # status-only sends no progress, so a higher count is kept as it is
             fields.update(write_state="dropped", verify_note=f"dropped: {site} progress moved to {now}")
     elif now >= item["md_progress"]:
         if completing and now == item["md_progress"]:
             fields["verify_note"] = f"{site} already at {now}; only marking completed"
+        elif scoring:
+            fields.update(status_approved=0, verify_note=f"{site} is now at {now}; only the score is sent")
         else:
             fields.update(write_state="dropped", verify_note=f"dropped: {site} is now at {now} (≥ {item['md_progress']})")
     return fields
@@ -105,6 +130,8 @@ def verify_note(item: Any, entry: Any, site: str = "AniList") -> tuple[str, bool
             notes.append(f"{site} filled in its total of {entry['progress']} chapters")
         elif entry["progress"] != expected_progress:
             problems.append(f"progress is {entry['progress']}, expected {expected_progress}")
+        if sends_score(item) and (entry["score"] or 0) != site_score(item, site):
+            problems.append(f"score is {entry['score'] or 'unset'}, expected {site_score(item, site)}")
         if item["al_status_before"] is None:  # added by this run
             expected_status = "COMPLETED" if sends_completion(item) else "CURRENT"
             if entry["status"] != expected_status:
@@ -133,7 +160,11 @@ def mutation_document(ops: list[WriteOp]) -> tuple[str, dict[str, Any]]:
             params += [f"$a{i}: Int", f"$p{i}: Int"]
             variables[f"a{i}"], variables[f"p{i}"] = op.media_id, op.progress
             status = "COMPLETED" if op.complete else "CURRENT"
-            fields.append(f"m{i}: SaveMediaListEntry(mediaId: $a{i}, status: {status}, progress: $p{i}) {SELECTION}")
+            score = ""
+            if op.score is not None:
+                params.append(f"$s{i}: Int")
+                variables[f"s{i}"], score = op.score, f", scoreRaw: $s{i}"
+            fields.append(f"m{i}: SaveMediaListEntry(mediaId: $a{i}, status: {status}, progress: $p{i}{score}) {SELECTION}")
             continue
         args = [f"id: $e{i}"]
         params.append(f"$e{i}: Int")
@@ -144,6 +175,10 @@ def mutation_document(ops: list[WriteOp]) -> tuple[str, dict[str, Any]]:
             variables[f"p{i}"] = op.progress
         if op.complete:
             args.append("status: COMPLETED")
+        if op.score is not None:
+            args.append(f"scoreRaw: $s{i}")
+            params.append(f"$s{i}: Int")
+            variables[f"s{i}"] = op.score
         fields.append(f"m{i}: SaveMediaListEntry({', '.join(args)}) {SELECTION}")
     return f"mutation ({', '.join(params)}) {{ {' '.join(fields)} }}", variables
 
@@ -217,7 +252,7 @@ class Writer:
         pending = self.repo.items_in_state(run_id, "pending")
         ops = [op_for(i) for i in pending]
         # An approved row that ends up with nothing to send (status-only whose completion was unticked).
-        empty = [op.md_id for op in ops if op.progress is None and not op.complete]
+        empty = [op.md_id for op in ops if op.progress is None and not op.complete and op.score is None]
         if empty:
             self.repo.update_items(run_id, [(m, {"write_state": "dropped", "verify_note": "dropped: nothing left to send"}) for m in empty])
         ops = [op for op in ops if op.md_id not in set(empty)]

@@ -275,15 +275,20 @@ class MalClient:
         return await self._request("PATCH", f"/manga/{int(mal_id)}/my_list_status",
                                    data={"status": status, "num_chapters_read": int(chapters)})
 
-    async def update_list_status(self, mal_id: int, *, chapters: int | None, status: str | None) -> dict[str, Any]:
-        """The sync's MyAnimeList write. Sends chapters read and, optionally, reading/completed."""
+    async def update_list_status(self, mal_id: int, *, chapters: int | None, status: str | None,
+                                 score: int | None = None) -> dict[str, Any]:
+        """The sync's MyAnimeList write. Sends chapters read and, optionally, reading/completed and a score (1-10)."""
         if status is not None and status not in WRITE_STATUSES:
             raise ValueError(f"refusing to send status {status!r}")
+        if score is not None and not 1 <= int(score) <= 10:
+            raise ValueError(f"refusing to send score {score!r}")
         form: dict[str, Any] = {}
         if chapters is not None:
             form["num_chapters_read"] = int(chapters)
         if status is not None:
             form["status"] = status
+        if score is not None:
+            form["score"] = int(score)
         if not form:
             raise ValueError("nothing to send")
         return await self._request("PATCH", f"/manga/{int(mal_id)}/my_list_status", data=form)

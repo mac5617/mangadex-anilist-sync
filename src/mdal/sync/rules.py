@@ -197,6 +197,14 @@ def evaluate(
     return item("write", f"read to {md_progress} on MangaDex; {site} has {al}")
 
 
+def score_from_md(rating: int | None, site_score: float | None, other_score: float | None) -> int | None:
+    """Your MangaDex rating (1-10) for an entry this site hasn't scored, unless the other site scored it differently
+    (agreeing means it came from MangaDex on an earlier sync). Scores are out of 100 here: MyAnimeList's × 10."""
+    if rating is None or site_score or (other_score and round(other_score) != rating * 10):
+        return None
+    return rating
+
+
 def completion_label(entry_status: str | None, status_source: str | None, total: int | None, site: str = "AniList") -> str:
     """e.g. "Reading → Completed (AniList: finished, 120 ch)" for the diff screen."""
     if status_source == MARKED:

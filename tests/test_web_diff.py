@@ -35,7 +35,7 @@ def row(html: str, md_id: str) -> str:
 def test_diff_page_summary_and_estimate(client, run_id, mock):
     html = client.get(f"/sync/{run_id}").text
     stats = {label: value for value, label in re.findall(r'<span class="figure-value">(\d+)</span><span class="figure-label">([^<]+)</span>', html)}
-    assert stats == {"Updates": "3", "New entries": "0", "Flagged": "2", "Skipped": "1", "Completions": "2"}
+    assert stats == {"Updates": "3", "New entries": "0", "Flagged": "2", "Skipped": "1", "Completions": "2", "Scores": "0"}
     # Default selection: the 3 writes (status-only counts because its completion is checked).
     assert "3 selected, 2 to mark completed" in html
     assert "≈ 3 AniList requests, ≈ 9 s" in html

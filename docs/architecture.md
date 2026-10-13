@@ -157,6 +157,7 @@ Not-on-my-list items are derived: `mapping.state IN ('confirmed','auto') AND al_
 1. `/manga/status` → library ids and statuses.
 2. `/manga?ids[]…&limit=100&contentRating[]=safe&…=suggestive&…=erotica&…=pornographic&includes[]=author&includes[]=cover_art` per 100 ids → `md_manga`.
 3. `/manga/read?ids[]…&grouped=true` per 100 ids → `md_read`.
+3a. `/rating?manga[]…` per 100 ids → `md_manga.rating` (yours, 1-10). A plain refusal leaves the ratings unknown instead of failing the sync. A rating fills in the score of an entry the site hasn't scored, unless the other site has a different score; it's shown as a "score" tick on the diff row and sent with that row (`sync_item.set_score`, `score_approved`), and dropped if the re-read shows the entry has a score by then.
 4. Unknown chapter ids = `md_read.chapter_id` minus `md_chapter` → `/chapter?ids[]…&limit=100&contentRating[]×4&includeUnavailable=1` per 100. Ids that were requested but not returned get `missing=1` and are retried at most once more, on the next sync, before being permanent.
 
 **AniList** (`fetch/anilist_list.py`):
@@ -263,8 +264,9 @@ Assumptions: 500 library series; 85% have `links.al`, 5% only `links.mal`, 10% n
 | `/manga/status` | 1 | 1 |
 | `/manga` (100/req) | 5 | 5 |
 | `/manga/read` grouped (100/req) | 5 | 5 |
+| `/rating` (100/req) | 5 | 5 |
 | `/chapter` (100/req) | 300 (30,000 ids) | ≈ 1–10 (only new ids) |
-| **Total** | **≈ 312 → ≈ 104 s** | **≈ 13–22 → ≈ 5–8 s** |
+| **Total** | **≈ 317 → ≈ 106 s** | **≈ 18–27 → ≈ 6–9 s** |
 
 **AniList**, at 20 req/min (3 s spacing):
 
@@ -282,7 +284,7 @@ Assumptions: 500 library series; 85% have `links.al`, 5% only `links.mal`, 10% n
 
 Worst case, all 500 need updating: 52 write-phase requests ≈ 2.6 min. Estimate formula shown before approval: `est_requests = 2 + ceil(n_approved / batch)`, `est_seconds = est_requests × 60 / anilist_rpm`.
 
-A test (story 13) runs the whole dry run against a mocked 500-series library, asserts the AniList dry-run count ≤ 24 and MangaDex ≤ 312, and asserts zero AniList requests on a second, unchanged run apart from the single list fetch.
+A test (story 13) runs the whole dry run against a mocked 500-series library, asserts the AniList dry-run count ≤ 24 and MangaDex ≤ 317, and asserts zero AniList requests on a second, unchanged run apart from the single list fetch.
 
 ## 12. Test strategy
 - **Unit (pure):** normalisation, scoring signals, threshold boundaries (0.92/0.60 exactly, margin edge), progress rules (decimal floor, null, never-lower, exceeds-total, each implausible trigger, hints), estimate.

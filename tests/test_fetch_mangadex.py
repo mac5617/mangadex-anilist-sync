@@ -37,7 +37,7 @@ async def test_request_counts_for_250_series_and_1000_reads(fast, mock):
     fake = library(250, 4).install(mock)
     summary = await fetch_library(fast.mangadex, fast.repo)
     calls = fake.data_calls()
-    assert calls == {"token": 1, "status": 1, "manga": 3, "read": 3, "chapter": 10}
+    assert calls == {"token": 1, "status": 1, "manga": 3, "read": 3, "chapter": 10, "rating": 3}
     assert summary.series == 250
     assert summary.read_ids == 1000
     assert summary.chapters_resolved == 1000

@@ -1,8 +1,8 @@
 """Writing and verifying approved items on MyAnimeList. The only module that calls `update_list_status`.
 
 Same safety rules as the AniList writer (sync/writer.py), sharing its re-check and verify logic:
-- an update sends the chapters read and, for approved completions, the literal status `completed`;
-  a status is never changed to anything else;
+- an update sends the chapters read, for approved completions the literal status `completed`, and for an
+  approved MangaDex rating a score (only while the entry has none); a status is never changed to anything else;
 - an add sends `reading` or `completed` with the chapters read, and is dropped if the re-read shows
   the series is already on the list (MyAnimeList would update that entry instead);
 - the list is re-read right before writing, and anything that would lower progress is dropped;
@@ -21,7 +21,7 @@ from typing import Any
 from mdal.clients.myanimelist import MalClient, MalRequestError
 from mdal.db.repo import Repo, now_iso
 from mdal.fetch.mal_list import fetch_mal_list
-from mdal.sync.writer import is_status_only, recheck, sends_completion, verify_note, with_note
+from mdal.sync.writer import is_status_only, recheck, sends_completion, sends_score, site_score, verify_note, with_note
 
 SITE = "MyAnimeList"
 
@@ -77,8 +77,8 @@ def is_mal_add(item: Any) -> bool:
     return item["al_entry_id"] is None
 
 
-def mal_request(item: Any) -> tuple[int | None, str | None]:
-    """(chapters, status) to send. Status is one of two literals, or None to leave it alone."""
+def mal_request(item: Any) -> tuple[int | None, str | None, int | None]:
+    """(chapters, status, score) to send. Status is one of two literals, or None to leave it alone."""
     adding = is_mal_add(item)
     chapters = None if (not adding and is_status_only(item)) else item["md_progress"]
     if sends_completion(item):
@@ -87,7 +87,7 @@ def mal_request(item: Any) -> tuple[int | None, str | None]:
         status = "reading"
     else:
         status = None
-    return chapters, status
+    return chapters, status, site_score(item, SITE) if sends_score(item) else None
 
 
 class MalWriter:
@@ -109,14 +109,14 @@ class MalWriter:
         await self.prewrite(run_id)
         pending = self.repo.items_in_state(run_id, "pending")
         for n, item in enumerate(pending, start=1):
-            chapters, status = mal_request(item)
-            if chapters is None and status is None:
+            chapters, status, score = mal_request(item)
+            if chapters is None and status is None and score is None:
                 self.repo.update_items(run_id, [(item["md_id"], {"write_state": "dropped",
                                                                  "verify_note": "dropped: nothing left to send"})])
                 continue
             self.progress(f"writing {n}/{len(pending)}, about {self.client.queue.min_interval:.0f} s each")
             try:
-                await self.client.update_list_status(item["mal_id"], chapters=chapters, status=status)
+                await self.client.update_list_status(item["mal_id"], chapters=chapters, status=status, score=score)
             except MalRequestError as exc:
                 self.repo.update_items(run_id, [(item["md_id"], {"write_state": "failed", "verify_note": f"write failed: {exc}"})])
                 continue

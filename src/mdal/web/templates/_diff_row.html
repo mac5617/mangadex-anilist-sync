@@ -24,6 +24,11 @@
         {%- if r.complete_checked %} checked{% endif %}{% if not r.selectable %} disabled{% endif %}> mark completed</label>
       <span class="sub">{{ r.status_label }}</span>
     {% endif %}
+    {% if r.set_score is not none %}
+      <label class="complete"><input type="checkbox" name="sc" value="{{ rid }}"
+        {%- if r.score_checked %} checked{% endif %}{% if not r.selectable %} disabled{% endif %}> score {{ r.set_score }}/10</label>
+      <span class="sub">your MangaDex rating; {{ r.site }} has none</span>
+    {% endif %}
   </td>
   <td class="reason">{{ r.reason }}{% if r.hint %}<span class="sub">{{ r.hint }}</span>{% endif %}
     {% if r.flag_kind == "implausible" and r.action == "flag" %}<label class="override"><input type="checkbox" name="ov" value="{{ rid }}"> override: write anyway</label>{% endif %}
