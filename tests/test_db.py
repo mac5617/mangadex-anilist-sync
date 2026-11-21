@@ -144,3 +144,39 @@ def test_migration_002_allows_add_and_keeps_rows(tmp_path):
     conn.execute("INSERT INTO sync_item(run_id, md_id, action) VALUES (1, 'b', 'add')")
     with pytest.raises(sqlite3.IntegrityError):
         conn.execute("INSERT INTO sync_item(run_id, md_id, action) VALUES (1, 'c', 'create')")
+
+
+def _hammer(repo, rounds=400):
+    """A background job writing settings while page threads read them: the clash behind a one-off HTTP 500."""
+    import threading
+
+    errors: list[str] = []
+
+    def write():
+        for i in range(rounds):
+            repo.set_setting("new_llm", {"picks": [i], "error": None})
+            with repo.conn:   # a multi-statement transaction, like a sync's writes
+                repo.conn.execute("INSERT OR REPLACE INTO settings(key, value) VALUES ('rec_status', ?)", (f'{{"n": {i}}}',))
+                repo.conn.execute("INSERT OR REPLACE INTO settings(key, value) VALUES ('new_status', ?)", (f'{{"n": {i}}}',))
+
+    def read():
+        for _ in range(rounds):
+            try:
+                assert repo.get_setting("ollama_model") == "gpt-oss:20b"
+                assert "picks" in (repo.get_setting("new_llm") or {"picks": []})
+                rec, new = repo.get_setting("rec_status"), repo.get_setting("new_status")
+                assert rec is None or "n" in rec, rec
+            except Exception as exc:   # noqa: BLE001
+                errors.append(f"{exc.__class__.__name__}: {exc}")
+
+    threads = [threading.Thread(target=write)] + [threading.Thread(target=read) for _ in range(4)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    return errors
+
+
+def test_reads_and_writes_from_several_threads_never_mix(db_path):
+    errors = _hammer(Repo(connect(db_path)))
+    assert not errors, errors[:5]

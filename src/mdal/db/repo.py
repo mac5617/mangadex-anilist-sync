@@ -9,7 +9,10 @@ import json
 import sqlite3
 from collections.abc import Iterable, Mapping
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from mdal.db.connection import LockedConnection
 
 # Tunables (architecture §3). Values are stored as JSON text.
 SETTING_DEFAULTS: dict[str, Any] = {
@@ -67,7 +70,7 @@ def now_iso() -> str:
 
 
 def _upsert(
-    conn: sqlite3.Connection, table: str, row: Mapping[str, Any], key: Iterable[str], preserve: Iterable[str] = ()
+    conn: LockedConnection, table: str, row: Mapping[str, Any], key: Iterable[str], preserve: Iterable[str] = ()
 ) -> None:
     """Insert or update. Columns in `preserve` are written on insert but never overwritten."""
     cols = list(row)
@@ -81,7 +84,7 @@ def _upsert(
 
 
 class Repo:
-    def __init__(self, conn: sqlite3.Connection) -> None:
+    def __init__(self, conn: LockedConnection) -> None:
         self.conn = conn
 
     # ---- settings -------------------------------------------------------
