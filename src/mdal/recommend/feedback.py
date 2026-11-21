@@ -58,7 +58,11 @@ LOVED = re.compile(r"\b(lov(e|ed|ing)|adored?|amazing|masterpiece|favou?rite|inc
 LIKED = re.compile(r"\b(lik(e|ed)\s+it|enjoy(ed)?|good|great|fun|solid|not bad|pretty good|nice)\b", re.I)
 DISLIKED = re.compile(r"\b(hat(e|ed)|dislik(e|ed)|didn'?t (like|enjoy)|did not (like|enjoy)|boring|bad|awful|"
                       r"terrible|dropped|disappointing|disappointed|not for me|meh|worst)\b", re.I)
-READ_WORDS = re.compile(r"\b(read|finished|completed|caught up|just read|already read|binged)\b", re.I)
+# "Finished"/"completed" alone usually describe what they want ("a finished series"): only "I finished",
+# "just finished", "finished it/reading" and the like say the reader did.
+READ_WORDS = re.compile(r"\b(read|caught up|binged|"
+                        r"(i|i've|ive|i have|i just|just|already|recently|finally)\s+(finished|completed)|"
+                        r"(finished|completed)\s+(it|reading|this|that))\b", re.I)
 WANT_MORE = re.compile(r"\b(another|more like|like (this|it|that)|similar)\b", re.I)
 
 

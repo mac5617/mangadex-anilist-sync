@@ -168,11 +168,37 @@ def tag_overlap(reference: list[str], items: list[Item]) -> dict[str, float]:
     return {i.key: len(ref & {tag_key(t) for t in i.tags}) / len(ref) for i in items}
 
 
+QUOTES = "\"'“”‘’«»「」『』*_`"
+# Words that, just before a one-word title, show it is being named: "I just read Monster", "better than Another".
+NAMING_CUES = {"read", "reading", "reread", "finished", "finishing", "binged", "enjoyed", "loved", "liked", "hated",
+               "disliked", "dropped", "than", "called", "titled", "named"}
+
+
+def clearly_named(question: str, name: str) -> bool:
+    """A one-word title ("Another", "Monster", "Cursed") is also an ordinary word, so it counts only when the
+    question plainly names it: quoted, capitalised mid-sentence, or right after a cue like "read" or "than".
+    "Another finished dark fantasy" and "anything cursed" don't name a series."""
+    tokens = question.split()
+    for k, raw in enumerate(tokens):
+        word = raw.strip(".,!?;:()[]")
+        if normalize(word) != name:
+            continue
+        quoted = word[:1] in QUOTES or word[-1:] in QUOTES
+        bare = word.strip(QUOTES)
+        mid_sentence = k > 0 and tokens[k - 1][-1:] not in ".!?:" and not question.isupper()
+        cue = k > 0 and normalize(tokens[k - 1]) in NAMING_CUES
+        if quoted or (bare[:1].isupper() and mid_sentence) or cue:
+            return True
+    return False
+
+
 def find_named(question: str, index: dict[str, tuple[str, str]]) -> list[tuple[str, str]]:
     """Series the question names: [(key, title)], longest match first. `index` maps normalised titles to them."""
     text = f" {normalize(question)} "
     found: list[tuple[str, str]] = []
     for name in sorted(index, key=len, reverse=True):
+        if " " not in name and not clearly_named(question, name):
+            continue
         if len(name) >= MIN_NAMED and f" {name} " in text and index[name] not in found:
             found.append(index[name])
             text = text.replace(f" {name} ", " ")

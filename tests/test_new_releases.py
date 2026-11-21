@@ -476,7 +476,20 @@ def test_model_label_shortens_hugging_face_names():
 def test_find_named_prefers_the_longest_title_and_ignores_short_ones():
     index = {"cursed flesh": ("md:1", "Cursed Flesh"), "cursed": ("md:2", "Cursed"), "real": ("al:3", "Real")}
     assert chat.find_named("I just read Cursed Flesh, more like it? Real talk.", index) == [("md:1", "Cursed Flesh")]
-    assert chat.find_named("anything cursed", index) == [("md:2", "Cursed")]
+    # A one-word title is also a word: it counts only when the question plainly names it.
+    assert chat.find_named("anything cursed", index) == []
+    assert chat.find_named("I just read cursed, more like it?", index) == [("md:2", "Cursed")]
+    assert chat.find_named('something like "Cursed" but longer', index) == [("md:2", "Cursed")]
+    assert chat.find_named("Something like Cursed but longer", index) == [("md:2", "Cursed")]
+    assert chat.find_named("Cursed series with a twist?", index) == []
+
+
+def test_a_question_starting_with_a_title_word_names_nothing():
+    index = {"another": ("md:1", "Another"), "monster": ("al:2", "Monster")}
+    assert chat.find_named("Another finished dark fantasy or mystery with a clever lead, nothing too long", index) == []
+    assert chat.find_named("is there another monster series?", index) == []
+    assert chat.find_named("I loved Monster, is there another like it?", index) == [("al:2", "Monster")]
+    assert chat.find_named("Better than Another, please", index) == [("md:1", "Another")]
 
 
 def test_reply_sentences_naming_unpicked_series_are_dropped():

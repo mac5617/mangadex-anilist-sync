@@ -28,6 +28,11 @@ from tests.test_new_releases import MU_SERIES, mock, ollama, scan, uuid, world  
     ("I didn't like Cursed Flesh", "disliked"),
     ("Something like Cursed Flesh", None),
     ("I'd love something like Cursed Flesh", None),
+    # "finished" describing what they want is not a verdict
+    ("Another finished dark fantasy like Cursed Flesh", None),
+    ("A completed series like Cursed Flesh", None),
+    ("I finished Cursed Flesh", "read"),
+    ("Just finished Cursed Flesh, another like it?", "liked"),
 ])
 def test_detect_verdict(text, verdict):
     assert feedback.detect_verdict(text) == verdict
