@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "pulsing-dot",
+        "value": "*",
+        "files": [
+          "src/mdal/web/templates/base.html"
+        ],
+        "createdAt": "2026-11-21T18:07:53.888Z",
+        "reason": "Claude triage: the dots are Ask's thinking indicator (.chat-thinking), shown only while a model request is in flight, and static under reduced motion"
+      }
+    ]
+  }
+}
