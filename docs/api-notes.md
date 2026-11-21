@@ -116,7 +116,7 @@ Changes in response (`clients/mangadex.py`):
 3. **AniList 429 as HTML / missing Retry-After.** Handled by status-code classification and a 60 s fallback.
 4. **Server-side side effects of SaveMediaListEntry** (status/date changes) and **activity-feed posts.** Unverified. Detect them in the verify step and raise them before bulk writes.
 5. **Complexity cap unknown.** Mitigated by halve-on-complexity-error, and by a read-only aliased-query test before any write.
-6. **Cover images.** These are loaded by your browser from `uploads.mangadex.org` (a `*.mangadex.org` host). Load them lazily, only on the review screen, with `referrerpolicy="no-referrer"`. Never prefetch them in bulk.
+6. **Cover images.** Since November 2026 `uploads.mangadex.org` answers browsers with a verification page (302 to `mangadex.org/edge/challenge`) instead of the image, while identified clients still get it. Shiori fetches each cover itself, as `mangadex-anilist-sync/<version>`, through the paced MangaDex client (cooldown included, not counted in a sync's requests), stores it under `covers/` next to the database and serves it from `/covers/md/...`. Covers are fetched only when a page shows them (lazily), once each; never prefetch them in bulk.
 
 ---
 

@@ -14,6 +14,7 @@ from mdal import titles
 from mdal.clients.anilist import AniListClient
 from mdal.clients.anilist_oauth import AniListOAuth
 from mdal.clients.mangadex import MangaDexClient, MangaDexCredentials
+from mdal.covers import CoverCache
 from mdal.clients.mangaupdates import MangaUpdatesClient
 from mdal.clients.myanimelist import MalClient
 from mdal.clients.ratelimit import PacedQueue
@@ -94,6 +95,7 @@ class Services:
         self.releases = NewReleases(self)
         self.series = SeriesPages(self)
         self.ranker = Ranker(self)
+        self.covers = CoverCache(self)
 
     @classmethod
     def from_env(cls) -> Services:

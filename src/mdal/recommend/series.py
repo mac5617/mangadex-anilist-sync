@@ -24,7 +24,7 @@ from mdal.fetch.mangaupdates import fresh_enough, lookup_mu
 from mdal.matching.normalize import normalize
 from mdal.recommend import ranking
 from mdal.recommend.feedback import VERDICTS
-from mdal.recommend.fresh import MD_COVER, english_meta
+from mdal.recommend.fresh import MD_COVER_LARGE, english_meta
 from mdal.recommend.ratings import title_of
 from mdal.stats import COUNTRY_LABELS, FORMAT_LABELS, MD_STATUS_LABELS, PUB_LABELS
 
@@ -52,7 +52,7 @@ def big_cover(url: str | None) -> str | None:
     if "anilist" in url:
         size = "large" if url.rsplit("/", 1)[-1].startswith("bx") else "medium"
         return url.replace("/cover/small/", f"/cover/{size}/").replace("/cover/medium/", f"/cover/{size}/")
-    return url.replace(".256.jpg", ".512.jpg")
+    return url.replace("?size=256", "?size=512")     # a MangaDex cover served by Shiori (covers.py)
 
 
 class SeriesPages:
@@ -121,7 +121,7 @@ class SeriesPages:
         cover = None
         fallback = media["cover_url"] if media else None    # the small cover, if the big one fails to load
         if md and md["cover_file"]:
-            cover = MD_COVER.format(md_id=md_id, file=md["cover_file"]).replace(".256.jpg", ".512.jpg")
+            cover = MD_COVER_LARGE.format(md_id=md_id, file=md["cover_file"])
         elif media and media["cover_url"]:
             cover = big_cover(media["cover_url"])
         description = (new["description"] if new else None) or (plain_text(media["description"]) if media and media["description"] else None)

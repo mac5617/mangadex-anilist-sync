@@ -300,7 +300,7 @@ def test_big_covers_only_ask_anilist_for_sizes_that_exist():
     base = "https://s4.anilist.co/file/anilistcdn/media/manga/cover"
     assert big_cover(f"{base}/small/bx101311-abc.jpg") == f"{base}/large/bx101311-abc.jpg"
     assert big_cover(f"{base}/small/b75275-6sw70Ah3Y94V.jpg") == f"{base}/medium/b75275-6sw70Ah3Y94V.jpg"   # old upload
-    assert big_cover("https://uploads.mangadex.org/covers/x/c.jpg.256.jpg").endswith(".512.jpg")
+    assert big_cover("/covers/md/x/c.jpg?size=256") == "/covers/md/x/c.jpg?size=512"
 
 
 def test_mangaupdates_recommendations_keep_their_covers_and_old_records_are_refetched(services):

@@ -75,7 +75,7 @@ def test_covers_are_lazy_and_no_referrer(client, seeded):
     imgs = re.findall(r"<img [^>]*>", html)
     assert imgs
     assert all('loading="lazy"' in i and 'referrerpolicy="no-referrer"' in i for i in imgs)
-    assert "https://uploads.mangadex.org/covers/k/c.jpg.256.jpg" in html
+    assert "/covers/md/k/c.jpg?size=256" in html
 
 
 async def test_accept_confirms_and_is_never_rematched(client, services, seeded, fake):

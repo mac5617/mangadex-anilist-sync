@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -18,7 +18,7 @@ WEB_DIR = Path(__file__).parent
 templates = Jinja2Templates(directory=WEB_DIR / "templates")
 
 def md_cover_url(md_id: str, cover_file: str | None) -> str | None:
-    """MangaDex's smallest thumbnail. Loaded by the browser, lazily, with no referrer (api-notes risk 6)."""
+    """MangaDex's smallest thumbnail, served by Shiori (covers.py)."""
     return MD_COVER.format(md_id=md_id, file=cover_file) if cover_file else None
 
 
@@ -122,6 +122,16 @@ def create_app(services: Services) -> FastAPI:
     def favicon() -> FileResponse:
         """Browsers ask for this path on their own, whatever the page links."""
         return FileResponse(WEB_DIR / "static" / "favicon.ico", media_type="image/x-icon")
+
+    @app.get("/covers/md/{md_id}/{file}", include_in_schema=False)
+    async def md_cover(md_id: str, file: str, size: int = 256) -> Response:
+        """A MangaDex cover from Shiori's store, fetched on first view. 404 (the page shows no cover) when
+        MangaDex can't be asked right now or sends no image."""
+        path = await services.covers.get(md_id, file, size)
+        if path is None:
+            return Response(status_code=404, headers={"Cache-Control": "no-store"})
+        # A cover's file name changes with the cover, so the browser may keep it.
+        return FileResponse(path, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=2592000, immutable"})
 
     from mdal.web.routes import auth, backup, dashboard, discover, history, insights, list as list_routes, notlisted, review, search, series, settings, stats, sync
 

@@ -41,8 +41,9 @@ LANGUAGES = {"ja": "Japan", "ko": "Korea", "zh": "China", "zh-hk": "China", "en"
              "vi": "Vietnam", "th": "Thailand", "es": "Spain", "fr": "France"}
 STATUS = {"ongoing": "ongoing", "completed": "completed", "hiatus": "on hiatus", "cancelled": "cancelled"}
 ADULT_RATINGS = ("erotica", "pornographic")
-# MangaDex's smallest thumbnail. Loaded by the browser, lazily, with no referrer (api-notes risk 6).
-MD_COVER = "https://uploads.mangadex.org/covers/{md_id}/{file}.256.jpg"
+# MangaDex's smallest thumbnail, served by Shiori (covers.py): MangaDex answers browsers with a verification page.
+MD_COVER = "/covers/md/{md_id}/{file}?size=256"
+MD_COVER_LARGE = "/covers/md/{md_id}/{file}?size=512"
 
 
 EMPHASIS = re.compile(r"(\*\*|__|\*|`)(?=\S)(.+?)(?<=\S)\1")

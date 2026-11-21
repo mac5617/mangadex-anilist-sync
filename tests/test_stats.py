@@ -216,7 +216,7 @@ def test_entries_page(client, services, mock):
     assert "Genre: Action" in html and 'href="/stats/entries?sort=progress"' in html  # chip removes the filter
     assert html.index(">B<") < html.index(">A<")
     assert "46 / 50" in html and 'class="meter"' in html
-    assert "uploads.mangadex.org/covers/ma/c.jpg.256.jpg" in html  # MangaDex cover when the series is matched
+    assert "/covers/md/ma/c.jpg?size=256" in html  # MangaDex cover when the series is matched
     assert "https://mangadex.org/title/ma" in client.get("/stats/entries?q=A").text
     assert len(mock.calls) == 0
 

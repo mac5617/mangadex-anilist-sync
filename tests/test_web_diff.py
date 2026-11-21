@@ -168,7 +168,7 @@ def test_rows_show_mangadex_cover(client, run_id):
     html = client.get(f"/sync/{run_id}").text
     w = row(html, "w")
     img = re.search(r"<img [^>]*>", w).group(0)
-    assert 'src="https://uploads.mangadex.org/covers/w/c.jpg.256.jpg"' in img
+    assert 'src="/covers/md/w/c.jpg?size=256"' in img
     assert 'loading="lazy"' in img and 'referrerpolicy="no-referrer"' in img
     assert 'class="md-title"' in w and "AniList:" in w
 

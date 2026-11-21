@@ -25,6 +25,7 @@ from mdal.config import USER_AGENT
 log = logging.getLogger(__name__)
 
 API_URL = "https://api.mangadex.org"
+UPLOADS_URL = "https://uploads.mangadex.org"
 TOKEN_URL = "https://auth.mangadex.org/realms/mangadex/protocol/openid-connect/token"
 ALL_CONTENT_RATINGS = ["safe", "suggestive", "erotica", "pornographic"]
 IDS_PER_REQUEST = 100
@@ -181,13 +182,13 @@ class MangaDexClient:
         log.info("MangaDex: %s of %s requests left; waiting %.0f s for the reset", remaining, limit, wait)
         self.queue.pause_for(wait)
 
-    async def _send(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
+    async def _send(self, method: str, url: str, *, counted: bool = True, **kwargs: Any) -> httpx.Response:
         while True:
             self.check_cooldown()
             try:
                 async with self.queue.slot():
                     self.check_cooldown()
-                    if self.request_counter:
+                    if self.request_counter and counted:   # covers aren't part of a sync's request count
                         self.request_counter()
                     response = await self._http.request(method, url, **kwargs)
                     if response.status_code == 429:
@@ -283,6 +284,23 @@ class MangaDexClient:
         """Token grant only (1 request); raises MangaDexAuthError on failure. Used by story 06."""
         self._access = None
         await self._password_grant()
+
+    # ---- covers ---------------------------------------------------------
+    async def cover(self, md_id: str, file: str, size: int) -> bytes | None:
+        """One cover thumbnail (`size` 256 or 512), or None when MangaDex doesn't send an image.
+
+        Paced, and stopped by a cooldown, like every MangaDex request; no login is needed or sent. MangaDex now
+        answers browsers with a verification page instead of the image, so Shiori fetches each cover once, as
+        itself, and serves it locally (covers.py)."""
+        response = await self._send("GET", f"{UPLOADS_URL}/covers/{md_id}/{file}.{size}.jpg", counted=False)
+        if response.status_code == 403:
+            self._start_cooldown("MangaDex answered 403 for a cover (temporary IP ban)")
+            raise MangaDexBlocked("MangaDex returned 403 for a cover, most likely a temporary IP ban.")
+        if response.status_code != 200 or not response.headers.get("content-type", "").startswith("image/"):
+            log.info("MangaDex cover %s/%s: HTTP %s %s", md_id, file, response.status_code,
+                     response.headers.get("location", "")[:80])
+            return None
+        return response.content
 
     # ---- data -----------------------------------------------------------
     async def get(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:

@@ -395,7 +395,7 @@ async def test_new_releases_page_and_hiding(services, world, mock):
         for gone in range(3, 8):                                  # owned, followed, on AniList, same title, adult
             assert uuid(gone) not in html, gone
         assert "Adult Horror" in c.get("/discover/new?adult=1").text
-        assert f"https://mangadex.org/title/{uuid(1)}" in html and f"covers/{uuid(1)}/1.jpg.256.jpg" in html
+        assert f"https://mangadex.org/title/{uuid(1)}" in html and f"/covers/md/{uuid(1)}/1.jpg?size=256" in html
 
         assert c.post(f"/discover-new-hide/{uuid(1)}").text == ""
         assert "Cursed Flesh" not in c.get("/discover/new").text
