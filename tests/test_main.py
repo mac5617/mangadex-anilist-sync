@@ -12,9 +12,11 @@ def test_run_binds_loopback(monkeypatch, services):
     calls = {}
     monkeypatch.setattr(main.Services, "from_env", classmethod(lambda cls: services))
     monkeypatch.setattr(main.uvicorn, "run", lambda app, **kw: calls.update(kw))
+    monkeypatch.setattr(main, "lower_priority", lambda: calls.update(lowered=True))
     main.run()
     assert calls["host"] == "127.0.0.1"
     assert calls["port"] == 8765
+    assert calls["lowered"]
 
 
 def test_index_returns_200(services):

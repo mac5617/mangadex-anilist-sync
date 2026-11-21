@@ -61,6 +61,7 @@ def test_mangaupdates_matching():
 
 @pytest.fixture
 async def scanned(services, world, mock):
+    services.repo.set_setting("llm_auto", True)      # a scan that matches descriptions and asks the model
     ollama(mock, {"picks": [{"n": 1, "reason": "Curses."}]})
     await scan(services)
     return services

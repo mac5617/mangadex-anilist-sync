@@ -114,3 +114,13 @@ def test_sync_targets_setting(client, services):
     assert services.repo.get_setting("sync_targets") == ["anilist"]
     assert "Sync AniList" in client.get("/").text and "MyAnimeList</button>" not in client.get("/").text
     assert "Sync is off for both sites" in client.post("/settings/sync-targets", data={}).text
+
+
+def test_the_model_only_runs_when_asked_by_default(client, services):
+    assert services.repo.get_setting("llm_auto") is False
+    page = client.get("/settings").text
+    assert 'action="/settings/llm-auto"' in page and 'name="on" value="1">' in page
+    assert "Refresh and scans now ask the local model." in client.post("/settings/llm-auto", data={"on": "1"}).text
+    assert services.repo.get_setting("llm_auto") is True
+    assert "only runs when you ask" in client.post("/settings/llm-auto", data={}).text
+    assert services.repo.get_setting("llm_auto") is False

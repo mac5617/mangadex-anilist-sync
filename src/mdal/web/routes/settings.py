@@ -127,6 +127,7 @@ def render_settings(
         "db_path": str(s.db_path),
         "title_language": titles.language(), "title_languages": titles.LANGUAGES,
         "mal_mirror": svc.repo.get_setting("mal_mirror"),
+        "llm_auto": svc.repo.get_setting("llm_auto"),
         "sync_targets": svc.repo.get_setting("sync_targets") or [],
         "cooldown": cooldown_info(svc),
         "env_status": _env_status(svc),
@@ -179,6 +180,13 @@ def save_mal_mirror(request: Request, on: str = Form("")) -> HTMLResponse:
     get_services(request).repo.set_setting("mal_mirror", on == "1")
     return render_settings(request, message="List edits now also go to MyAnimeList." if on == "1"
                            else "List edits now only go to AniList.")
+
+
+@router.post("/settings/llm-auto", response_class=HTMLResponse)
+def save_llm_auto(request: Request, on: str = Form("")) -> HTMLResponse:
+    get_services(request).repo.set_setting("llm_auto", on == "1")
+    return render_settings(request, message="Refresh and scans now ask the local model." if on == "1"
+                           else "The local model now only runs when you ask it to.")
 
 
 @router.post("/settings/clear-cooldown", response_class=HTMLResponse)

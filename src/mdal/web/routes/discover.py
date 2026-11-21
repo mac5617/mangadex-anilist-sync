@@ -101,6 +101,7 @@ def status_context(request: Request) -> dict[str, Any]:
     status = rec.status()
     llm = svc.repo.get_setting("rec_llm") or {}
     return {"rs": status, "running": status.get("state") == "running" and rec.busy, "llm": llm,
+            "llm_auto": svc.repo.get_setting("llm_auto"),
             "model": svc.repo.get_setting("ollama_model"),
             "has_candidates": bool(svc.repo.conn.execute("SELECT 1 FROM rec_candidate LIMIT 1").fetchone()),
             "anilist": bool(svc.anilist_token())}
@@ -322,6 +323,7 @@ def new_status_context(request: Request) -> dict[str, Any]:
     status = svc.releases.status()
     return {"ns": status, "new_running": status.get("state") == "running" and svc.releases.busy,
             "new_llm": svc.repo.get_setting("new_llm") or {}, "model": svc.repo.get_setting("ollama_model"),
+            "llm_auto": svc.repo.get_setting("llm_auto"),
             "embed_model": svc.repo.get_setting("embed_model"),
             "has_new": bool(svc.repo.conn.execute("SELECT 1 FROM md_new LIMIT 1").fetchone()),
             "mangadex": bool(svc.settings.mangadex_username)}

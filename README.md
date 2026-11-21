@@ -237,8 +237,9 @@ requests:
 3. It gathers candidates: what AniList readers recommend from your 30 favourite series, the top-scored manga
    for your 8 strongest tags and 4 strongest genres, and the most popular manga by your 8 favourite creators.
    Anything on your AniList list or in your MangaDex library is left out.
-4. Your local model picks 12 for **For you** and explains each in a sentence, naming series you liked. It only
-   chooses among the candidates, by id, so it can't invent a title.
+4. When you press **Ask the model**, your local model picks 12 for **For you** and explains each in a sentence,
+   naming series you liked. It only chooses among the candidates, by their number in the list, so it can't
+   invent a title. (With **Settings → Local model** switched on, Refresh does this step itself.)
 
 | Page | What's on it |
 |---|---|
@@ -257,7 +258,13 @@ unless you tick **Include adult titles**. **Find on MangaDex** opens a MangaDex 
 changes it; it must be on this computer). Pick any installed model from the list on the Discover pages;
 `gpt-oss:20b` is the default and answers in a few seconds on a 16 GB GPU. Only titles, genres, tags, creators,
 statuses and scores are sent, never account details. Without Ollama running, everything still works and
-**For you** shows the top-scored series instead; **Ask the model again** retries without re-reading AniList.
+**For you** shows the top-scored series instead; **Ask the model** runs it without re-reading AniList.
+
+**Only when you ask.** By default Shiori never loads a model on its own: Refresh, scans and the background checks
+rank by your genres, tags and creators alone, and Ollama runs only for **Ask the model** and **Ask**. Tick
+**Settings → Local model** to have Refresh and every scan (background ones included) ask it too. Either way
+Ollama is told to unload the model about 30 seconds after a job, or 5 minutes after an Ask reply, so it doesn't
+hold RAM or VRAM while you use the computer. Shiori itself runs at below-normal priority.
 
 ### New releases and Ask
 
@@ -268,11 +275,12 @@ in your MangaDex library, followed, on your AniList or MyAnimeList list (by its 
 or marked **Not interested** is left out. Each remaining series is scored by:
 
 - **Description**: how close its description is to those of your 150 best-liked series, and how far from the
-  ones you dropped. This needs an embedding model in Ollama (see below); without one it's skipped.
+  ones you dropped. This needs an embedding model in Ollama (see below) and runs with **Ask the model** (or every
+  scan, when the model is switched on); series not compared yet are ranked by tags and creators.
 - **Tags**: MangaDex genres and themes matched by name to your AniList genres and tags.
 - **Creators**: an author or artist of series you liked.
 
-Your chat model then reads the descriptions of the best 40 and picks 12, with a reason for each.
+**Ask the model** then has your chat model read the descriptions of the best 40 and pick 12, with a reason for each.
 
 **Ask** is a conversation about what to read next ("a dark fantasy with a clever lead, finished", "more like
 that but funnier"). For each message Shiori shortlists the 30 series that best fit both the question and your
@@ -287,7 +295,7 @@ you thought of it, Ask saves that as a rating. **New conversation** clears it. A
 **Settings → Scan MangaDex for new releases every (hours)** (default 24; 0 turns it off). A scan that fails is
 tried again an hour later. In between, Shiori checks the newest releases every hour: it reads MangaDex's latest
 page, and the next one only while there's something new on it, so a quiet hour costs one or two requests. New
-finds are scored like the rest; the model sees them on the next full scan. Neither starts during a sync or a
+finds are scored like the rest; the model sees them the next time it's asked. Neither starts during a sync or a
 MangaDex cooldown, and after the computer wakes from sleep Shiori waits three minutes for the network first.
 
 **Home → New releases for you** always shows your best matches: picks you haven't seen on New releases yet come

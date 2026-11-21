@@ -83,6 +83,18 @@
     reviewed and approved on their own.</p>
 </section>
 
+<section class="panel stack" id="model">
+  <h2>Local model</h2>
+  <form method="post" action="/settings/llm-auto" class="row">
+    <label class="check-line"><input type="checkbox" name="on" value="1"{% if llm_auto %} checked{% endif %}>
+      Use the model during Refresh and new-release scans, including the background ones</label>
+    <button class="secondary">Save</button>
+  </form>
+  <p class="muted small">Off, Ollama only runs when you press <strong>Ask the model</strong> on Discover or New releases, or use
+    Ask; everything else is ranked without it. Either way the model is unloaded about 30 seconds after a job
+    (5 minutes after an Ask reply), so it doesn't hold memory while you use the computer.</p>
+</section>
+
 <section class="panel stack" id="titles">
   <h2>Titles</h2>
   <form method="post" action="/settings/titles" class="row">

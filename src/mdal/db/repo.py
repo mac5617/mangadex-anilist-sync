@@ -37,6 +37,9 @@ SETTING_DEFAULTS: dict[str, Any] = {
     "mal_user_name": None,
     # Recommendations: the local model (Ollama), the last refresh, and the model's last picks.
     "ollama_model": "gpt-oss:20b",
+    # Off: Refresh and scans (yours and the background ones) don't load a model; it runs only when you ask
+    # (Ask the model, or the Ask chat). On: they ask it as part of the job.
+    "llm_auto": False,
     "rec_status": None,      # {state, detail, error, started_at, finished_at}
     "rec_llm": None,         # {model, summary, picks: [{id, reason}], created_at, error}
     # New releases: the embedding model for description matching, the scan's language, its last run and picks.
@@ -46,8 +49,8 @@ SETTING_DEFAULTS: dict[str, Any] = {
     "new_check": None,       # the hourly check of the newest releases: {at, state, added, requests, error}
     "new_llm": None,         # {model, picks: [{md_id, reason}], created_at, error}
     "new_scan_hours": 24,    # scan MangaDex in the background this often; 0 = only when asked
-    "new_seen": [],
-    "new_digest": None,      # {at, md_ids}: picks from the latest scan not yet seen on New releases          # MangaDex ids of picks already shown on New releases (for the Home digest)
+    "new_seen": [],          # MangaDex ids of picks already shown on New releases (for the Home digest)
+    "new_digest": None,      # {at, md_ids}: picks from the latest scan not yet seen on New releases
     "mangaupdates_rps": 1,
     # List: series skipped while ranking, the last background save of scores, and when Reading counts as stalled.
     "rank_skipped": [],

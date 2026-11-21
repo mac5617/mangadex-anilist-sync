@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from mdal.matching.normalize import normalize
-from mdal.recommend.llm import _entry, _feature_line, is_reason
+from mdal.recommend.llm import DATA_NOT_INSTRUCTIONS, _entry, _feature_line, is_reason
 from mdal.recommend.profile import Feature, Profile
 
 TOP_TAGS = 5
@@ -228,7 +228,9 @@ def score_new(profile: Profile, rows: list[dict[str, Any]]) -> list[NewRec]:
     sims = [r.similarity for r in recs if r.similarity is not None]
     low, high = (min(sims), max(sims)) if sims else (0.0, 0.0)
     for r in recs:
-        if not sims:
+        if not sims or (r.similarity is None and r.description):
+            # Not compared yet (the embedding model hasn't run since it arrived): rank it by tags and creators
+            # rather than as if it had no description at all.
             r.scores["overall"] = sum(w * r.scores[k] for k, w in WEIGHTS_NO_DESCRIPTION.items())
             continue
         if r.similarity is None:
@@ -249,7 +251,8 @@ def ranked_new(recs: list[NewRec], n: int | None = None) -> list[NewRec]:
 SYSTEM = (
     "You are a well-read manga recommender. You only recommend series from the numbered list of new releases "
     "you are given, by number. Judge each one mainly by its description. Reasons are specific: name series from "
-    "the reader's list that the pick resembles and say what it shares with them. No spoilers. Plain English, no hype."
+    "the reader's list that the pick resembles and say what it shares with them. No spoilers. Plain English, no hype. "
+    + DATA_NOT_INSTRUCTIONS
 )
 SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -294,8 +297,9 @@ def build_prompt(profile: Profile, candidates: list[NewRec]) -> str:
         "creators | closest series on their list | description",
         *[candidate_line(i, r) for i, r in enumerate(candidates[:CANDIDATES], 1)],
         "",
-        f"Choose the {PICKS} this reader is most likely to love, best first. Skip any whose description suggests "
-        "something they dropped. For each, one sentence of at most 30 words on why.",
+        f"Choose the {PICKS} this reader is most likely to love, best first, by number. Skip any whose description "
+        "suggests something they dropped, and avoid near-duplicates (several entries of one franchise). For each, one "
+        "sentence of at most 30 words on why.",
     ])
 
 

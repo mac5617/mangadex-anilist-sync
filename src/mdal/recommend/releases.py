@@ -5,7 +5,10 @@ MangaDex series and your follows, compares descriptions with the embedding model
 installed, then asks the chat model to pick. Pages only read what was stored.
 
 Between scans, an hourly check reads only MangaDex's newest pages (stopping at the first page with nothing
-new) and adds what it finds to Home, scored the same way; the model is asked again on the next scan.
+new) and adds what it finds to Home, scored the same way.
+
+Models (the embedding model and the chat model) only run as part of a scan or check when `llm_auto` is on. With it
+off, which is the default, they run only when you ask: Ask the model on New releases, or the Ask chat.
 """
 
 from __future__ import annotations
@@ -87,6 +90,11 @@ class NewReleases:
 
     def ollama(self):
         return self.services.recommender.ollama()
+
+    @property
+    def model_auto(self) -> bool:
+        """Scans and checks use the local models themselves (else only when you ask)."""
+        return bool(self.repo.get_setting("llm_auto"))
 
     def status(self) -> dict[str, Any]:
         return self.repo.get_setting("new_status") or {}
@@ -210,7 +218,8 @@ class NewReleases:
         try:
             added, requests = await fetch_latest(s.mangadex, repo, repo.get_setting("new_language"))
             if added:
-                await self._compare_descriptions(say=lambda _msg: None)
+                if self.model_auto:
+                    await self._compare_descriptions(say=lambda _msg: None)
                 self._update_digest()
             log.info("new-release check: %s new series (%s MangaDex requests)", len(added), requests)
             repo.set_setting("new_check", {"at": started, "state": "done", "added": len(added), "requests": requests})
@@ -274,10 +283,13 @@ class NewReleases:
                 say("reading your AniList list (for descriptions)")
                 await fetch_list(s.anilist, repo, await s.orchestrator.user_id())
             found, requests = await fetch_new_releases(s.mangadex, repo, repo.get_setting("new_language"), say)
-            notes = [note] if (note := await self._compare_descriptions()) else []
+            notes = []
+            if self.model_auto and (note := await self._compare_descriptions()):
+                notes.append(note)
             _, recs = self.recs()
-            self._status(detail=f"{len(recs)} new to you; asking the model", requests=requests, candidates=len(recs))
-            if note := await self._ask_model():
+            self._status(detail=f"{len(recs)} new to you" + ("; asking the model" if self.model_auto else ""),
+                         requests=requests, candidates=len(recs))
+            if self.model_auto and (note := await self._ask_model()):
                 notes.append(note)
             if note := await self._english_releases():
                 notes.append(note)
@@ -293,9 +305,13 @@ class NewReleases:
             self._status(state="failed", error=f"{exc.__class__.__name__}: {exc}", finished_at=now_iso())
 
     async def _llm_only(self) -> None:
+        """Ask the model: description matching first (only new or changed descriptions are embedded), then picks."""
         try:
-            note = await self._ask_model()
-            self._status(state="done", detail=note or "picks updated", finished_at=now_iso())
+            notes = [await self._compare_descriptions()]
+            notes += [await self._ask_model(), await self._english_releases()]
+            notes = [n for n in notes if n]
+            self._update_digest()
+            self._status(state="done", detail="; ".join(notes) or "picks updated", finished_at=now_iso())
         except Exception as exc:
             log.exception("asking the model failed")
             self._status(state="failed", error=f"{exc.__class__.__name__}: {exc}", finished_at=now_iso())

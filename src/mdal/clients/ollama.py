@@ -13,6 +13,10 @@ from urllib.parse import urlparse
 import httpx
 
 LOCAL_HOSTS = ("127.0.0.1", "localhost", "::1", "[::1]")
+# How long Ollama keeps a model in memory after answering. One-off jobs (picks, embeddings) free it almost at once so
+# a 13 GB model doesn't sit in RAM/VRAM while you use the computer; a conversation keeps it a little for the next reply.
+KEEP_BRIEF = "30s"
+KEEP_CHAT = "5m"
 
 
 class OllamaError(Exception):
@@ -45,15 +49,15 @@ class OllamaClient:
         return response.json().get("models") or []
 
     async def chat_json(self, model: str, system: str, prompt: str, schema: dict[str, Any],
-                        capabilities: list[str] | None = None) -> dict[str, Any]:
+                        capabilities: list[str] | None = None, keep_alive: str = KEEP_BRIEF) -> dict[str, Any]:
         return await self.chat_messages(model, [{"role": "system", "content": system}, {"role": "user", "content": prompt}],
-                                        schema, capabilities)
+                                        schema, capabilities, keep_alive)
 
     async def chat_messages(self, model: str, messages: list[dict[str, str]], schema: dict[str, Any],
-                            capabilities: list[str] | None = None) -> dict[str, Any]:
+                            capabilities: list[str] | None = None, keep_alive: str = KEEP_CHAT) -> dict[str, Any]:
         """One structured answer to a conversation ([{role, content}], system first)."""
         body: dict[str, Any] = {
-            "model": model, "stream": False, "format": schema, "messages": messages,
+            "model": model, "stream": False, "format": schema, "messages": messages, "keep_alive": keep_alive,
             "options": {"temperature": 0.4, "num_ctx": 16384},
         }
         if capabilities and "thinking" in capabilities:
@@ -69,7 +73,8 @@ class OllamaClient:
         """One vector per text, in order."""
         if not texts:
             return []
-        vectors = (await self._post("/api/embed", {"model": model, "input": texts, "truncate": True})).get("embeddings")
+        body = {"model": model, "input": texts, "truncate": True, "keep_alive": KEEP_BRIEF}
+        vectors = (await self._post("/api/embed", body)).get("embeddings")
         if not isinstance(vectors, list) or len(vectors) != len(texts):
             raise OllamaError("the embedding model returned the wrong number of vectors")
         return vectors

@@ -188,6 +188,12 @@ def ollama(mock, chat_content=None, *, embedder=True):
     return routes
 
 
+@pytest.fixture(autouse=True)
+def model_auto(services):
+    """These tests cover scans with the model switched on; tests that want it off turn it off."""
+    services.repo.set_setting("llm_auto", True)
+
+
 async def scan(services):
     services.releases.start_scan()
     await services.releases.task
@@ -281,6 +287,33 @@ async def test_the_hourly_check_puts_new_finds_on_home(services, world, mock):
     assert services.releases.status()["state"] == "done"            # the scan's own status is left alone
 
 
+async def test_scan_and_check_leave_the_models_alone_unless_switched_on(services, world, mock):
+    services.repo.set_setting("llm_auto", False)
+    model = ollama(mock, {"picks": [{"n": 1, "reason": "Curses, like Loved 1."}, {"n": 2, "reason": "Isekai."},
+                                    {"n": 3, "reason": "Also fine."}]})
+    await scan(services)
+    status = services.releases.status()
+    assert status["state"] == "done" and "model" not in status["detail"], status
+    UPDATED.insert(0, md_manga(10, "Another Curse", tags=["Horror", "Gore"], description="A curse spreads in a horror town."))
+    try:
+        services.releases.start_check()
+        await services.releases.task
+    finally:
+        UPDATED.pop(0)
+    assert services.releases.check()["added"] == 1
+    assert not [c for c in mock.calls if str(c.request.url).startswith(OLLAMA)]     # Ollama wasn't even asked
+    _, recs = services.releases.recs()
+    assert fresh.ranked_new(recs)[0].title in {"Cursed Flesh", "Another Curse"}   # ranked by tags and creators
+
+    # Ask the model compares descriptions, then picks, and lets the models go again soon after.
+    services.releases.start_llm()
+    await services.releases.task
+    assert services.releases.status()["state"] == "done"
+    assert len(services.repo.get_setting("new_llm")["picks"]) == 3
+    assert next(r for r in services.releases.recs()[1] if r.title == "Cursed Flesh").similar_to[0].startswith("Loved")
+    assert {json.loads(c.request.content)["keep_alive"] for c in [*model["embed"].calls, *model["chat"].calls]} == {"30s"}
+
+
 async def test_scan_without_embedding_model_still_ranks_by_tags(services, world, mock):
     ollama(mock, {"picks": []}, embedder=False)
     await scan(services)
@@ -362,7 +395,7 @@ async def test_ask_answers_from_the_pool_only(services, world, mock):
         assert sent["format"]["required"] == ["picks", "reply"]
         assert "Loved 1" in sent["messages"][0]["content"]                 # your taste goes in the system prompt
         listing = sent["messages"][-1]["content"]
-        assert listing.startswith("Something with a curse") and "1. Cursed Flesh" in listing
+        assert listing.endswith("My request: Something with a curse") and "1. Cursed Flesh" in listing   # the request comes last
         assert "Owned Already" not in listing and ". Loved 2 |" not in listing
 
         c.post("/discover/ask", data={"message": "more like that"})
@@ -457,7 +490,7 @@ async def test_a_named_series_is_the_reference_and_anilist_adds_its_neighbours(s
         sent = json.loads(anilist.calls[0].request.content)
         assert sent["variables"] == {"q": "Cursed Flesh"} and "recommendations" in sent["query"]
         prompt = json.loads(route.calls[-1].request.content)["messages"][-1]["content"]
-        reference, listing = prompt.split("---")
+        listing, reference = prompt.split("The series I mentioned")
         assert "Cursed Flesh (I've read it; don't suggest it)" in reference
         assert ". Cursed Flesh |" not in listing                               # never offered back
         assert "1. Curse Garden" in listing and "takes root" in listing          # AniList's neighbour, with its description
@@ -500,10 +533,10 @@ async def test_a_genre_question_only_offers_that_genre_and_nothing_already_sugge
         {"reply": "Here you go.", "picks": [{"n": 1, "reason": "Fits."}]})}})
     with TestClient(create_app(services), follow_redirects=False) as c:
         c.post("/discover/ask", data={"message": "Something creepy"})
-        first = json.loads(route.calls[-1].request.content)["messages"][-1]["content"].split("---")[1]
+        first = json.loads(route.calls[-1].request.content)["messages"][-1]["content"].split("---")[0]
         picked = first.split("\n")[1].split(". ", 1)[1].split(" |")[0]       # the series it suggested
         c.post("/discover/ask", data={"message": "A isekai manga"})
-        listing = json.loads(route.calls[-1].request.content)["messages"][-1]["content"].split("---")[1]
+        listing = json.loads(route.calls[-1].request.content)["messages"][-1]["content"].split("---")[0]
         offered = [line.split(". ", 1)[1].split(" |")[0] for line in listing.splitlines() if line[:1].isdigit()]
         assert offered and set(offered) <= {"Fresh Isekai", "<script>bad()</script> Quiet Isekai"}
         assert picked not in offered or "Isekai" in picked
@@ -518,5 +551,5 @@ async def test_a_series_named_earlier_stays_read(services, world, mock):
     with TestClient(create_app(services), follow_redirects=False) as c:
         c.post("/discover/ask", data={"message": "I just read Cursed Flesh, another like it?"})
         c.post("/discover/ask", data={"message": "A horror manga"})
-        listing = json.loads(route.calls[-1].request.content)["messages"][-1]["content"].split("---")[1]
+        listing = json.loads(route.calls[-1].request.content)["messages"][-1]["content"].split("---")[0]
         assert ". Cursed Flesh |" not in listing

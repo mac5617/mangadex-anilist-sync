@@ -1,7 +1,8 @@
 """Refreshing recommendations (AniList reads) and asking the local model for picks, in the background.
 
 A refresh: makes sure your list has tags (re-reading it once if not), fetches creators for your
-strongest series, gathers candidates, then asks the model. Pages only read what was stored.
+strongest series, gathers candidates, then asks the model (only when `llm_auto` is on; otherwise the model
+runs when you press Ask the model). Pages only read what was stored.
 """
 
 from __future__ import annotations
@@ -147,9 +148,9 @@ class Recommender:
             repo.replace_rec_candidates([{"media_id": i, "sources": json.dumps(src, ensure_ascii=False),
                                           "fetched_at": collected.fetched_at} for i, src in collected.sources.items()])
             _, recs = self.recs()
-            self._status(state="running", detail=f"{len(recs)} candidates; asking the model",
+            self._status(state="running", detail=f"{len(recs)} candidates" + ("; asking the model" if repo.get_setting("llm_auto") else ""),
                          requests=sent, candidates=len(recs))
-            note = await self._ask_model()
+            note = await self._ask_model() if repo.get_setting("llm_auto") else None
             self._status(state="done", detail=f"{len(recs)} candidates from {sent} requests{mal_note}" + (f"; {note}" if note else ""),
                          finished_at=now_iso(), error=None)
         except AniListError as exc:
@@ -189,7 +190,7 @@ class Recommender:
             self._status(detail=f"asking {model} to pick from {len(top)} candidates")
             answer = await self.ollama().chat_json(model, SYSTEM, build_prompt(profile, top), SCHEMA,
                                                    available[model].get("capabilities"))
-            summary, picks = clean_answer(answer, {r.media_id for r in top}, {r.media_id: r.title for r in top})
+            summary, picks = clean_answer(answer, top)
             if len(picks) < 3:
                 raise OllamaError(f"the model returned only {len(picks)} usable picks")
         except OllamaError as exc:
