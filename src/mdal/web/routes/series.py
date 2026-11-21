@@ -72,7 +72,7 @@ def series_rate(request: Request, kind: str, ident: str, verdict: str = Form("")
     if request.headers.get("HX-Target", "").startswith("rating-"):
         row = svc.repo.feedback().get(key)
         return templates.TemplateResponse(request, "_rating_row.html", {"r": row, "key": key, "verdicts": VERDICTS,
-                                                                        "href": series_url(key)})
+                                                                        "href": series_url(key), "cover": _cover(svc, key)})
     return verdict_panel(request, key)
 
 
@@ -293,9 +293,17 @@ async def series_save_notes(request: Request, kind: str, ident: str, notes: str 
     return notes_panel(request, key, notes_saved=saved)
 
 
+def _cover(svc: Any, key: str) -> str | None:
+    """The cover a series page would show, for a rating row."""
+    view = svc.series.view(key) if svc.series.exists(key) else None
+    return view["cover"] if view else None
+
+
 @router.get("/discover/ratings", response_class=HTMLResponse)
 def ratings_page(request: Request) -> HTMLResponse:
-    rows = list(get_services(request).repo.feedback().values())
+    svc = get_services(request)
+    rows = list(svc.repo.feedback().values())
     return render(request, "discover_ratings.html", {
-        "rows": [{"r": r, "key": r["key"], "href": series_url(r["key"])} for r in rows], "verdicts": VERDICTS,
+        "rows": [{"r": r, "key": r["key"], "href": series_url(r["key"]), "cover": _cover(svc, r["key"])} for r in rows],
+        "verdicts": VERDICTS,
         "counts": {v: sum(1 for r in rows if r["verdict"] == v) for v in VERDICTS}})

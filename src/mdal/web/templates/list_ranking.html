@@ -13,7 +13,7 @@
 <div class="panel"><p class="muted">Nothing ranked yet. <a href="/list/rank">Start ranking</a>: it takes a few seconds per series.</p></div>
 {% endif %}
 {% if total %}
-<nav class="sort-pick" aria-label="Sort">
+<nav class="seg sort-pick" aria-label="Sort">
   <span class="muted small">Sort</span>
   {% for key, label in sorts.items() %}<a href="/list/ranking{{ '' if key == 'rank' else '?sort=' ~ key }}"{% if key == sort %} aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
 </nav>

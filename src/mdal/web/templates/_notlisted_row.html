@@ -17,7 +17,7 @@
         {% for s in statuses %}<option value="{{ s }}"{% if s == r.default_status %} selected{% endif %}>{{ labels[s] }}</option>{% endfor %}
       </select>
       <input type="number" name="progress" value="{{ r.progress }}" min="0"{% if r.chapters %} max="{{ r.chapters }}"{% endif %} aria-label="progress">
-      <button>Add</button>
+      <button class="secondary">Add</button>
     </form>
   </td>
 </tr>

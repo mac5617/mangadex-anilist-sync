@@ -9,15 +9,17 @@
   </div>
 </div>
 
-<section class="block">
+{% if review %}<section class="block">
   <h2>Uncertain matches ({{ review | length }})</h2>
-  {% for card in review %}{% include "_review_card.html" %}{% else %}<div class="panel empty">None.</div>{% endfor %}
-</section>
+  {% for card in review %}{% include "_review_card.html" %}{% endfor %}
+</section>{% endif %}
 
-<section class="block">
+{% if unmatched %}<section class="block">
   <h2>No match found ({{ unmatched | length }})</h2>
-  {% for card in unmatched %}{% include "_review_card.html" %}{% else %}<div class="panel empty">None.</div>{% endfor %}
-</section>
+  <div class="review-grid">{% for card in unmatched %}{% include "_review_card.html" %}{% endfor %}</div>
+</section>{% endif %}
+
+{% if not review and not unmatched %}<p class="panel empty">Nothing to review. Every series in your MangaDex library has a match or a decision.</p>{% endif %}
 
 <details class="section block"{% if not not_on_anilist %} hidden{% endif %}>
   <summary><h2>Marked not on AniList ({{ not_on_anilist | length }})</h2></summary>

@@ -17,6 +17,7 @@ from mdal.web.app import get_services, render
 from mdal.year import review, years
 
 router = APIRouter()
+SHELF = 48   # covers in Year in review's opening shelf of what you finished
 
 
 def card(e: dict[str, Any], note: str = "") -> dict[str, Any]:
@@ -39,9 +40,11 @@ def year_page(request: Request, year: int | None = None) -> HTMLResponse:
     }
     picks = {
         "best": [card(e, f"scored {e['score'] / 10:g}") for e in r["best"]],
+        "shelf": [card(e) for e in r["finished_list"]][:SHELF],
         "longest": [card(e, f"{e['progress']} chapters") for e in r["longest"]],
-        "first": card(r["first"], r["first"]["completed_at"]) if r["first"] else None,
-        "last": card(r["last"], r["last"]["completed_at"]) if r["last"] else None,
+        "first": card(r["first"], f"first finished · {r['first']['completed_at']}") if r["first"] else None,
+        "last": (card(r["last"], f"last finished · {r['last']['completed_at']}")
+                 if r["last"] and r["last"] is not r["first"] else None),
     }
     return render(request, "stats_year.html", {"r": r, "years": available, "c": charts, "p": picks})
 

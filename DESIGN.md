@@ -7,7 +7,7 @@ colors:
   sheet-shade: "#eef0f2"
   ink: "#1a1d21"
   ink-muted: "#5d6670"
-  ink-faint: "#8a939c"
+  ink-faint: "#656d76"
   hairline: "#e1e4e8"
   hairline-strong: "#c9ced4"
   ribbon-teal: "#0e6b6b"
@@ -31,6 +31,7 @@ colors:
   night-sheet-shade: "#1f242b"
   night-ink: "#e4e7eb"
   night-hairline: "#2a3038"
+  night-ink-faint: "#8a939d"
   night-ribbon-teal: "#4fb8b4"
 typography:
   display:
@@ -59,6 +60,11 @@ typography:
     fontSize: "0.76rem"
     fontWeight: 600
     lineHeight: 1.3
+  lead:
+    fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, sans-serif"
+    fontSize: "1.25rem"
+    fontWeight: 400
+    lineHeight: 1.45
   figure:
     fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, sans-serif"
     fontSize: "1.4rem"
@@ -69,7 +75,9 @@ typography:
     fontFamily: "ui-monospace, Cascadia Code, Consolas, monospace"
     fontSize: "0.86em"
 rounded:
+  meter: "2px"
   tag: "3px"
+  cover-sm: "4px"
   base: "6px"
   cover: "8px"
   tier: "10px"
@@ -177,7 +185,8 @@ Cool paper and dark ink, a single Ribbon Teal for action and place, and status w
 - **Sheet Shade** (`sheet-shade` / `night-sheet-shade`): table header rows, row hover, badges, tag pills,
   cover placeholders, inline code.
 - **Ink** (`ink` / `night-ink`): body text and titles. **Ink Muted** for secondary text, labels and inactive
-  nav; **Ink Faint** for counts, axis labels and the least important metadata.
+  nav; **Ink Faint** (`ink-faint` / `night-ink-faint`) for counts, axis labels, placeholders and the least
+  important metadata. Faint still reaches 4.5:1 on Paper, Sheet and Sheet Shade in both themes.
 - **Hairline** (`hairline` / `night-hairline`): borders of tables, panels and figure strips, and row dividers.
   **Hairline Strong** outlines inputs, secondary buttons and chips.
 
@@ -190,6 +199,9 @@ Cool paper and dark ink, a single Ribbon Teal for action and place, and status w
 - **Viz Blue, Orange, Green, Amber** for series in charts and the network graphs (themes, creators, your
   series), plus a five-step blue heat ramp (`--heat-1`…`--heat-5`) for heat grids and tag tone. Validated
   for contrast on both themes; chart colors never stand in for status.
+- On Stats and Year in review each single-series chart takes its own hue through a `hue-1`…`hue-4` class on
+  its panel (the `--bar` property), so a page of charts reads as several things, not one blue wall. The hue
+  marks which chart you're looking at, never a category inside it.
 
 ### Named Rules
 **The One Ribbon Rule.** Ribbon Teal is the only accent. It marks the action to take and where you are, and
@@ -199,6 +211,10 @@ nothing else; never use it for decoration, large fills or headings.
 page is never painted in a status color.
 
 **The Tokens Only Rule.** Dark mode redefines the same custom properties; components never branch on theme.
+
+**The Two Registers Rule.** The working screens (Sync, Matches, Settings, History) stay plain ledger. Stats,
+Year in review, Discover and Map are the reader's own pages and may be livelier: a hue per chart, a headline
+sentence, large covers, a cover shelf. Ribbon Teal stays the only accent in both.
 
 ## Typography
 
@@ -214,6 +230,7 @@ machine. Hierarchy comes from weight (600–700) and size steps, not from a seco
 - **Title** (650, 1.02rem): section and panel headings; `h3` at 600, 0.95rem.
 - **Body** (400, 15px, 1.55): everything else. Long text (descriptions, model reasons, chat answers) is held
   to 70–110ch.
+- **Lead** (400, 1.25rem, 1.45): one headline sentence that sums up a stats page; balanced, at most 60ch.
 - **Figure** (650, 1.4rem, tabular): the summary numbers that lead a page.
 - **Label** (600, 0.76rem): table headers and badges. Small text elsewhere runs 0.78–0.88rem.
 
@@ -228,16 +245,21 @@ and the Ask empty state.
 
 One centred reading column (`page-max`, 76rem) with 1rem side gutters and 1.5rem between sections; the page
 head pairs the title and a short muted lede with actions on the right. Discover pages and their header use
-the full window width with clamped gutters (1–2.5rem). Sections are separated by space and hairlines rather
+the full window width with clamped gutters (1–2.5rem); their recommendation cards form a shelf of as many
+40rem columns as fit, so wide screens fill instead of leaving half of each card empty. Sections are separated by space and hairlines rather
 than wrapped in cards; panels are used only when a block is a separate object.
 
 Grids use `auto-fit` / `auto-fill` with sensible minimums (two-up at 22rem, three-up at 17rem, review
-candidates at 19rem, cover digests at 8.5rem) so they fill the width at any size. The series page and Rank
+cards at 34rem, review candidates at 19rem, search results at 22rem, cover digests at 8.5rem, best-of covers
+at 11rem, the Year shelf at 4.75rem) so they fill the width at any size. A page never leaves content in the
+left half of a wide column: widen it, put it in columns, or add a ruled row beside it. The series page and Rank
 use a sticky left column (cover and your rating) beside the content. Ask is a one-screen chat: the page
 never scrolls, the conversation does, above a pinned composer.
 
 Below 48rem the header wraps with a scrolling nav row, side columns stack, covers shrink, and sub-navigation
-scrolls on its own instead of widening the page. Spacing steps are 0.25, 0.5, 0.75, 1 and 1.5rem.
+scrolls on its own instead of widening the page; scrolling tab rows hide their scrollbar and fade at the
+right edge so the hidden tabs read as "more this way". Figures strips go two to a row, an odd last figure
+spanning both. Spacing steps are 0.25, 0.5, 0.75, 1 and 1.5rem.
 
 ## Elevation & Depth
 
@@ -252,10 +274,12 @@ side columns) stay flat and rely on their Sheet background and a border.
 
 ## Shapes
 
-Corners are gently rounded and grow with the warmth of the surface: 3px for tags, badges, thumbnails and
-bars; 6px for buttons, inputs, panels, tables and cards; 8px for large covers; 10px for ranking tiers; 12px
+Corners are gently rounded and grow with the warmth of the surface: 2px for meter bars; 3px for tags, badges
+and thumbnails; 4px for cover tiles and chart bars; 6px for buttons, inputs, panels, tables and cards; 8px for large covers; 10px for ranking tiers; 12px
 for the chat composer; 14px for chat bubbles (with a 4px tail corner); full pills only for Ask's prompt
-chips. Covers keep a 2:3 aspect ratio everywhere. Chart bars round only their outer end (4px).
+chips. Covers keep a 2:3 aspect ratio everywhere. Chart bars round only their outer end (4px) and are at most 32px thick (26px when paired). A bar taller than
+the axis (a one-off import year, a huge first sync) is drawn to the top with a small break across it, so the
+rest of the chart stays readable. Missing covers show the shiori ribbon, faint, centred in a Sheet Shade box.
 
 ## Components
 
@@ -267,6 +291,9 @@ Quiet tools; the main action is the only solid fill on a screen.
 - **Danger:** Sheet fill with Err text; hover to the Err wash. Destructive actions never use a red fill.
 - **Link button:** text-only Ribbon Teal at 0.85rem for small in-row actions.
 - **Disabled:** 45% opacity. **Focus:** 2px Ribbon Teal outline, 2px offset, on every control.
+- **Choice buttons** (verdicts): outlined; the chosen one takes the Ribbon Teal Wash with a teal border,
+  never a solid fill. Repeated per-row actions (Unlisted's Add) are secondary.
+- **Pickers** (year, sort): the underline tab pattern, never filled pills.
 
 ### Badges, tags and chips
 - **Badges:** 3px radius, 0.78rem at 600, Sheet Shade by default; status badges use the status color on its
@@ -278,6 +305,8 @@ Quiet tools; the main action is the only solid fill on a screen.
 ### Panels, figures and tables
 - **Panel / card:** Sheet, 1px Hairline, 6px radius, about 1rem padding; a finished review card turns to the
   ok wash.
+- **Notices:** a status wash with a full 1px border in the status color at low strength. Never a stripe down
+  one side.
 - **Figures strip:** one bordered row of summary numbers divided by hairlines, not a card per number.
 - **Data tables:** wrapped in a bordered Sheet; sticky Sheet Shade header in label type; 0.5rem × 0.7rem
   cells; hairline row dividers; soft hover tint. Series cells pair a 38×54 cover with the MangaDex title and
@@ -308,8 +337,13 @@ text at 1.02rem with recommendation rows beneath. Thinking is three small Ribbon
 (static under reduced motion).
 
 ### Ranking tiers
-Large full-width choices (10px radius, 1.05rem, 600) whose border takes the tier's status color on hover and
-when suggested, with a keyboard hint at the right.
+Three large choices side by side across the column beside a 19rem cover (10px radius, 1.15rem, 600, label at
+the foot) whose border takes the tier's status color on hover and when suggested, with a keyboard hint at the
+top right.
+
+### Year shelf
+Year in review opens with every cover finished that year, packed tight (4.75rem columns, 0.4rem gaps) like
+spines on a shelf, before any numbers; "Your best this year" follows as 11rem covers.
 
 ## Do's and Don'ts
 
@@ -326,6 +360,8 @@ when suggested, with a keyboard hint at the right.
 ### Don't:
 - **Don't** add drop shadows, gradients or glows; the system is flat.
 - **Don't** introduce a second accent, a second typeface, or uppercase letter-spaced labels.
+- **Don't** use filled pills for pickers, or a colored stripe down one side of a box.
+- **Don't** leave a wide column's right half empty.
 - **Don't** fill panels, headers or buttons with a status color; a destructive button stays outlined.
 - **Don't** wrap every number in its own card; use the figures strip.
 - **Don't** add decorative illustration, icons for their own sake, or ornament around covers.

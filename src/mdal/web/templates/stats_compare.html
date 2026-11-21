@@ -23,6 +23,14 @@
 {% if error %}<p class="notice err">{{ error }}</p>{% endif %}
 {% if missing %}<p class="notice warn">Not compared with {{ user }} yet: press Compare to read their list (1 AniList request).</p>{% endif %}
 
+{% if not r %}
+<ul class="compare-preview" aria-label="What a comparison shows">
+  <li><h2>Series in common</h2><p class="muted">How much of your reading overlaps, and how alike your genre mix is.</p></li>
+  <li><h2>Score agreement</h2><p class="muted">Whether you rank the series you share the same way, and where you disagree most.</p></li>
+  <li><h2>Their favourites</h2><p class="muted">Series they loved that you haven't read, with covers, and the ones you both loved.</p></li>
+</ul>
+{% endif %}
+
 {% if r %}
 <p class="muted small">{{ friend.name }}'s list read {{ friend.fetched_at | when }}.</p>
 <div class="figures">

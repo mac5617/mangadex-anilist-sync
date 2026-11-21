@@ -42,6 +42,9 @@ def clock(moment: datetime) -> str:
 
 
 templates.env.globals["md_cover"] = md_cover_url
+# Appended to stylesheet and script URLs so a browser fetches them again after they change.
+templates.env.globals["static_version"] = str(int(max(
+    (p.stat().st_mtime for p in (WEB_DIR / "static").rglob("*") if p.is_file()), default=0)))
 templates.env.filters["when"] = when
 templates.env.globals["change_labels"] = {
     "write": "update", "add": "new entry", "skip": "skip", "flag": "flagged",

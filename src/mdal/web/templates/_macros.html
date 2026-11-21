@@ -4,7 +4,7 @@
   {% if src %}<img class="thumb{% if size %} {{ size }}{% endif %}" src="{{ src }}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer"
     onerror="this.onerror=null;this.removeAttribute('src');this.classList.add('broken')"
     {%- if size == "lg" %} width="96" height="137"{% elif size == "md" %} width="64" height="91"{% else %} width="40" height="57"{% endif %}>
-  {%- else %}<span class="thumb placeholder{% if size %} {{ size }}{% endif %}" aria-hidden="true">no cover</span>{% endif %}
+  {%- else %}<span class="thumb placeholder{% if size %} {{ size }}{% endif %}" aria-hidden="true"></span>{% endif %}
 {%- endmacro %}
 
 {% macro series(md_title, md_url, cover, al_title=None, al_url=None, extra=None, site="AniList", page=None) -%}

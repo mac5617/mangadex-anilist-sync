@@ -60,6 +60,7 @@ def review(entries: list[dict[str, Any]], year: int) -> dict[str, Any]:
         "genres": year_genres.most_common(10), "tags": year_tags.most_common(12), "staff": year_staff.most_common(8),
         "more_than_usual": lift(year_genres, all_genres) + lift(year_tags, all_tags),
         "best": scored[:6],
+        "finished_list": sorted(finished, key=lambda e: e["completed_at"]),
         "longest": sorted(finished, key=lambda e: -(e.get("progress") or 0))[:3],
         "first": min(finished, key=lambda e: e["completed_at"], default=None),
         "last": max(finished, key=lambda e: e["completed_at"], default=None),

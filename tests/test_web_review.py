@@ -83,7 +83,7 @@ async def test_accept_confirms_and_is_never_rematched(client, services, seeded, 
     assert response.status_code == 200 and 'id="card-k"' in response.text and "Confirmed" in response.text
     m = seeded.get_mapping("k")
     assert (m["state"], m["tier"], m["al_media_id"]) == ("confirmed", 1, 7)
-    assert "Uncertain matches (0)" in client.get("/review").text
+    assert "Uncertain matches" not in client.get("/review").text   # an empty section is left out
     # Next sync: the confirmed series is not looked at again (u is unchanged and cached too).
     assert await rematch(services, fake) == 0
     assert seeded.get_mapping("k")["state"] == "confirmed"
@@ -129,7 +129,7 @@ async def test_not_on_anilist_and_undo(client, services, seeded, fake):
     response = client.post("/review/u/not-on-anilist")
     assert "not on AniList" in response.text and "Undo" in response.text
     html = client.get("/review").text
-    assert "No match found (0)" in html and "Marked not on AniList (1)" in html
+    assert "No match found" not in html and "Marked not on AniList (1)" in html
     assert await rematch(services, fake) == 0
     assert seeded.get_mapping("u")["state"] == "not_on_anilist"
 

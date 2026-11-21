@@ -1,6 +1,6 @@
 <article class="rec{% if compact %} compact{% endif %}" id="{{ c.dom_id }}">
   {% if c.cover %}<img class="thumb md" src="{{ c.cover }}" alt="" width="132" height="188" loading="lazy" decoding="async" referrerpolicy="no-referrer"
-    onerror="this.onerror=null;this.removeAttribute('src');this.classList.add('broken')">{% else %}<span class="thumb md placeholder" aria-hidden="true">no cover</span>{% endif %}
+    onerror="this.onerror=null;this.removeAttribute('src');this.classList.add('broken')">{% else %}<span class="thumb md placeholder" aria-hidden="true"></span>{% endif %}
   <div class="rec-body">
     <h3>{% if rank %}<span class="rec-rank">{{ rank }}</span>{% endif %}<a href="{{ c.page }}">{{ c.title }}</a>
       {% if c.adult %}<span class="badge">adult</span>{% endif %}</h3>

@@ -476,16 +476,23 @@ def nice_max(value: float) -> float:
     return 10 * exp
 
 
-def chart(bars: list[Bar], max_labels: int = 12) -> dict[str, Any]:
-    """Bars scaled to a clean axis: pct per bar, three ticks, and which x labels to show."""
+def chart(bars: list[Bar], max_labels: int = 12, clip_outliers: bool = False) -> dict[str, Any]:
+    """Bars scaled to a clean axis: pct per bar, three ticks, and which x labels to show.
+    clip_outliers: when one or two bars dwarf the rest (over 3x the third-largest), the axis is set by the others
+    and the tall bars are drawn to the top, marked clipped, so the rest stay readable."""
     biggest = max([b.value for b in bars] + [b.value2 or 0 for b in bars], default=0)
     top = nice_max(biggest)
+    if clip_outliers and len(bars) >= 6:
+        values = sorted((b.value for b in bars), reverse=True)
+        if values[2] > 0 and values[0] > 3 * values[2]:
+            top = nice_max(1.15 * max(v for v in values if v <= 3 * values[2]))
     every = max(1, math.ceil(len(bars) / max_labels))
     return {
         # pct: against the axis top (columns, which have an axis); rel: against the largest bar (labelled bars)
-        "bars": [{"label": b.label, "value": b.value, "tip": b.tip, "pct": 100 * b.value / top,
+        "bars": [{"label": b.label, "value": b.value, "tip": b.tip, "pct": min(100.0, 100 * b.value / top),
+                  "clipped": b.value > top,
                   "rel": 100 * b.value / biggest if biggest else 0, "key": b.key,
-                  "value2": b.value2, "tip2": b.tip2, "pct2": 100 * (b.value2 or 0) / top,
+                  "value2": b.value2, "tip2": b.tip2, "pct2": min(100.0, 100 * (b.value2 or 0) / top),
                   "show_label": i % every == 0 or i == len(bars) - 1} for i, b in enumerate(bars)],
         "ticks": [top, top / 2, 0],
         "empty": not bars or all(b.value == 0 and not b.value2 for b in bars),

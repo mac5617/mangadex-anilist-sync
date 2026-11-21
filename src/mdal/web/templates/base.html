@@ -11,10 +11,10 @@
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="icon" href="/favicon.ico" sizes="48x48">
   <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
-  <link rel="stylesheet" href="/static/app.css">
+  <link rel="stylesheet" href="/static/app.css?v={{ static_version }}">
   <script src="/static/htmx.min.js" defer></script>
-  <script src="/static/feedback.js" defer></script>
-  <script src="/static/score.js" defer></script>
+  <script src="/static/feedback.js?v={{ static_version }}" defer></script>
+  <script src="/static/score.js?v={{ static_version }}" defer></script>
 </head>
 <body class="{% block body_class %}{% endblock %}">
   {%- set path = request.url.path if request else "" %}

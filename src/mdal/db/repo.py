@@ -335,7 +335,8 @@ class Repo:
         ).fetchall()
 
     def review_count(self) -> int:
-        return self.conn.execute("SELECT COUNT(*) FROM mapping WHERE state='review'").fetchone()[0]
+        """Series waiting on a decision on Matches → To review: uncertain matches and ones with no match found."""
+        return self.conn.execute("SELECT COUNT(*) FROM mapping WHERE state IN ('review','unmatched')").fetchone()[0]
 
     def not_on_list(self) -> list[sqlite3.Row]:
         """Library series matched to AniList media that is not on the user's list (story 17)."""

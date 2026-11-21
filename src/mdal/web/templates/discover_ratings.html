@@ -15,7 +15,7 @@
 <div class="table-wrap">
 <table class="data ratings">
   <thead><tr><th>Series</th><th>Rating</th><th>From</th><th>Saved</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
-  <tbody>{% for row in rows %}{% with r = row.r, key = row.key, href = row.href %}{% include "_rating_row.html" %}{% endwith %}{% endfor %}</tbody>
+  <tbody>{% for row in rows %}{% with r = row.r, key = row.key, href = row.href, cover = row.cover %}{% include "_rating_row.html" %}{% endwith %}{% endfor %}</tbody>
 </table>
 </div>
 {% else %}

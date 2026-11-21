@@ -7,7 +7,7 @@
   <aside class="series-side">
     {% if s.cover %}<img class="series-cover" src="{{ s.cover }}" alt="Cover of {{ s.title }}" referrerpolicy="no-referrer"
       {% if s.cover_fallback %}data-fallback="{{ s.cover_fallback }}" {% endif %}onerror="if(this.dataset.fallback&&this.src!==this.dataset.fallback){this.src=this.dataset.fallback}else{this.onerror=null;this.removeAttribute('src');this.classList.add('broken')}">
-    {% else %}<div class="series-cover placeholder" aria-hidden="true">no cover</div>{% endif %}
+    {% else %}<div class="series-cover placeholder" aria-hidden="true"></div>{% endif %}
     {% include "_series_verdict.html" %}
     {% if s.links %}<ul class="series-links">{% for label, url in s.links %}
       <li><a href="{{ url }}" target="_blank" rel="noopener noreferrer">{{ label }} ↗</a></li>{% endfor %}</ul>{% endif %}

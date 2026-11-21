@@ -1,75 +1,260 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-21T00:00:00Z",
+  "generatedAt": "2026-11-21T19:00:00Z",
   "title": "Design System: Shiori",
   "extensions": {
     "colorMeta": {
-      "ribbon-teal": { "role": "primary", "displayName": "Ribbon Teal", "canonical": "#0e6b6b", "darkValue": "#4fb8b4",
-        "tonalRamp": ["#062b2b", "#0a4444", "#0e6b6b", "#2a8f8d", "#4fb8b4", "#8fd3d0", "#c6eae8", "#e3f1f0"] },
-      "paper": { "role": "neutral", "displayName": "Paper", "canonical": "#f6f7f8", "darkValue": "#111418" },
-      "sheet": { "role": "neutral", "displayName": "Sheet", "canonical": "#ffffff", "darkValue": "#171b20" },
-      "sheet-shade": { "role": "neutral", "displayName": "Sheet Shade", "canonical": "#eef0f2", "darkValue": "#1f242b" },
-      "ink": { "role": "neutral", "displayName": "Ink", "canonical": "#1a1d21", "darkValue": "#e4e7eb",
-        "tonalRamp": ["#111418", "#1a1d21", "#2a3038", "#3a414b", "#5d6670", "#8a939c", "#c9ced4", "#eef0f2"] },
-      "ink-muted": { "role": "neutral", "displayName": "Ink Muted", "canonical": "#5d6670", "darkValue": "#9aa3ad" },
-      "ink-faint": { "role": "neutral", "displayName": "Ink Faint", "canonical": "#8a939c", "darkValue": "#6f7882" },
-      "hairline": { "role": "neutral", "displayName": "Hairline", "canonical": "#e1e4e8", "darkValue": "#2a3038" },
-      "hairline-strong": { "role": "neutral", "displayName": "Hairline Strong", "canonical": "#c9ced4", "darkValue": "#3a414b" },
-      "ok": { "role": "status", "displayName": "Ok", "canonical": "#1b7a43", "darkValue": "#5cd29a" },
-      "err": { "role": "status", "displayName": "Err", "canonical": "#b42318", "darkValue": "#f58a80" },
-      "warn": { "role": "status", "displayName": "Warn", "canonical": "#8a5a00", "darkValue": "#f0b955" },
-      "info": { "role": "status", "displayName": "Info", "canonical": "#2a5f9e", "darkValue": "#8db4ec" },
-      "viz-blue": { "role": "data", "displayName": "Viz Blue", "canonical": "#2a78d6", "darkValue": "#3987e5",
-        "tonalRamp": ["#0d366b", "#1c5cab", "#2a78d6", "#5598e7", "#86b6ef", "#b8d4f6", "#dceaf9", "#eef5fc"] }
+      "ribbon-teal": {
+        "role": "primary",
+        "displayName": "Ribbon Teal",
+        "canonical": "#0e6b6b",
+        "darkValue": "#4fb8b4",
+        "tonalRamp": [
+          "#062b2b",
+          "#0a4444",
+          "#0e6b6b",
+          "#2a8f8d",
+          "#4fb8b4",
+          "#8fd3d0",
+          "#c6eae8",
+          "#e3f1f0"
+        ]
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "Paper",
+        "canonical": "#f6f7f8",
+        "darkValue": "#111418"
+      },
+      "sheet": {
+        "role": "neutral",
+        "displayName": "Sheet",
+        "canonical": "#ffffff",
+        "darkValue": "#171b20"
+      },
+      "sheet-shade": {
+        "role": "neutral",
+        "displayName": "Sheet Shade",
+        "canonical": "#eef0f2",
+        "darkValue": "#1f242b"
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "canonical": "#1a1d21",
+        "darkValue": "#e4e7eb",
+        "tonalRamp": [
+          "#111418",
+          "#1a1d21",
+          "#2a3038",
+          "#3a414b",
+          "#5d6670",
+          "#8a939c",
+          "#c9ced4",
+          "#eef0f2"
+        ]
+      },
+      "ink-muted": {
+        "role": "neutral",
+        "displayName": "Ink Muted",
+        "canonical": "#5d6670",
+        "darkValue": "#9aa3ad"
+      },
+      "ink-faint": {
+        "role": "neutral",
+        "displayName": "Ink Faint",
+        "canonical": "#656d76",
+        "darkValue": "#8a939d"
+      },
+      "hairline": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "canonical": "#e1e4e8",
+        "darkValue": "#2a3038"
+      },
+      "hairline-strong": {
+        "role": "neutral",
+        "displayName": "Hairline Strong",
+        "canonical": "#c9ced4",
+        "darkValue": "#3a414b"
+      },
+      "ok": {
+        "role": "status",
+        "displayName": "Ok",
+        "canonical": "#1b7a43",
+        "darkValue": "#5cd29a"
+      },
+      "err": {
+        "role": "status",
+        "displayName": "Err",
+        "canonical": "#b42318",
+        "darkValue": "#f58a80"
+      },
+      "warn": {
+        "role": "status",
+        "displayName": "Warn",
+        "canonical": "#8a5a00",
+        "darkValue": "#f0b955"
+      },
+      "info": {
+        "role": "status",
+        "displayName": "Info",
+        "canonical": "#2a5f9e",
+        "darkValue": "#8db4ec"
+      },
+      "viz-blue": {
+        "role": "data",
+        "displayName": "Viz Blue",
+        "canonical": "#2a78d6",
+        "darkValue": "#3987e5",
+        "tonalRamp": [
+          "#0d366b",
+          "#1c5cab",
+          "#2a78d6",
+          "#5598e7",
+          "#86b6ef",
+          "#b8d4f6",
+          "#dceaf9",
+          "#eef5fc"
+        ]
+      }
     },
     "typographyMeta": {
-      "display": { "displayName": "Display", "purpose": "Series page titles only." },
-      "headline": { "displayName": "Headline", "purpose": "The page h1." },
-      "title": { "displayName": "Title", "purpose": "Section and panel headings." },
-      "body": { "displayName": "Body", "purpose": "All running text; long text held to 70-110ch." },
-      "label": { "displayName": "Label", "purpose": "Table headers and badges." },
-      "figure": { "displayName": "Figure", "purpose": "Summary numbers that lead a page; tabular." },
-      "mono": { "displayName": "Mono", "purpose": "Codes, keys and env names." }
+      "display": {
+        "displayName": "Display",
+        "purpose": "Series page titles only."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "The page h1."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Section and panel headings."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "All running text; long text held to 70-110ch."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Table headers and badges."
+      },
+      "figure": {
+        "displayName": "Figure",
+        "purpose": "Summary numbers that lead a page; tabular."
+      },
+      "mono": {
+        "displayName": "Mono",
+        "purpose": "Codes, keys and env names."
+      },
+      "lead": {
+        "displayName": "Lead",
+        "purpose": "One headline sentence that sums up a stats page."
+      }
     },
     "shadows": [
-      { "name": "composer-focus", "value": "0 0 0 3px var(--accent-soft)", "purpose": "Focus halo on the Ask composer only." },
-      { "name": "heat-match", "value": "0 0 0 2px var(--surface), 0 0 0 4px var(--fg)", "purpose": "Marks the matching cell in a heat grid." }
+      {
+        "name": "composer-focus",
+        "value": "0 0 0 3px var(--accent-soft)",
+        "purpose": "Focus halo on the Ask composer only."
+      },
+      {
+        "name": "heat-match",
+        "value": "0 0 0 2px var(--surface), 0 0 0 4px var(--fg)",
+        "purpose": "Marks the matching cell in a heat grid."
+      }
     ],
     "motion": [
-      { "name": "chat-dot", "value": "1.2s ease-in-out infinite", "purpose": "Ask thinking dots; static under reduced motion." },
-      { "name": "spin", "value": "0.8s linear infinite", "purpose": "Inline spinner; static under reduced motion." }
+      {
+        "name": "chat-dot",
+        "value": "1.2s ease-in-out infinite",
+        "purpose": "Ask thinking dots; static under reduced motion."
+      },
+      {
+        "name": "spin",
+        "value": "0.8s linear infinite",
+        "purpose": "Inline spinner; static under reduced motion."
+      }
     ],
     "breakpoints": [
-      { "name": "narrow", "value": "48rem" },
-      { "name": "discover-split", "value": "900px" },
-      { "name": "wide-covers", "value": "100rem (container)" }
+      {
+        "name": "narrow",
+        "value": "48rem"
+      },
+      {
+        "name": "discover-split",
+        "value": "900px"
+      },
+      {
+        "name": "wide-covers",
+        "value": "100rem (container)"
+      }
     ]
   },
   "components": [
-    { "name": "Primary Button", "kind": "button", "refersTo": "button-primary", "description": "The one solid action in an area.",
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one solid action in an area.",
       "html": "<button class=\"ds-btn\">Write selected to AniList</button>",
-      "css": ".ds-btn { display: inline-flex; align-items: center; gap: .35rem; padding: .42rem .85rem; border-radius: 6px; border: 1px solid var(--accent, #0e6b6b); background: var(--accent, #0e6b6b); color: var(--accent-fg, #fff); font: 600 .9rem/1.2 system-ui, sans-serif; cursor: pointer; } .ds-btn:hover { background: var(--accent-hover, #0a5656); border-color: var(--accent-hover, #0a5656); } .ds-btn:focus-visible { outline: 2px solid var(--accent, #0e6b6b); outline-offset: 2px; }" },
-    { "name": "Secondary Button", "kind": "button", "refersTo": "button-secondary", "description": "Every other action.",
+      "css": ".ds-btn { display: inline-flex; align-items: center; gap: .35rem; padding: .42rem .85rem; border-radius: 6px; border: 1px solid var(--accent, #0e6b6b); background: var(--accent, #0e6b6b); color: var(--accent-fg, #fff); font: 600 .9rem/1.2 system-ui, sans-serif; cursor: pointer; } .ds-btn:hover { background: var(--accent-hover, #0a5656); border-color: var(--accent-hover, #0a5656); } .ds-btn:focus-visible { outline: 2px solid var(--accent, #0e6b6b); outline-offset: 2px; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Every other action.",
       "html": "<button class=\"ds-btn-secondary\">Refresh</button>",
-      "css": ".ds-btn-secondary { display: inline-flex; align-items: center; padding: .42rem .85rem; border-radius: 6px; border: 1px solid var(--line-strong, #c9ced4); background: var(--surface, #fff); color: var(--fg, #1a1d21); font: 600 .9rem/1.2 system-ui, sans-serif; cursor: pointer; } .ds-btn-secondary:hover { background: var(--surface-2, #eef0f2); } .ds-btn-secondary:focus-visible { outline: 2px solid var(--accent, #0e6b6b); outline-offset: 2px; }" },
-    { "name": "Text Input", "kind": "input", "refersTo": "input", "description": "Search, ids and settings fields.",
+      "css": ".ds-btn-secondary { display: inline-flex; align-items: center; padding: .42rem .85rem; border-radius: 6px; border: 1px solid var(--line-strong, #c9ced4); background: var(--surface, #fff); color: var(--fg, #1a1d21); font: 600 .9rem/1.2 system-ui, sans-serif; cursor: pointer; } .ds-btn-secondary:hover { background: var(--surface-2, #eef0f2); } .ds-btn-secondary:focus-visible { outline: 2px solid var(--accent, #0e6b6b); outline-offset: 2px; }"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Search, ids and settings fields.",
       "html": "<input class=\"ds-input\" type=\"text\" placeholder=\"Search series\">",
-      "css": ".ds-input { font: 15px/1.55 system-ui, sans-serif; color: var(--fg, #1a1d21); background: var(--surface, #fff); border: 1px solid var(--line-strong, #c9ced4); border-radius: 6px; padding: .38rem .55rem; min-width: 16rem; } .ds-input:focus-visible { outline: 2px solid var(--accent, #0e6b6b); outline-offset: 2px; }" },
-    { "name": "Header Navigation", "kind": "nav", "description": "Sticky header with the ribbon mark and underlined current section.",
+      "css": ".ds-input { font: 15px/1.55 system-ui, sans-serif; color: var(--fg, #1a1d21); background: var(--surface, #fff); border: 1px solid var(--line-strong, #c9ced4); border-radius: 6px; padding: .38rem .55rem; min-width: 16rem; } .ds-input:focus-visible { outline: 2px solid var(--accent, #0e6b6b); outline-offset: 2px; }"
+    },
+    {
+      "name": "Header Navigation",
+      "kind": "nav",
+      "description": "Sticky header with the ribbon mark and underlined current section.",
       "html": "<nav class=\"ds-nav\"><a class=\"ds-brand\" href=\"#\"><span class=\"ds-mark\"></span>Shiori</a><a href=\"#\" aria-current=\"page\">Home</a><a href=\"#\">Sync</a><a href=\"#\">Matches <span class=\"ds-count\">71</span></a><a href=\"#\">Discover</a></nav>",
-      "css": ".ds-nav { display: flex; align-items: stretch; gap: 1.25rem; min-height: 3.25rem; padding: 0 1rem; background: var(--surface, #fff); border-bottom: 1px solid var(--line, #e1e4e8); font: 15px system-ui, sans-serif; } .ds-nav a { display: flex; align-items: center; gap: .35rem; color: var(--muted, #5d6670); font-weight: 500; text-decoration: none; border-bottom: 2px solid transparent; margin-bottom: -1px; } .ds-nav a:hover { color: var(--fg, #1a1d21); } .ds-nav a[aria-current=page] { color: var(--fg, #1a1d21); border-bottom-color: var(--accent, #0e6b6b); } .ds-nav .ds-brand { color: var(--fg, #1a1d21); font-weight: 700; font-size: 1.05rem; gap: .55rem; margin-right: .5rem; } .ds-mark { width: .7rem; height: 1.05rem; background: var(--accent, #0e6b6b); clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 74%, 0 100%); } .ds-count { font-size: .72rem; font-weight: 600; color: var(--accent, #0e6b6b); background: var(--accent-soft, #e3f1f0); border-radius: 3px; padding: 0 .3rem; }" },
-    { "name": "Status Badges", "kind": "chip", "refersTo": "badge", "description": "Row and sync state as a small wash.",
+      "css": ".ds-nav { display: flex; align-items: stretch; gap: 1.25rem; min-height: 3.25rem; padding: 0 1rem; background: var(--surface, #fff); border-bottom: 1px solid var(--line, #e1e4e8); font: 15px system-ui, sans-serif; } .ds-nav a { display: flex; align-items: center; gap: .35rem; color: var(--muted, #5d6670); font-weight: 500; text-decoration: none; border-bottom: 2px solid transparent; margin-bottom: -1px; } .ds-nav a:hover { color: var(--fg, #1a1d21); } .ds-nav a[aria-current=page] { color: var(--fg, #1a1d21); border-bottom-color: var(--accent, #0e6b6b); } .ds-nav .ds-brand { color: var(--fg, #1a1d21); font-weight: 700; font-size: 1.05rem; gap: .55rem; margin-right: .5rem; } .ds-mark { width: .7rem; height: 1.05rem; background: var(--accent, #0e6b6b); clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 74%, 0 100%); } .ds-count { font-size: .72rem; font-weight: 600; color: var(--accent, #0e6b6b); background: var(--accent-soft, #e3f1f0); border-radius: 3px; padding: 0 .3rem; }"
+    },
+    {
+      "name": "Status Badges",
+      "kind": "chip",
+      "refersTo": "badge",
+      "description": "Row and sync state as a small wash.",
       "html": "<span class=\"ds-badge ok\">write</span> <span class=\"ds-badge err\">flagged</span> <span class=\"ds-badge warn\">implausible</span> <span class=\"ds-badge info\">add</span>",
-      "css": ".ds-badge { display: inline-block; padding: .02rem .4rem; border-radius: 3px; font: 600 .78rem system-ui, sans-serif; background: var(--surface-2, #eef0f2); color: var(--muted, #5d6670); } .ds-badge.ok { background: var(--ok-bg, #e5f3ea); color: var(--ok, #1b7a43); } .ds-badge.err { background: var(--err-bg, #fbeae8); color: var(--err, #b42318); } .ds-badge.warn { background: var(--warn-bg, #fdf2dc); color: var(--warn, #8a5a00); } .ds-badge.info { background: var(--info-bg, #e7eef8); color: var(--info, #2a5f9e); }" },
-    { "name": "Figures Strip", "kind": "custom", "description": "The few numbers a page leads with, one bordered row.",
+      "css": ".ds-badge { display: inline-block; padding: .02rem .4rem; border-radius: 3px; font: 600 .78rem system-ui, sans-serif; background: var(--surface-2, #eef0f2); color: var(--muted, #5d6670); } .ds-badge.ok { background: var(--ok-bg, #e5f3ea); color: var(--ok, #1b7a43); } .ds-badge.err { background: var(--err-bg, #fbeae8); color: var(--err, #b42318); } .ds-badge.warn { background: var(--warn-bg, #fdf2dc); color: var(--warn, #8a5a00); } .ds-badge.info { background: var(--info-bg, #e7eef8); color: var(--info, #2a5f9e); }"
+    },
+    {
+      "name": "Figures Strip",
+      "kind": "custom",
+      "description": "The few numbers a page leads with, one bordered row.",
       "html": "<div class=\"ds-figures\"><div class=\"ds-fig\"><b>2,337</b><span>on your list</span></div><div class=\"ds-fig\"><b>220</b><span>not on your list</span></div><div class=\"ds-fig\"><b>71</b><span>to review</span></div></div>",
-      "css": ".ds-figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); background: var(--surface, #fff); border: 1px solid var(--line, #e1e4e8); border-radius: 6px; font-family: system-ui, sans-serif; } .ds-fig { display: flex; flex-direction: column; padding: .8rem 1rem; border-left: 1px solid var(--line, #e1e4e8); } .ds-fig:first-child { border-left: 0; } .ds-fig b { font-size: 1.4rem; font-weight: 650; font-variant-numeric: tabular-nums; color: var(--fg, #1a1d21); } .ds-fig span { font-size: .84rem; color: var(--muted, #5d6670); }" },
-    { "name": "Data Table", "kind": "card", "refersTo": "table-header", "description": "Bordered sheet, sticky shaded header, hairline rows.",
+      "css": ".ds-figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); background: var(--surface, #fff); border: 1px solid var(--line, #e1e4e8); border-radius: 6px; font-family: system-ui, sans-serif; } .ds-fig { display: flex; flex-direction: column; padding: .8rem 1rem; border-left: 1px solid var(--line, #e1e4e8); } .ds-fig:first-child { border-left: 0; } .ds-fig b { font-size: 1.4rem; font-weight: 650; font-variant-numeric: tabular-nums; color: var(--fg, #1a1d21); } .ds-fig span { font-size: .84rem; color: var(--muted, #5d6670); }"
+    },
+    {
+      "name": "Data Table",
+      "kind": "card",
+      "refersTo": "table-header",
+      "description": "Bordered sheet, sticky shaded header, hairline rows.",
       "html": "<div class=\"ds-table\"><table><thead><tr><th>Series</th><th>Progress</th><th>Action</th></tr></thead><tbody><tr><td>Choujin X</td><td class=\"n\">41 → 52</td><td>write</td></tr><tr><td>Dandadan</td><td class=\"n\">160 → 171</td><td>write</td></tr></tbody></table></div>",
-      "css": ".ds-table { background: var(--surface, #fff); border: 1px solid var(--line, #e1e4e8); border-radius: 6px; overflow: hidden; font: .91rem system-ui, sans-serif; } .ds-table table { width: 100%; border-collapse: collapse; } .ds-table th { background: var(--surface-2, #eef0f2); color: var(--muted, #5d6670); font-size: .76rem; font-weight: 600; text-align: left; padding: .5rem .7rem; border-bottom: 1px solid var(--line, #e1e4e8); } .ds-table td { padding: .5rem .7rem; border-bottom: 1px solid var(--line, #e1e4e8); color: var(--fg, #1a1d21); } .ds-table tr:last-child td { border-bottom: 0; } .ds-table tbody tr:hover td { background: var(--surface-2, #eef0f2); } .ds-table .n { font-variant-numeric: tabular-nums; }" },
-    { "name": "Ask Prompt Chip", "kind": "chip", "refersTo": "prompt-chip", "description": "Suggested question in the empty Ask chat.",
+      "css": ".ds-table { background: var(--surface, #fff); border: 1px solid var(--line, #e1e4e8); border-radius: 6px; overflow: hidden; font: .91rem system-ui, sans-serif; } .ds-table table { width: 100%; border-collapse: collapse; } .ds-table th { background: var(--surface-2, #eef0f2); color: var(--muted, #5d6670); font-size: .76rem; font-weight: 600; text-align: left; padding: .5rem .7rem; border-bottom: 1px solid var(--line, #e1e4e8); } .ds-table td { padding: .5rem .7rem; border-bottom: 1px solid var(--line, #e1e4e8); color: var(--fg, #1a1d21); } .ds-table tr:last-child td { border-bottom: 0; } .ds-table tbody tr:hover td { background: var(--surface-2, #eef0f2); } .ds-table .n { font-variant-numeric: tabular-nums; }"
+    },
+    {
+      "name": "Ask Prompt Chip",
+      "kind": "chip",
+      "refersTo": "prompt-chip",
+      "description": "Suggested question in the empty Ask chat.",
       "html": "<button class=\"ds-prompt\">Something like Chainsaw Man</button>",
-      "css": ".ds-prompt { padding: .45rem .9rem; border-radius: 999px; border: 1px solid var(--line-strong, #c9ced4); background: var(--surface, #fff); color: var(--fg, #1a1d21); font: .92rem system-ui, sans-serif; cursor: pointer; } .ds-prompt:hover { background: var(--accent-soft, #e3f1f0); border-color: var(--accent, #0e6b6b); } .ds-prompt:focus-visible { outline: 2px solid var(--accent, #0e6b6b); outline-offset: 2px; }" }
+      "css": ".ds-prompt { padding: .45rem .9rem; border-radius: 999px; border: 1px solid var(--line-strong, #c9ced4); background: var(--surface, #fff); color: var(--fg, #1a1d21); font: .92rem system-ui, sans-serif; cursor: pointer; } .ds-prompt:hover { background: var(--accent-soft, #e3f1f0); border-color: var(--accent, #0e6b6b); } .ds-prompt:focus-visible { outline: 2px solid var(--accent, #0e6b6b); outline-offset: 2px; }"
+    }
   ],
   "narrative": {
     "northStar": "The Reader's Ledger",
@@ -82,12 +267,41 @@
       "State is shown with small washes and badges, not large colored areas."
     ],
     "rules": [
-      { "name": "The One Ribbon Rule", "body": "Ribbon Teal is the only accent. It marks the action to take and where you are, and nothing else; never use it for decoration, large fills or headings.", "section": "colors" },
-      { "name": "The Small Wash Rule", "body": "Status color lives in badges, notices, row tints and thin borders. A whole panel or page is never painted in a status color.", "section": "colors" },
-      { "name": "The Tokens Only Rule", "body": "Dark mode redefines the same custom properties; components never branch on theme.", "section": "colors" },
-      { "name": "The Tabular Figures Rule", "body": "Every count, chapter number, score and date uses tabular numerals and doesn't wrap.", "section": "typography" },
-      { "name": "The No Shouting Rule", "body": "No uppercase labels, no letter-spaced caps, no display sizes outside series titles and the Ask empty state.", "section": "typography" },
-      { "name": "The Hairline Rule", "body": "If something needs separating, use a 1px hairline or a shade step, never a shadow.", "section": "elevation" }
+      {
+        "name": "The One Ribbon Rule",
+        "body": "Ribbon Teal is the only accent. It marks the action to take and where you are, and nothing else; never use it for decoration, large fills or headings.",
+        "section": "colors"
+      },
+      {
+        "name": "The Small Wash Rule",
+        "body": "Status color lives in badges, notices, row tints and thin borders. A whole panel or page is never painted in a status color.",
+        "section": "colors"
+      },
+      {
+        "name": "The Tokens Only Rule",
+        "body": "Dark mode redefines the same custom properties; components never branch on theme.",
+        "section": "colors"
+      },
+      {
+        "name": "The Two Registers Rule",
+        "section": "colors",
+        "body": "The working screens (Sync, Matches, Settings, History) stay plain ledger. Stats, Year in review, Discover and Map are the reader's own pages and may be livelier: a hue per chart, a headline sentence, large covers, a cover shelf. Ribbon Teal stays the only accent in both."
+      },
+      {
+        "name": "The Tabular Figures Rule",
+        "body": "Every count, chapter number, score and date uses tabular numerals and doesn't wrap.",
+        "section": "typography"
+      },
+      {
+        "name": "The No Shouting Rule",
+        "body": "No uppercase labels, no letter-spaced caps, no display sizes outside series titles and the Ask empty state.",
+        "section": "typography"
+      },
+      {
+        "name": "The Hairline Rule",
+        "body": "If something needs separating, use a 1px hairline or a shade step, never a shadow.",
+        "section": "elevation"
+      }
     ],
     "dos": [
       "Do keep Ribbon Teal for the primary action, the current place and focus; one solid button per screen area.",
@@ -102,7 +316,9 @@
       "Don't introduce a second accent, a second typeface, or uppercase letter-spaced labels.",
       "Don't fill panels, headers or buttons with a status color; a destructive button stays outlined.",
       "Don't wrap every number in its own card; use the figures strip.",
-      "Don't add decorative illustration, icons for their own sake, or ornament around covers."
+      "Don't add decorative illustration, icons for their own sake, or ornament around covers.",
+      "Don't use filled pills for pickers, or a colored stripe down one side of a box.",
+      "Don't leave a wide column's right half empty."
     ]
   }
 }

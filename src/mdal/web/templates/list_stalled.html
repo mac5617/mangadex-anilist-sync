@@ -16,7 +16,7 @@
   <tbody>{% for r in rows %}<tr id="stalled-{{ r.media_id }}">
     <td><div class="series-cell">
       {% if r.cover %}<img class="thumb" src="{{ r.cover_fallback or r.cover }}" alt="" width="38" height="54" loading="lazy" referrerpolicy="no-referrer"
-        onerror="this.onerror=null;this.removeAttribute('src');this.classList.add('broken')">{% endif %}
+        onerror="this.onerror=null;this.removeAttribute('src');this.classList.add('broken')">{% else %}<span class="thumb placeholder" aria-hidden="true"></span>{% endif %}
       <div class="series-text"><a href="{{ r.href }}">{{ r.title }}</a><span class="muted small">{{ r.meta }}</span></div></div></td>
     <td class="num">{{ r.idle_days | num }} days ago</td>
     <td class="actions">{% if anilist %}

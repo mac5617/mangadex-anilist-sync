@@ -76,7 +76,7 @@ def stats_list(request: Request, gsort: str = "count") -> HTMLResponse:
     filters = _filters(request, GLOBAL_FILTERS)
     gsort = gsort if gsort in RANK_SORTS else "count"
     s = list_stats(get_services(request).repo, filters, gsort)
-    timeline = chart(s.timeline)
+    timeline = chart(s.timeline, clip_outliers=True)
     for b in timeline["bars"]:
         b["href"] = entries_url(filters, started=b["key"])
         b["href2"] = entries_url(filters, completed=b["key"])
@@ -164,7 +164,7 @@ def stats_syncs(request: Request, run: str = "", site: str = "") -> HTMLResponse
     return render(request, "stats_syncs.html", {
         "s": s, "runs": runs, "selected": run, "site": target or "", "sites": SITE_NAMES,
         "has_mal": bool(runs_with_writes(repo, "mal")),
-        "c": {"per_run": chart(s.per_run), "jumps": chart(s.jumps), "transitions": chart(s.transitions)},
+        "c": {"per_run": chart(s.per_run, clip_outliers=True), "jumps": chart(s.jumps), "transitions": chart(s.transitions)},
     })
 
 

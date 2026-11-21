@@ -1,4 +1,5 @@
-{# Chart macros. Marks: one series colour (--viz-1; --viz-2 for a second series), <=24px thick, 4px rounded
+{# Chart macros. Marks: one series colour per chart (--bar, set by a hue-N class on the panel; --viz-2 for a
+   second series), <=32px thick, 4px rounded
    data-end, 2px gaps, hairline grid, value labels in text ink. Every mark has a tooltip (hover + keyboard
    focus); marks with a drill-down link to the entries list. Every chart has a table view.
    Import with: {% import "_charts.html" as charts %} #}
@@ -46,7 +47,7 @@
       <div class="cols-grid"><span></span><span></span><span></span></div>
       <div class="cols">
         {% for b in c.bars %}
-          <div class="col-slot">{{ mark(b.href, "col", b.tip) }}<span class="col-fill" style="height: {{ '%.2f' | format(b.pct) }}%"></span>{{ end_mark(b.href) }}</div>
+          <div class="col-slot">{{ mark(b.href, "col", b.tip) }}<span class="col-fill{% if b.clipped %} clipped{% endif %}" style="height: {{ '%.2f' | format(b.pct) }}%"></span>{{ end_mark(b.href) }}</div>
         {% endfor %}
       </div>
       <div class="cols-x">{% for b in c.bars %}<span>{% if b.show_label %}{{ b.label }}{% endif %}</span>{% endfor %}</div>
@@ -67,7 +68,7 @@
       <div class="cols">
         {% for b in c.bars %}
           <div class="col-slot pair">
-            {{ mark(b.href, "col", b.tip) }}<span class="col-fill" style="height: {{ '%.2f' | format(b.pct) }}%"></span>{{ end_mark(b.href) }}
+            {{ mark(b.href, "col", b.tip) }}<span class="col-fill{% if b.clipped %} clipped{% endif %}" style="height: {{ '%.2f' | format(b.pct) }}%"></span>{{ end_mark(b.href) }}
             {{ mark(b.href2, "col s2", b.tip2) }}<span class="col-fill" style="height: {{ '%.2f' | format(b.pct2) }}%"></span>{{ end_mark(b.href2) }}
           </div>
         {% endfor %}
@@ -90,7 +91,8 @@
       {% for row in h.rows %}
         <tr><th>{{ row.label }}</th>
           {% for cell in row.cells %}
-            {%- set level = 0 if not cell.value else (1 + ((cell.value / h.max) ** 0.5 * 4.99) | int) -%}
+            {#- a steep root: counts run from 1 to thousands, so small cells still differ from each other -#}
+            {%- set level = 0 if not cell.value else (1 + ((cell.value / h.max) ** 0.3 * 4.99) | int) -%}
             <td>{% if cell.value %}<a class="heat-cell h{{ level }}{% if cell.match %} match{% endif %}" href="{{ cell.href }}" data-tip="{{ cell.tip }}">{{ cell.value | num }}</a>
               {%- else %}<span class="heat-cell h0{% if cell.match %} match{% endif %}">·</span>{% endif %}</td>
           {% endfor %}

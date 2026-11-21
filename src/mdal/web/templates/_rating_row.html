@@ -1,7 +1,9 @@
 {%- set kind, ident = key.split(":", 1) -%}
 <tr id="rating-{{ kind }}-{{ ident }}">
 {% if r %}
-  <td><a href="{{ href }}">{{ r.title }}</a></td>
+  <td><a class="series-cell" href="{{ href }}">{% if cover %}<img class="thumb" src="{{ cover }}" alt="" width="38" height="54" loading="lazy" referrerpolicy="no-referrer"
+    onerror="this.onerror=null;this.removeAttribute('src');this.classList.add('broken')">{% else %}<span class="thumb placeholder" aria-hidden="true"></span>{% endif %}
+    <span class="series-text"><span class="md-title">{{ r.title }}</span></span></a></td>
   <td>
     <select aria-label="Rating for {{ r.title }}" name="verdict" hx-post="/series/{{ kind }}/{{ ident }}/rate" hx-trigger="change"
       hx-target="#rating-{{ kind }}-{{ ident }}" hx-swap="outerHTML">

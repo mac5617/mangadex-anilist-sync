@@ -364,3 +364,18 @@ def test_activity_filters_accept_all(client):
     assert client.get("/stats/syncs?run=&site=").status_code == 200
     assert client.get("/stats/syncs?site=mal&run=").status_code == 200
     assert client.get("/stats/syncs?run=abc").status_code == 200
+
+
+def test_chart_clips_outliers_only_when_asked():
+    bars = [Bar(str(i), v, "") for i, v in enumerate([900, 40, 30, 25, 20, 10])]
+    plain = chart(bars)
+    assert plain["ticks"][0] == 1000 and not any(b["clipped"] for b in plain["bars"])
+    clipped = chart(bars, clip_outliers=True)
+    assert clipped["ticks"][0] == 50                      # set by the bars that aren't outliers
+    assert clipped["bars"][0]["clipped"] and clipped["bars"][0]["pct"] == 100
+    assert clipped["bars"][1]["pct"] == 80 and not clipped["bars"][1]["clipped"]
+
+
+def test_chart_leaves_even_bars_alone_when_clipping():
+    bars = [Bar(str(i), v, "") for i, v in enumerate([90, 80, 70, 60, 50, 40])]
+    assert chart(bars, clip_outliers=True)["ticks"][0] == 100

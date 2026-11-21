@@ -17,9 +17,14 @@
     <p class="lede">From the start and completion dates on your AniList list.</p>
   </div>
   <div class="page-actions">
-    <nav class="year-pick" aria-label="Year">{% for y in years[:8] %}<a href="/stats/year?year={{ y }}"{% if y == r.year %} aria-current="page"{% endif %}>{{ y }}</a>{% endfor %}</nav>
+    <nav class="seg year-pick" aria-label="Year">{% for y in years[:8] %}<a href="/stats/year?year={{ y }}"{% if y == r.year %} aria-current="page"{% endif %}>{{ y }}</a>{% endfor %}</nav>
   </div>
 </div>
+
+{% if p.shelf %}<section class="year-shelf" aria-label="Everything you finished in {{ r.year }}">
+  <ul class="shelf">{% for x in p.shelf %}<li><a href="{{ x.href }}" title="{{ x.title }}">{% if x.cover %}<img src="{{ x.cover }}" alt="{{ x.title }}" loading="lazy" referrerpolicy="no-referrer">{% else %}<span class="tile-noimg"></span><span class="visually-hidden">{{ x.title }}</span>{% endif %}</a></li>{% endfor %}</ul>
+  {% if r.finished > p.shelf | length %}<p class="muted small">The first {{ p.shelf | length }} of {{ r.finished | num }} you finished, in order.</p>{% endif %}
+</section>{% endif %}
 
 <div class="figures">
   {{ charts.figure(r.finished | num, "Series finished") }}
@@ -28,14 +33,14 @@
   {{ charts.figure("%.1f" | format(r.mean_score / 10) if r.mean_score else "—", "Average score", "of what you finished and scored") }}
 </div>
 
-<section class="panel chart-panel">
+<section class="panel chart-panel hue-3">
   <h2>Finished, month by month</h2>
   {{ charts.columns(c.months, "Month", "Finished", empty="No completion dates with months this year.") }}
 </section>
 
 {% if p.best %}<section class="block">
   <h2>Your best this year</h2>
-  <ul class="tiles{% if p.best | length >= 5 %} fill-row{% endif %}">{% for x in p.best %}{{ tile(x) }}{% endfor %}</ul>
+  <ul class="tiles best-tiles">{% for x in p.best %}{{ tile(x) }}{% endfor %}</ul>
 </section>{% endif %}
 
 {% if r.more_than_usual %}<section class="block">
@@ -47,17 +52,15 @@
 
 <div class="grid two">
   <section class="panel chart-panel"><h2>Genres</h2><p class="chart-sub">Series you started or finished</p>{{ charts.hbars(c.genres, "Genre", "Series") }}</section>
-  <section class="panel chart-panel"><h2>Tags</h2><p class="chart-sub">Series you started or finished</p>{{ charts.hbars(c.tags, "Tag", "Series") }}</section>
+  <section class="panel chart-panel hue-2"><h2>Tags</h2><p class="chart-sub">Series you started or finished</p>{{ charts.hbars(c.tags, "Tag", "Series") }}</section>
 </div>
 
-<div class="grid two">
-  {% if p.longest %}<section class="block"><h2>Longest finished</h2><ul class="tiles small-tiles">{% for x in p.longest %}{{ tile(x) }}{% endfor %}</ul></section>{% endif %}
-  <section class="block">
-    <h2>Bookends</h2>
-    <ul class="tiles small-tiles">{% if p.first %}{{ tile(p.first) }}{% endif %}{% if p.last and p.last != p.first %}{{ tile(p.last) }}{% endif %}</ul>
-    {% if r.staff %}<p class="small"><span class="muted">Creators you read most:</span> {% for name, n in r.staff %}{{ name }} ({{ n }}){% if not loop.last %} · {% endif %}{% endfor %}</p>{% endif %}
-    {% if r.dropped %}<p class="small muted">{{ r.dropped | length }} series you started this year are now dropped.</p>{% endif %}
-  </section>
-</div>
+<section class="block">
+  <h2>Longest, first and last finished</h2>
+  <ul class="tiles">{% for x in p.longest %}{{ tile(x) }}{% endfor %}
+    {%- if p.first %}{{ tile(p.first) }}{% endif %}{% if p.last %}{{ tile(p.last) }}{% endif %}</ul>
+  {% if r.staff %}<p class="small"><span class="muted">Creators you read most:</span> {% for name, n in r.staff %}{{ name }} ({{ n }}){% if not loop.last %} · {% endif %}{% endfor %}</p>{% endif %}
+  {% if r.dropped %}<p class="small muted">{{ r.dropped | length }} series you started this year are now dropped.</p>{% endif %}
+</section>
 {% endif %}
 {% endblock %}
