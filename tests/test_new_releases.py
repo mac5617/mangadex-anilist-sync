@@ -87,6 +87,34 @@ def test_shortlist_blends_question_and_taste():
     assert [i.key for i in chat.shortlist(items, relevance, 2)] == ["cook", "fav"]
 
 
+@pytest.mark.parametrize("a, b", [
+    ("Umineko When They Cry Episode 5: End of the Golden Witch", "Umineko When They Cry Episode 8: Twilight of the Golden Witch"),
+    ("Higurashi WHEN THEY CRY: Atonement Arc", "Higurashi WHEN THEY CRY: Massacre Arc"),
+    ("Zatch Bell!", "Zatch Bell! 2"),
+    ("Shijou Saikyou no Deshi Kenichi", "Shijou Saikyou no Deshi Kenichi 2 ~Tatsujin-hen~"),
+])
+def test_entries_of_one_series_share_a_key(a, b):
+    assert chat.series_key(a) == chat.series_key(b)
+
+
+@pytest.mark.parametrize("a, b", [("Re:Zero", "Re:Monster"), ("Mob Psycho 100", "Monster"), ("Dandadan", "Gantz")])
+def test_different_series_keep_their_own_key(a, b):
+    assert chat.series_key(a) != chat.series_key(b)
+
+
+def test_shortlist_offers_one_entry_per_series_the_one_to_start_with():
+    def item(key, title, year, taste):
+        return chat.Item(key=key, title=title, url="u", cover=None, meta=[year], tags=[], description=None,
+                         taste=taste, adult=False, source="AniList")
+    items = [item("al:8", "Umineko When They Cry Episode 8: Twilight", "2012", 1.0),
+             item("al:5", "Umineko When They Cry Episode 5: End", "2010", 0.9),
+             item("al:1", "Mushishi", "1999", 0.5)]
+    picked = chat.shortlist(items, {}, n=5, reserve=0)
+    # Episode 8 ranked best, so the series keeps first place, filled by the earlier episode.
+    assert [i.key for i in picked] == ["al:5", "al:1"]
+    assert "at most one entry of any series" in chat.SYSTEM
+
+
 # ---- a scan against fake MangaDex and Ollama --------------------------------------------------
 
 

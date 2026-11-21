@@ -68,6 +68,41 @@ def keyword_relevance(question: str, items: list[Item]) -> dict[str, float]:
     return out
 
 
+SUBTITLE = re.compile(r"\s*(?::|\s-\s|~|\(|\[).*$")       # "Title: Subtitle", "Title - Part", "Title ~Arc~", "Title (2019)"
+ENTRY = re.compile(r"\b(?:episode|ep|season|part|vol(?:ume)?|book|arc|act)\s*\d+\b|\s+(?:\d{1,2}|ii|iii|iv|v|vi)$")
+NUMBER = re.compile(r"\b(?:episode|ep|season|part|vol(?:ume)?|book|arc|act)?\s*(\d{1,3})\b")
+MIN_SERIES_KEY = 5            # shorter keys ("Re" from "Re:Zero") are too generic to group by
+
+
+def series_key(title: str) -> str:
+    """The same for every entry of one series: "Umineko When They Cry Episode 5: End of the Golden Witch" and
+    "... Episode 8: Twilight ..." both give "umineko when they cry"; "Zatch Bell! 2" gives "zatch bell"."""
+    base = SUBTITLE.sub("", title.casefold()).strip()
+    base = normalize(ENTRY.sub("", base))
+    return base if len(base) >= MIN_SERIES_KEY else normalize(title)
+
+
+def start_order(item: Item) -> tuple[int, int]:
+    """Earliest first: by year (the first four-digit detail), then by the entry number in the title."""
+    year = next((int(m) for m in item.meta if re.fullmatch(r"\d{4}", m)), 9999)
+    number = NUMBER.search(item.title.casefold())
+    return year, int(number.group(1)) if number else 0
+
+
+def one_per_series(ordered: list[Item]) -> list[Item]:
+    """Several entries of one series (episodes, sequels) take one place: the best-ranked one's, filled by the
+    entry to start with. Otherwise a question can be answered with Episodes 5 and 8 of the same story."""
+    groups: dict[str, list[Item]] = {}
+    for item in ordered:
+        groups.setdefault(series_key(item.title), []).append(item)
+    out: list[Item] = []
+    for item in ordered:
+        group = groups.pop(series_key(item.title), None)
+        if group:
+            out.append(min(group, key=start_order))
+    return out
+
+
 def shortlist(items: list[Item], relevance: dict[str, float], n: int = SHORTLIST,
               reserve: int = ANILIST_RESERVE, taste: float = TASTE) -> list[Item]:
     """Best blend of relevance to the question (scaled 0..1 across the pool) and taste.
@@ -81,7 +116,7 @@ def shortlist(items: list[Item], relevance: dict[str, float], n: int = SHORTLIST
         rel = (relevance.get(item.key, 0.0) - low) / (high - low) if high > low else 0.0
         return (1 - taste) * rel + taste * item.taste
 
-    ordered = sorted(items, key=lambda i: -blend(i))
+    ordered = one_per_series(sorted(items, key=lambda i: -blend(i)))
     chosen = ordered[:n]
     missing = reserve - sum(1 for i in chosen if i.key.startswith("al:"))
     if missing > 0:
@@ -150,7 +185,9 @@ SYSTEM = (
     "list to compare). What they ask for in their latest message decides: mood, genre, length, status, or 'like X "
     "but Y'. Every pick must match it; their usual taste only breaks ties between series that do, and earlier "
     "questions only matter when the latest one refers back to them. If too few in the list fit, pick only those and "
-    "say so plainly. Be concise and specific, no hype, no spoilers. Pick 4 to 6 series unless they ask for a "
+    "say so plainly. Suggest at most one entry of any series (never two episodes, seasons or sequels of the same "
+    "story), and prefer the one a new reader starts with. "
+    "Be concise and specific, no hype, no spoilers. Pick 4 to 6 series unless they ask for a "
     "different number. Each series you suggest is shown to the reader as a "
     "card with its title, details and your reason: each reason says in one or two sentences why that series fits "
     "them, and the reply is one to three sentences that answer them overall without repeating the reasons (plain "
