@@ -381,7 +381,7 @@ def seed_diffed_run(repo, *, evil_title: str = "<script>alert(1)</script> Evil")
          "action": "flag", "flag_kind": "exceeds_total", "reason": "MangaDex 11 exceeds AniList's total of 10 chapters"},
         {**base, "md_id": "k", "action": "skip", "reason": "no match"},
     ])
-    repo.update_run(run_id, phase_detail="6 series", est_requests=3, est_seconds=9)
+    repo.update_run(run_id, phase_detail="6 series")
     return run_id
 
 

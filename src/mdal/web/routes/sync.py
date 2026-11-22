@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import time
 from datetime import datetime
-from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
@@ -18,20 +17,27 @@ from mdal import titles
 from mdal.db.repo import Repo
 from mdal.recommend.series import series_url
 from mdal.services import Services
-from mdal.sync.estimate import estimate
-from mdal.sync.orchestrator import (
-    ACTIVE_STATES,
-    DISMISSED_PREFIX,
+from mdal.sync.changes import (
     SITE_NAMES,
     TARGETS,
     ApprovalError,
+    Estimate,
+    Selection,
+    is_preselected,
+    is_selectable,
+    is_status_only,
+    plan_estimate,
+    write_plan,
+)
+from mdal.sync.orchestrator import (
+    ACTIVE_STATES,
+    DISMISSED_PREFIX,
     SyncAlreadyRunning,
     SyncCoolingDown,
     SyncStateError,
     open_diff,
 )
 from mdal.sync.rules import AlMediaInfo, MdInfo, completion_info, completion_label
-from mdal.sync.writer import is_status_only
 from mdal.web.app import clock, get_services, md_cover_url, render, templates
 
 router = APIRouter()
@@ -149,7 +155,6 @@ def diff_rows(repo: Repo, run_id: int) -> list[DiffRow]:
                 status_label = "New entry → " + status_label.split(" → ", 1)[1] + "; untick to add as Reading"
         elif is_new:
             status_label = "New entry: Reading"
-        selectable = r["action"] in ("write", "add", "flag") and r["flag_kind"] != "exceeds_total"
         rows.append(DiffRow(
             run_id=run_id,
             md_id=r["md_id"],
@@ -170,52 +175,13 @@ def diff_rows(repo: Repo, run_id: int) -> list[DiffRow]:
             set_status=r["set_status"],
             status_label=status_label,
             status_only=bool(r["set_status"] or r["set_score"]) and is_status_only(r),
-            selectable=selectable,
-            checked=bool(r["approved"]) if r["write_state"] != "none" else r["action"] in ("write", "add"),
+            selectable=is_selectable(r),
+            checked=is_preselected(r),
             complete_checked=bool(r["status_approved"]),
             set_score=r["set_score"],
             score_checked=bool(r["score_approved"]),
         ))
     return rows
-
-
-@dataclass(frozen=True)
-class Estimate:
-    selected: int
-    to_complete: int
-    requests: int
-    seconds: int
-    site: str = "AniList"
-    to_score: int = 0
-
-
-def compute_estimate(repo: Repo, rows: list[DiffRow], selected: Iterable[str], completing: Iterable[str],
-                     target: str = "anilist", scoring: Iterable[str] = ()) -> Estimate:
-    """Pure DB/maths: the write-phase cost of the current selection."""
-    chosen, marks, scores = set(selected), set(completing), set(scoring)
-    n = to_complete = to_score = 0
-    for row in rows:
-        if not row.selectable or row.md_id not in chosen:
-            continue
-        completes = bool(row.set_status) and row.md_id in marks
-        scored = row.set_score is not None and row.md_id in scores
-        if row.status_only and not completes and not scored:
-            continue  # nothing left to send
-        n += 1
-        to_complete += completes
-        to_score += scored
-    if target == "mal":  # one request per entry
-        req, sec = estimate(n, 1, repo.get_setting("mal_rpm"))
-    else:
-        req, sec = estimate(n, repo.get_setting("anilist_write_batch"), repo.get_setting("anilist_rpm"))
-    return Estimate(n, to_complete, req, sec, SITE_NAMES[target], to_score)
-
-
-def default_estimate(repo: Repo, rows: list[DiffRow], target: str = "anilist") -> Estimate:
-    return compute_estimate(
-        repo, rows, [r.md_id for r in rows if r.checked], [r.md_id for r in rows if r.complete_checked], target,
-        [r.md_id for r in rows if r.score_checked],
-    )
 
 
 def combine(parts: list[Estimate]) -> Estimate:
@@ -234,21 +200,21 @@ def group(repo: Repo, run: Any) -> list[Any]:
     return [d for t in TARGETS if (d := open_diff(repo, t))] or [run]
 
 
-def choices(form: Any, runs: list[Any], default_run: int) -> dict[int, tuple[list[str], list[str], list[str], list[str]]]:
+def choices(form: Any, runs: list[Any], default_run: int) -> dict[int, Selection]:
     """Form ticks ("run:md_id", or a bare md_id meaning this page's run) per run, for the runs the page showed
     (its `runs` fields). A site whose changes arrived after the page loaded is left waiting, never closed unseen."""
     shown = {int(v) for v in form.getlist("runs") if str(v).isdigit()} or {default_run}
     ids = {r["run_id"] for r in runs} & shown
-    out: dict[int, tuple[list[str], list[str], list[str], list[str]]] = {i: ([], [], [], []) for i in ids}
+    ticks: dict[int, tuple[list[str], list[str], list[str], list[str]]] = {i: ([], [], [], []) for i in ids}
     for n, key in enumerate(("sel", "mc", "ov", "sc")):
         for value in form.getlist(key):
             run_s, sep, md_id = str(value).partition(":")
             run_id = int(run_s) if sep and run_s.isdigit() else default_run
             if not sep:
                 md_id = str(value)
-            if run_id in out:
-                out[run_id][n].append(md_id)
-    return out
+            if run_id in ticks:
+                ticks[run_id][n].append(md_id)
+    return {run_id: Selection.of(*t) for run_id, t in ticks.items()}
 
 
 def still_reading(svc: Any, runs: list[Any]) -> list[str]:
@@ -261,16 +227,12 @@ def still_reading(svc: Any, runs: list[Any]) -> list[str]:
     return [SITE_NAMES[t] for t in dict.fromkeys(sites)]
 
 
-def estimates(repo: Repo, runs: list[Any], picked: dict[int, tuple[list[str], list[str], list[str], list[str]]] | None) -> Estimate:
-    parts = []
-    for run in runs:
-        rows = diff_rows(repo, run["run_id"])
-        if picked is None:
-            parts.append(default_estimate(repo, rows, run["target"]))
-        else:
-            sel, mc, _, sc = picked[run["run_id"]]
-            parts.append(compute_estimate(repo, rows, sel, mc, run["target"], sc))
-    return combine(parts)
+def estimates(repo: Repo, runs: list[Any], picked: dict[int, Selection] | None) -> Estimate:
+    """The cost of each site's Write plan: for what's ticked, or for what the page starts with."""
+    return combine([
+        plan_estimate(repo, run["target"], write_plan(repo, run["run_id"], picked[run["run_id"]] if picked else None))
+        for run in runs
+    ])
 
 
 def _run_or_404(repo: Repo, run_id: int) -> Any:

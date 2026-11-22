@@ -61,7 +61,6 @@ async def test_run_reaches_diffed_with_one_item_per_series(fast, world):
     assert (items["e"]["action"], items["e"]["reason"]) == ("skip", "no match")
     assert (items["f"]["action"], items["f"]["flag_kind"]) == ("flag", "implausible")
 
-    assert r["est_requests"] == 3 and r["est_seconds"] == 9  # 2 writes, batch 10, 20 rpm
     assert "2 to write" in r["phase_detail"]
 
 

@@ -22,6 +22,7 @@ from typing import Any
 
 from mdal.clients.anilist import AniListClient, AniListComplexityError, AniListGraphQLError
 from mdal.db.repo import Repo, now_iso
+from mdal.sync.changes import is_status_only, sends_completion, sends_score
 from mdal.fetch.anilist_list import fetch_list
 
 log = logging.getLogger(__name__)
@@ -41,19 +42,6 @@ class WriteOp:
 
 def is_add(item: Any) -> bool:
     return item["al_entry_id"] is None and item["al_media_id"] is not None
-
-
-def is_status_only(item: Any) -> bool:
-    """No progress to send: the site is at or ahead (or nothing was read), so only the status or score can change."""
-    return item["al_progress"] is not None and (item["md_progress"] is None or item["md_progress"] <= item["al_progress"])
-
-
-def sends_completion(item: Any) -> bool:
-    return item["set_status"] == "COMPLETED" and bool(item["status_approved"])
-
-
-def sends_score(item: Any) -> bool:
-    return item["set_score"] is not None and bool(item["score_approved"])
 
 
 def site_score(item: Any, site: str) -> int:

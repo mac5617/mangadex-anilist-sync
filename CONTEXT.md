@@ -47,3 +47,23 @@ _Avoid_: run (a run is one Sync's record for one site)
 **Busy**:
 A Sync is in progress for any site, including the gap between finishing one site and starting the next. No list edit is made while Shiori is busy.
 _Avoid_: locked, running (for the two-site gap)
+
+**Change**:
+One series' proposed update for one site in a Sync.
+_Avoid_: diff row, sync item, run item
+
+**Flag**:
+A Change held back for you to look at, because it looks wrong or can't be written.
+_Avoid_: warning, error
+
+**Dismissal**:
+Your decision to set one kind of Flag aside on one site, until your MangaDex progress for that series changes.
+_Avoid_: ignore, hide
+
+**Selection**:
+The Changes, and the parts of them, you ticked for approval.
+_Avoid_: choices, ticks
+
+**Write plan**:
+What a Selection will actually send to a site. The estimate is the cost of the Write plan.
+_Avoid_: approved items, payload

@@ -17,7 +17,8 @@ from typing import Any
 from mdal.clients.myanimelist import MalClient, MalRequestError
 from mdal.db.repo import Repo, now_iso
 from mdal.fetch.mal_list import fetch_mal_list
-from mdal.sync.writer import is_status_only, recheck, sends_completion, sends_score, site_score, verify_note, with_note
+from mdal.sync.changes import is_status_only, sends_completion, sends_score
+from mdal.sync.writer import recheck, site_score, verify_note, with_note
 
 SITE = "MyAnimeList"
 

@@ -29,10 +29,10 @@ from mdal.fetch.anilist_list import fetch_list, fetch_staff, viewer
 from mdal.fetch.mal_list import fetch_mal_list
 from mdal.fetch.mangadex_library import fetch_library
 from mdal.matching.pipeline import AniListFetch, resolve_all
-from mdal.sync.estimate import estimate
+from mdal.sync.changes import SITE_NAMES, TARGETS, ApprovalError, Selection, WritePlan, approved_plan
 from mdal.sync.rules import AlEntry, AlMediaInfo, MdInfo, evaluate, score_from_md
 from mdal.sync.mal_writer import MalWriter
-from mdal.sync.writer import Writer, is_status_only
+from mdal.sync.writer import Writer
 
 if TYPE_CHECKING:
     from mdal.services import Services
@@ -43,8 +43,6 @@ ACTIVE_STATES = ("fetching", "resolving", "diffing", "writing", "verifying")
 INTERRUPTIBLE = ("fetching", "resolving", "diffing")  # cheap to redo: a restart marks them failed
 HALTING = (MangaDexBlocked, MangaDexRateLimited, MangaDexUnreachable, MangaDexCoolingDown,
            AniListUnavailable, AniListRateLimited, MalRateLimited, MalUnavailable)
-TARGETS = ("anilist", "mal")
-SITE_NAMES = {"anilist": "AniList", "mal": "MyAnimeList"}
 MD_REUSE_SECONDS = 600  # a MyAnimeList sync reuses a MangaDex read this recent instead of reading again
 
 MAPPING_SKIPS = {
@@ -71,41 +69,7 @@ class SyncCoolingDown(Exception):
     """MangaDex cooldown active: a new sync would only knock again."""
 
 
-class ApprovalError(Exception):
-    """Shown to the user as-is."""
-
-
 RESUMABLE = ("writing", "verifying", "failed", "halted")
-
-
-def validate_approval(
-    repo: Repo, run_id: int, selected: Iterable[str], completing: Iterable[str], overrides: Iterable[str],
-    scoring: Iterable[str] = (), allow_empty: bool = False,
-) -> list[tuple[str, int, int]]:
-    """Returns [(md_id, status_approved, score_approved)] to approve, or raises ApprovalError. `allow_empty`: a site
-    with nothing ticked, when several sites are approved together."""
-    run = repo.get_run(run_id)
-    if run is None or run["state"] != "diffed":
-        raise ApprovalError("Only a sync that is waiting for approval can be approved.")
-    items = {i["md_id"]: i for i in repo.items(run_id)}
-    chosen, marks, ok, scores = set(selected), set(completing), set(overrides), set(scoring)
-    approved: list[tuple[str, int, int]] = []
-    for md_id in sorted(chosen):
-        item = items.get(md_id)
-        if item is None or item["action"] == "skip":
-            raise ApprovalError("The selection contains a row that cannot be written.")
-        if item["flag_kind"] == "exceeds_total":
-            raise ApprovalError("Rows that exceed AniList's total chapter count cannot be written.")
-        if item["flag_kind"] == "implausible" and md_id not in ok:
-            raise ApprovalError("Tick “override” on flagged rows you want to write anyway.")
-        completes = int(item["set_status"] == "COMPLETED" and md_id in marks)
-        scored = int(item["set_score"] is not None and md_id in scores)
-        if is_status_only(item) and not completes and not scored:
-            continue  # nothing to send
-        approved.append((md_id, completes, scored))
-    if not approved and not allow_empty:
-        raise ApprovalError("Nothing selected to write.")
-    return approved
 
 
 @dataclass(frozen=True)
@@ -428,39 +392,40 @@ class SyncOrchestrator:
         scoring: Iterable[str] = (),
     ) -> int:
         """Validate, mark items pending and start writing. Returns the number of approved items."""
-        return await self.approve_many({run_id: (selected, completing, overrides, scoring)})
+        return await self.approve_many({run_id: Selection.of(selected, completing, overrides, scoring)})
 
-    async def approve_many(self, choices: dict[int, tuple[Iterable[str], ...]]) -> int:
-        """Approve the changes of several sites at once ({run_id: (selected, completing, overrides[, scoring])}), then write
+    async def approve_many(self, choices: dict[int, Selection]) -> int:
+        """Approve the changes of several sites at once ({run_id: Selection}), then write
         them one site after another (AniList first), each re-checked and verified as on its own. A site with
         nothing ticked is closed without writing. Returns the number of approved items."""
         if self.lock.locked() or (self.task and not self.task.done()):
             raise SyncAlreadyRunning("a sync is already running")
         several = len(choices) > 1
-        plan = {run_id: validate_approval(self.repo, run_id, *chosen, allow_empty=several)
-                for run_id, chosen in choices.items()}
-        if not any(plan.values()):
+        plan: dict[int, WritePlan] = {run_id: approved_plan(self.repo, run_id, chosen, allow_empty=several)
+                                      for run_id, chosen in choices.items()}
+        if not any(p.writes for p in plan.values()):
             raise ApprovalError("Nothing selected to write.")
         order = sorted(plan, key=lambda r: (TARGETS.index(self.repo.get_run(r)["target"]), r))
         await self.lock.acquire()
         try:
             for run_id in order:
-                if not plan[run_id]:
+                if not plan[run_id].writes:
                     self.repo.update_run(run_id, state="done", approved_at=now_iso(), finished_at=now_iso(),
                                          phase_detail="nothing selected to write")
                     continue
                 self.repo.update_items(run_id, [
-                    (md_id, {"approved": 1, "write_state": "pending", "status_approved": completes, "score_approved": scored})
-                    for md_id, completes, scored in plan[run_id]
+                    (w.md_id, {"approved": 1, "write_state": "pending", "status_approved": int(w.completes),
+                               "score_approved": int(w.scored)})
+                    for w in plan[run_id].writes
                 ])
                 self.repo.update_run(run_id, state="writing", approved_at=now_iso(),
                                      phase_detail="starting" if run_id == order[0] else "waiting for the site before")
         except BaseException:
             self.lock.release()
             raise
-        to_write = [r for r in order if plan[r]]
+        to_write = [r for r in order if plan[r].writes]
         self.task = self._watch(asyncio.create_task(self._write_all(to_write)))
-        return sum(len(v) for v in plan.values())
+        return sum(len(p.writes) for p in plan.values())
 
     async def _write_all(self, run_ids: list[int]) -> None:
         """Write approved sites in turn under one lock; one site failing doesn't stop the next."""
@@ -636,15 +601,13 @@ class SyncOrchestrator:
         items = build_items(repo, run_id, target="mal")
         repo.replace_items(run_id, items)
 
-        n_write = sum(1 for i in items if i["action"] in ("write", "add"))
-        req, sec = estimate(n_write, 1, repo.get_setting("mal_rpm"))
         linked = sum(1 for i in items if i["mal_id"] is not None)
         detail = (
             f"{series} series, {listed} MyAnimeList entries; {linked} linked to MyAnimeList"
             + (f" ({newly} newly matched on AniList)" if newly else "")
             + f"; {sum(i['action'] == 'write' for i in items)} to update, {sum(i['action'] == 'add' for i in items)} to add"
         )
-        repo.update_run(run_id, state="diffed", phase_detail=detail, est_requests=req, est_seconds=sec)
+        repo.update_run(run_id, state="diffed", phase_detail=detail)
 
     async def _anilist_dry_run(self, run_id: int) -> None:
         s, repo = self.services, self.repo
@@ -665,7 +628,6 @@ class SyncOrchestrator:
         repo.replace_items(run_id, items)
 
         n_write = sum(1 for i in items if i["action"] == "write")
-        req, sec = estimate(n_write, repo.get_setting("anilist_write_batch"), repo.get_setting("anilist_rpm"))
         states = [m["state"] for m in repo.mappings().values()]
         newly = match.auto + match.review + match.unmatched
         detail = (
@@ -674,4 +636,4 @@ class SyncOrchestrator:
             f"{states.count('review')} to review, {states.count('unmatched')} unmatched; "
             f"{n_write} to write"
         )
-        repo.update_run(run_id, state="diffed", phase_detail=detail, est_requests=req, est_seconds=sec)
+        repo.update_run(run_id, state="diffed", phase_detail=detail)

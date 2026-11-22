@@ -118,7 +118,8 @@ def test_links(client, run_id):
         ({"sel": ["w"]}, "1 selected · ≈ 3 AniList requests, ≈ 9 s"),
         ({"sel": ["w", "c", "s"], "mc": ["c", "s"]}, "3 selected, 2 to mark completed"),
         ({"sel": ["w", "c", "s"], "mc": []}, "2 selected"),           # status-only without completion: nothing to send
-        ({"sel": ["x", "i"]}, "1 selected"),                         # exceeds_total never counts
+        ({"sel": ["x", "i"]}, "0 selected"),                         # exceeds_total never counts; a Flag needs override
+        ({"sel": ["x", "i"], "ov": ["i"]}, "1 selected"),
         ({}, "0 selected · ≈ 0 AniList requests, ≈ 0 s"),
     ],
 )
