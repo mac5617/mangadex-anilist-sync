@@ -7,6 +7,7 @@ import pytest
 from mdal.backup import restore
 from mdal.db.connection import _migrations, connect, schema_version
 from mdal.db.repo import Repo
+from mdal.stats import entry_rows
 from mdal.sync.changes import (
     ApprovalError,
     Selection,
@@ -18,7 +19,7 @@ from mdal.sync.changes import (
     undismiss,
     write_plan,
 )
-from tests.factories import al_media_row, md_manga_row, seed_diffed_run, match
+from tests.factories import al_media_row, connect_mal, md_manga_row, seed_diffed_run, match
 
 
 @pytest.fixture
@@ -219,3 +220,39 @@ def test_the_write_plan_never_sends_two_changes_to_one_entry(repo):
     assert [w.md_id for w in plan.writes] == ["b"] and "same list entry" in plan.refusal
     with pytest.raises(ApprovalError, match="same list entry"):
         approved_plan(repo, run_id, Selection.of(["a", "b"]))
+
+
+def linked_world(repo: Repo, md_link: str, al_link: int | None, mal_score: int = 7) -> None:
+    """A rated series on AniList with no score, and a MyAnimeList entry 77 holding a different one."""
+    repo.replace_md_snapshot([md_manga_row("f", "Series", rating=8, links={"mal": md_link})], {})
+    repo.upsert_media([al_media_row(1, "AL", id_mal=al_link)])
+    match(repo, "f", 1)
+    repo.replace_al_entries([{"entry_id": 101, "media_id": 1, "status": "CURRENT", "progress": 5, "fetched_at": "x"}])
+    repo.replace_mal_entries([{"mal_id": 77, "status": "PAUSED", "progress": 3, "score": mal_score, "fetched_at": "x"}])
+
+
+def test_no_score_offer_against_a_score_reached_by_mangadex_link(repo):
+    linked_world(repo, "77", None)
+    assert build_items(repo, 1)[0].get("set_score") is None
+
+
+def test_no_score_offer_against_anilist_link_when_the_links_disagree(repo):
+    linked_world(repo, "88", 77)
+    assert build_items(repo, 1)[0].get("set_score") is None
+
+
+def test_stats_follow_the_myanimelist_link(repo):
+    linked_world(repo, "77", None)
+    assert entry_rows(repo)[0]["mal_status"] == "PAUSED"
+    linked_world(repo, "88", 77)                        # links disagree: there is no entry to compare with
+    assert entry_rows(repo)[0]["mal_status"] is None
+
+
+def test_series_page_follows_the_myanimelist_link(services):
+    connect_mal(services)
+    linked_world(services.repo, "77", None)
+    page = services.series.view("al:1")
+    assert page["mal_mirror"] and page["mal_entry"]["progress"] == 3
+    linked_world(services.repo, "88", 77)
+    page = services.series.view("al:1")
+    assert not page["mal_mirror"] and page["mal_entry"] is None

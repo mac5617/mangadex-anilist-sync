@@ -21,6 +21,7 @@ from mdal.fetch.anilist_list import plain_text
 from mdal.fetch.anilist_recs import fetch_neighbours
 from mdal.fetch.mal_recs import anilist_by_mal, mal_recommendations
 from mdal.fetch.mangaupdates import fresh_enough, lookup_mu
+from mdal.matching.mal_link import media_link
 from mdal.matching.matches import is_matched, library_series
 from mdal.matching.normalize import normalize
 from mdal.recommend import ranking
@@ -153,6 +154,7 @@ class SeriesPages:
         facts = [(k, v) for k, v in facts if v not in (None, "")]
 
         al_id = media["media_id"] if media else None
+        mal_id = media_link(media["id_mal"], library_series(repo, al_id))[0] if media else None
         entry = repo.al_entries().get(al_id) if al_id else None
         verdict = repo.feedback().get(key) or (repo.feedback().get(f"al:{al_id}") if al_id else None)
         links = [(label, url) for label, url in (
@@ -170,7 +172,7 @@ class SeriesPages:
             "entry": {"status": LIST_STATUS.get(entry["status"], entry["status"]), "status_code": entry["status"],
                       "progress": entry["progress"], "score": entry["score"]} if entry else None,
             "md_id": md_id,
-            "mal_entry": self._mal_entry(media),
+            "mal_entry": self._mal_entry(mal_id),
             "md_status": MD_STATUS_LABELS.get(lib["reading_status"] or "none") if lib else None,
             "verdict": {"verdict": verdict["verdict"], "label": VERDICTS[verdict["verdict"]], "source": verdict["source"],
                         "at": verdict["created_at"]} if verdict else None,
@@ -179,17 +181,16 @@ class SeriesPages:
             "ranked": self._ranked(al_id) if entry else None, "al_id": al_id,
             "notes": entry["notes"] if entry else None,
             "local_notes": self.repo.series_note(key),
-            "mal_mirror": bool(entry and media["id_mal"] and self.services.mal.connected
-                               and media["id_mal"] in self.repo.mal_entries()),
+            "mal_mirror": bool(entry and self.services.mal.connected and mal_id in self.repo.mal_entries()),
             "mu": mu, "english": english_meta(mu), "looked_up": self.looked_up(key), "problems": self.problems(key),
             "readers": self._readers(key),
         }
 
-    def _mal_entry(self, media: Any) -> dict[str, Any] | None:
-        """Your MyAnimeList entry for this series, as last read (only while MyAnimeList is connected)."""
-        if not (media and media["id_mal"] and self.services.mal.connected):
+    def _mal_entry(self, mal_id: int | None) -> dict[str, Any] | None:
+        """Your MyAnimeList entry for this series, by its MyAnimeList link, as last read (only while connected)."""
+        if not (mal_id and self.services.mal.connected):
             return None
-        e = self.repo.mal_entries().get(media["id_mal"])
+        e = self.repo.mal_entries().get(mal_id)
         if e is None:
             return None
         return {"status": LIST_STATUS.get(e["status"], e["status"]), "status_code": e["status"],

@@ -11,8 +11,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from mdal.db.repo import Repo
-from mdal.matching.mal_link import series_link
-from mdal.matching.matches import is_matched
+from mdal.matching.mal_link import media_links, series_link
+from mdal.matching.matches import is_matched, library_series
 from mdal.sync.estimate import estimate
 from mdal.sync.rules import AlEntry, AlMediaInfo, evaluate_series, score_from_md
 
@@ -251,6 +251,7 @@ def build_items(repo: Repo, run_id: int, md_ids: set[str] | None = None, target:
         return _one_per_entry(_build_mal_items(repo, run_id, rows, mappings, media, dismissed, jump_limit), rows, target)
     entries = repo.al_entries()
     mal_scores = {mal_id: e["score"] for mal_id, e in repo.mal_entries().items()}
+    links = media_links({m: r["id_mal"] for m, r in media.items()}, library_series(repo))
     items: list[dict[str, Any]] = []
     for row in rows:
         md_id = row["md_id"]
@@ -266,7 +267,8 @@ def build_items(repo: Repo, run_id: int, md_ids: set[str] | None = None, target:
         entry = AlEntry(entry_row["entry_id"], entry_row["status"], entry_row["progress"]) if entry_row else None
         info = AlMediaInfo(media_row["chapters"] if media_row else None, media_row["status"] if media_row else None)
         item = {**base, "al_media_id": al_id, **_evaluated(repo, row, entry, info, jump_limit, dismissed, "AniList")}
-        mal_score = mal_scores.get(media_row["id_mal"]) if media_row and media_row["id_mal"] else None
+        # Links that disagree name no entry to write to, but AniList's own link still says what not to contradict.
+        mal_score = mal_scores.get(links.get(al_id) or (media_row["id_mal"] if media_row else None))
         score = score_from_md(row["rating"], entry_row["score"] if entry_row else None, (mal_score or 0) * 10)
         items.append(_with_score(item, score, "AniList"))
     return _one_per_entry(items, rows, target)

@@ -15,6 +15,7 @@ from typing import Any
 
 from mdal import titles
 from mdal.db.repo import Repo
+from mdal.matching.mal_link import media_links
 from mdal.matching.matches import library_series, matched, not_on_list
 from mdal.sync.rules import STATUS_LABELS
 
@@ -86,13 +87,15 @@ def entry_rows(repo: Repo) -> list[dict[str, Any]]:
     rows = repo.conn.execute(
         "SELECT e.entry_id, e.media_id, e.status, e.progress, e.progress_volumes, e.score, e.started_at, "
         "e.completed_at, e.updated_at, e.notes, m.format, m.country, m.start_year, m.genres, m.chapters, m.status AS pub, "
-        "m.romaji, m.english, m.native, m.site_url, m.cover_url, m.tags, m.staff_roles, m.id_mal, "
-        "x.status AS mal_status, x.progress AS mal_progress "
-        "FROM al_entry e LEFT JOIN al_media m ON m.media_id = e.media_id LEFT JOIN mal_entry x ON x.mal_id = m.id_mal"
+        "m.romaji, m.english, m.native, m.site_url, m.cover_url, m.tags, m.staff_roles, m.id_mal "
+        "FROM al_entry e LEFT JOIN al_media m ON m.media_id = e.media_id"
     ).fetchall()
     md: dict[int, Any] = {}
-    for r in library_series(repo):
+    library = library_series(repo)
+    for r in library:
         md.setdefault(r["al_media_id"], r)
+    links = media_links({r["media_id"]: r["id_mal"] for r in rows}, library)
+    on_mal = repo.mal_entries()
     out = []
     for r in rows:
         d = md.get(r["media_id"])
@@ -108,6 +111,8 @@ def entry_rows(repo: Repo) -> list[dict[str, Any]]:
         row["md_cover_file"] = d["cover_file"] if d else None
         row["title"] = titles.pick(r["romaji"], r["english"], r["native"]) or (d["title"] if d else None) or f"#{r['media_id']}"
         row["through"] = through_bucket(r["progress"], r["chapters"])
+        mal = on_mal.get(links.get(r["media_id"]))
+        row["mal_status"], row["mal_progress"] = (mal["status"], mal["progress"]) if mal else (None, None)
         out.append(row)
     return out
 

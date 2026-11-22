@@ -8,7 +8,7 @@ matched to it (list edits).
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from typing import Any
 
 from mdal.matching.matches import is_matched
@@ -59,3 +59,11 @@ def media_link(al_mal: int | None, matched_rows: Iterable[Any]) -> tuple[int | N
     if len(ids) > 1:
         return None, f"MangaDex links different MyAnimeList entries ({', '.join(map(str, sorted(ids)))})"
     return (ids.pop(), None) if ids else (None, "no MyAnimeList id (the AniList match has none)")
+
+
+def media_links(al_links: Mapping[int, int | None], matched_rows: Iterable[Any]) -> dict[int, int | None]:
+    """`media_link` for many AniList series at once: their own links, and library rows with their `al_media_id`."""
+    by_media: dict[int, list[Any]] = {}
+    for row in matched_rows:
+        by_media.setdefault(row["al_media_id"], []).append(row)
+    return {m: media_link(al_links.get(m), by_media.get(m, ()))[0] for m in {*al_links, *by_media}}
