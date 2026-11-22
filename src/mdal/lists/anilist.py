@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, Any
 from mdal.clients.anilist import AniListClient, AniListComplexityError, AniListError, AniListGraphQLError
 from mdal.db.repo import Repo, now_iso
 from mdal.fetch.anilist_list import fetch_list
-from mdal.recommend.ranking import to_anilist
+from mdal.scores import to_anilist
 from mdal.sync.rules import STATUS_LABELS
 
 if TYPE_CHECKING:

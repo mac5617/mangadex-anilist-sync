@@ -15,6 +15,7 @@ from mdal.listtools import binge, stalled
 from mdal.recommend import ranking
 from mdal.recommend.fresh import english_meta
 from mdal.recommend.series import big_cover, series_url
+from mdal.scores import to_anilist
 from mdal.stats import entry_rows
 from mdal.web.app import get_services, render, templates
 
@@ -192,7 +193,7 @@ async def ranking_page(request: Request, sort: str = "rank") -> HTMLResponse:
         tier_rows = [{**view(entries[r["media_id"]]), "score": scores[r["media_id"]], "place": i + 1, "tier": tier,
                       "tier_label": ranking.TIERS[tier][2], "ranked_at": r["ranked_at"],
                       "popularity": popularity.get(r["media_id"], 0),
-                      "saved": (entries[r["media_id"]]["score"] or 0) == ranking.to_anilist(scores[r["media_id"]])}
+                      "saved": (entries[r["media_id"]]["score"] or 0) == to_anilist(scores[r["media_id"]])}
                      for i, r in enumerate(svc.ranker.tier(tier)) if r["media_id"] in entries]
         low, high, label = ranking.TIERS[tier]
         tiers.append({"tier": tier, "label": label, "range": f"{low:g}–{high:g}", "rows": tier_rows})

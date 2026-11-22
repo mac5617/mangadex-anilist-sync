@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 
 from mdal.clients.anilist import ANILIST_URL
 from mdal.clients.myanimelist import API_URL as MAL_URL
-from mdal.lists.myanimelist import mal_score
+from mdal.scores import to_mal
 from mdal.web.app import create_app
 from tests.factories import al_media_row, connect_mal
 from tests.test_list import FakeLists
@@ -19,7 +19,7 @@ DAY = 86400
 
 
 def test_mal_scores_are_whole_numbers():
-    assert [mal_score(s) for s in (0.1, 6.8, 8.4, 8.5, 10)] == [1, 7, 8, 8, 10]   # 8.5 rounds half to even: 8
+    assert [to_mal(s) for s in (0.1, 6.8, 8.4, 8.5, 10)] == [1, 7, 8, 8, 10]   # 8.5 rounds half to even: 8
 
 
 class FakeMal:

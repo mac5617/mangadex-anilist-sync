@@ -22,6 +22,7 @@ from typing import Any
 
 from mdal.clients.anilist import AniListClient, AniListComplexityError, AniListGraphQLError
 from mdal.db.repo import Repo, now_iso
+from mdal.scores import rating_on_site
 from mdal.sync.changes import NOTHING_LEFT, is_status_only, nothing_to_send, sends_completion, sends_score
 from mdal.fetch.anilist_list import fetch_list
 
@@ -46,7 +47,7 @@ def is_add(item: Any) -> bool:
 
 def site_score(item: Any, site: str) -> int:
     """The MangaDex rating (1-10) in the site's terms: AniList's 100-point scale, MyAnimeList's 1-10."""
-    return item["set_score"] * 10 if site == "AniList" else item["set_score"]
+    return rating_on_site(item["set_score"], site)
 
 
 def op_for(item: Any) -> WriteOp:

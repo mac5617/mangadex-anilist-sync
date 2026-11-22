@@ -14,6 +14,7 @@ from mdal.listtools import binge, stalled
 from mdal.recommend import ranking
 from mdal.lists.anilist import status_document
 from mdal.web.app import create_app
+from mdal.scores import to_anilist
 from tests.factories import al_media_row, list_edits
 
 DAY = 86400
@@ -25,7 +26,7 @@ DAY = 86400
 def test_scores_spread_evenly_within_each_tier():
     s = ranking.scores([(1, "liked"), (2, "liked"), (3, "liked"), (4, "fine"), (5, "disliked"), (6, "disliked")])
     assert s == {1: 10.0, 2: 8.4, 3: 6.8, 4: 6.7, 5: 3.9, 6: 0.0}
-    assert ranking.to_anilist(0.0) == 1 and ranking.to_anilist(8.4) == 84
+    assert to_anilist(0.0) == 1 and to_anilist(8.4) == 84
     assert ranking.tier_for(85) == "liked" and ranking.tier_for(50) == "fine" and ranking.tier_for(None) is None
 
 

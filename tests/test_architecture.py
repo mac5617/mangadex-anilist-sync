@@ -50,7 +50,7 @@ def test_writer_status_literals():
     assert set(re.findall(r"\b(COMPLETED|CURRENT|PLANNING|PAUSED|DROPPED|REPEATING)\b", text)) == {"COMPLETED", "CURRENT"}
 
 
-PURE_MODULES = ["matching/normalize.py", "matching/score.py", "matching/mal_link.py", "sync/rules.py", "sync/estimate.py",
+PURE_MODULES = ["matching/normalize.py", "matching/score.py", "matching/mal_link.py", "sync/rules.py", "sync/estimate.py", "scores.py",
                 "recommend/profile.py", "recommend/score.py", "recommend/llm.py", "recommend/graph.py",
                 "recommend/fresh.py", "recommend/chat.py", "recommend/feedback.py", "recommend/ranking.py",
                 "listtools.py", "search.py", "year.py", "compare.py", "titles.py"]

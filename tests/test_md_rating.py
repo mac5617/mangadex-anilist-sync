@@ -7,7 +7,7 @@ import respx
 from fastapi.testclient import TestClient
 
 from mdal.sync.orchestrator import ApprovalError
-from mdal.sync.rules import score_from_md
+from mdal.scores import rating_on_site, score_offer
 from mdal.web.app import create_app
 from tests.factories import FakeAniList, FakeMal, FakeMangaDex, FakeSeries, al_media, connect_mal, seed_diffed_run
 
@@ -32,8 +32,13 @@ def fast(services):
     (8, 60, None, None),       # this site has a score
     (None, None, None, None),  # not rated on MangaDex
 ])
-def test_score_from_md(rating, site, other, expected):
-    assert score_from_md(rating, site, other) == expected
+def test_score_offer(rating, site, other, expected):
+    assert score_offer(rating, "anilist", anilist=site, mal=other / 10 if other else other) == expected
+    assert score_offer(rating, "mal", anilist=other, mal=site / 10 if site else site) == expected
+
+
+def test_a_rating_on_each_site():
+    assert (rating_on_site(8, "AniList"), rating_on_site(8, "MyAnimeList")) == (80, 8)
 
 
 @pytest.fixture

@@ -41,11 +41,6 @@ def scores(ranked: list[tuple[int, str]]) -> dict[int, float]:
     return out
 
 
-def to_anilist(score: float) -> int:
-    """10-point score -> AniList's POINT_100 (1-100; 0 would mean "no score")."""
-    return max(1, min(100, round(score * 10)))
-
-
 @dataclass(frozen=True)
 class Search:
     """Where a series being ranked can still go in its tier: any index in [low, high]."""

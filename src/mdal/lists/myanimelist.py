@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Any
 
 from mdal.clients.myanimelist import MalClient, MalError
 from mdal.db.repo import Repo, now_iso
-from mdal.recommend.ranking import to_anilist
+from mdal.scores import to_mal
 
 if TYPE_CHECKING:
     from mdal.lists import Series, SiteResult
@@ -27,11 +27,6 @@ NOT_LISTED = "not on your MyAnimeList list"
 # AniList's words -> MyAnimeList's. The local copy (mal_entry) keeps AniList's words.
 MAL_STATUS = {"CURRENT": "reading", "COMPLETED": "completed", "PAUSED": "on_hold", "DROPPED": "dropped",
               "PLANNING": "plan_to_read"}
-
-
-def mal_score(score: float) -> int:
-    """A score out of 10 -> MyAnimeList's whole number, by way of AniList's 1-100 (84.5 rounds half to even: 8)."""
-    return max(1, min(10, round(to_anilist(score) / 10)))
 
 
 class MalSite:
@@ -55,10 +50,10 @@ class MalSite:
                 result.skipped[series] = series.mal_problem or "no MyAnimeList link"
             elif series.mal_id not in listed:
                 result.skipped[series] = NOT_LISTED
-            elif (listed[series.mal_id]["score"] or 0) == mal_score(score):
+            elif (listed[series.mal_id]["score"] or 0) == to_mal(score):
                 result.unchanged.append(series)
             else:
-                todo.append((series, mal_score(score)))
+                todo.append((series, to_mal(score)))
         for i, (series, value) in enumerate(todo):
             try:
                 problem = await self._checked_edit(series, "score", value, score=value)

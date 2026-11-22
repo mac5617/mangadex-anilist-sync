@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 from mdal.db.repo import now_iso
 from mdal.recommend import ranking
-from mdal.lists.myanimelist import mal_score
+from mdal.scores import to_anilist, to_mal
 
 if TYPE_CHECKING:
     from mdal.services import Services
@@ -76,8 +76,8 @@ class Ranker:
     def pending(self) -> dict[int, int]:
         """{media_id: AniList score} for ranked series whose AniList score differs from their place."""
         entries = self.repo.al_entries()
-        return {m: ranking.to_anilist(s) for m, s in self.ranked_scores().items()
-                if m in entries and (entries[m]["score"] or 0) != ranking.to_anilist(s)}
+        return {m: to_anilist(s) for m, s in self.ranked_scores().items()
+                if m in entries and (entries[m]["score"] or 0) != to_anilist(s)}
 
     def pending_mal(self) -> dict[int, int]:
         """{media_id: AniList score} for scores Shiori set (ranked or quick-scored) whose whole number isn't on
@@ -90,7 +90,7 @@ class Ranker:
         listed = self.repo.mal_entries()
         series = self.services.your_list.series([f"al:{m}" for m in scores])
         return {m: scores[m] for m in scores if (mal_id := series[f"al:{m}"].mal_id) in listed
-                and (listed[mal_id]["score"] or 0) != mal_score(scores[m] / 10)}
+                and (listed[mal_id]["score"] or 0) != to_mal(scores[m] / 10)}
 
     def status(self) -> dict[str, Any]:
         return self.repo.get_setting("rank_save") or {}
