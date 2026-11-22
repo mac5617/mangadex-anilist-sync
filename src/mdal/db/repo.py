@@ -446,7 +446,7 @@ class Repo:
                 "ON CONFLICT(ref, model) DO UPDATE SET text_hash=excluded.text_hash, vector=excluded.vector",
                 [(ref, model, h, v) for ref, h, v in rows])
 
-    # ---- edits to your AniList list (sync/list_edit.py) --------------------------
+    # ---- list edits made in Shiori (mdal/lists) -------------------------------------
     def update_al_entry(self, media_id: int, **fields: Any) -> None:
         allowed = {"score", "status", "notes", "progress"}
         if not fields or set(fields) - allowed:

@@ -21,6 +21,7 @@ class MemorySite:
     def __init__(self, name: str, listed: dict[str, float | None], fail: dict[str, str] | None = None) -> None:
         self.name, self.listed, self.fail = name, dict(listed), dict(fail or {})
         self.statuses = {k: "CURRENT" for k in listed}
+        self.notes: dict[str, str] = {}
         self.sent: list[dict[str, float]] = []
 
     def entry(self, series: Series):
@@ -56,6 +57,18 @@ class MemorySite:
         else:
             self.sent.append({series.key: status})
             self.statuses[series.key] = status
+            result.saved.append(series)
+        return result
+
+
+    async def set_notes(self, series: Series, notes: str) -> SiteResult:
+        result = SiteResult(self.name)
+        if series.key not in self.statuses:
+            result.skipped[series] = f"not on your {self.name} list"
+        elif series.key in self.fail:
+            result.failed[series] = self.fail[series.key]
+        else:
+            self.notes[series.key] = notes
             result.saved.append(series)
         return result
 
@@ -182,6 +195,24 @@ async def test_a_status_myanimelist_refuses_is_named(world):
     assert not edit.ok and edit.note == "Marked Dropped on AniList; MyAnimeList: MAL is down."
 
 
+async def test_notes_are_trimmed_and_mirrored_unless_this_save_says_not(world):
+    al, mal = MemorySite("AniList", {"al:1": None}), MemorySite("MyAnimeList", {"al:1": None})
+    lists, _ = make(world, al, mal)
+    edit = await lists.set_notes("al:1", "  " + "x" * 6000 + "  ")
+    assert edit.note == "Saved to AniList and MyAnimeList." and len(al.notes["al:1"]) == 5000 == len(mal.notes["al:1"])
+    edit = await lists.set_notes("al:1", "Only here", mirror=False)
+    assert edit.note == "Saved to AniList." and mal.notes["al:1"] != "Only here"
+
+
+async def test_notes_wait_while_busy_and_stop_at_anilist(world):
+    mal = MemorySite("MyAnimeList", {"al:1": None})
+    lists, _ = make(world, MemorySite("AniList", {"al:1": None}), mal, busy=True)
+    assert (await lists.set_notes("al:1", "x")).note == BUSY
+    lists, _ = make(world, MemorySite("AniList", {"al:1": None}, fail={"al:1": "AniList refused the notes: no"}), mal)
+    edit = await lists.set_notes("al:1", "x")
+    assert edit.note == "AniList refused the notes: no" and mal.notes == {}
+
+
 # ---- the AniList adapter -------------------------------------------------------------------------
 class FakeAniListScores:
     def __init__(self, complexity_over: int = 99):
@@ -190,6 +221,8 @@ class FakeAniListScores:
     def handle(self, request):
         body = json.loads(request.content)
         self.sent.append(body)
+        if "scoreRaw" not in body["query"]:                 # a status or notes save
+            return httpx.Response(200, json={"data": {"SaveMediaListEntry": {"id": body["variables"]["e"]}}})
         n = len(body["variables"]) // 2
         if n > self.complexity_over:
             return httpx.Response(200, json={"errors": [{"message": "Max query complexity"}], "data": None})
@@ -335,6 +368,18 @@ async def test_myanimelist_status_in_its_own_words_after_reading_the_entry(world
         await site.set_status(s["al:1"], "REPEATING")
 
 
+async def test_myanimelist_notes_go_to_comments_after_reading_the_entry(world, mal):
+    site, fake = mal({501})
+    lists, _ = make(world, MemorySite("AniList", {}), site)
+    s = lists.series(["al:1", "al:2"])
+    assert (await site.set_notes(s["al:1"], "Great")).saved == [s["al:1"]]
+    assert fake.calls == [("GET", 501), ("PATCH", 501, {"comments": "Great"})]
+    assert "different" in (await site.set_notes(s["al:2"], "x")).skipped[s["al:2"]]
+    fake.listed.clear()                                   # left the list since it was last read
+    assert (await site.set_notes(s["al:1"], "Again")).failed == {s["al:1"]: "not on your MyAnimeList list"}
+    assert [c[0] for c in fake.calls] == ["GET", "PATCH", "GET"]       # nothing sent that would create it
+
+
 # ---- the contract every site keeps -----------------------------------------------------------------
 @pytest.fixture(params=["memory", "anilist", "myanimelist"])
 def any_site(request, world):
@@ -401,3 +446,11 @@ async def test_ranker_scores_wait_while_syncing_and_go_out_when_it_stops(service
     await orch.task
     await asyncio.sleep(0)
     assert started == [True]
+
+
+async def test_contract_notes_are_saved_only_where_listed(world, any_site):
+    lists, _ = make(world, MemorySite("AniList", {}), MemorySite("MyAnimeList", {}))
+    s = lists.series(["al:1", "md:nope"])
+    assert (await any_site.set_notes(s["al:1"], "Kaneki")).saved == [s["al:1"]]
+    other = await any_site.set_notes(s["md:nope"], "Kaneki")
+    assert not other.saved

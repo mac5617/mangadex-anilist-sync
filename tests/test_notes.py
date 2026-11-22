@@ -71,7 +71,7 @@ def test_notes_mirror_to_mal_only_for_entries_on_your_mal_list(listed):
 
             check.respond(200, json={"id": 501})                                     # no longer on the MAL list
             failed = c.post("/series/al/1/notes", data={"notes": "Again", "mal": "1"}).text
-            assert "Saved to AniList." in failed and "isn&#39;t on your MyAnimeList list" in failed
+            assert "Saved to AniList; MyAnimeList: not on your MyAnimeList list." in failed
             assert patch.call_count == 1                                             # nothing was sent to create it
 
 

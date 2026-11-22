@@ -4,6 +4,7 @@ Like sync/writer.py, this module may contain a mutation. Its rules:
 - it only edits an entry that exists, addressed by its entry `id` (never `mediaId`), so nothing can be added;
 - a score is sent as `scoreRaw` (1-100), and one that is already AniList's score isn't sent;
 - a status is one of the literals in EDIT_STATUSES (never Rereading), and one AniList already has isn't sent;
+- notes are sent as `notes`, at most NOTES_MAX characters;
 - scores go in batches; a batch AniList finds too complex is halved, down to one;
 - every change is logged in list_edit, and the local copy of the entry follows what AniList answered;
 - an AniList error stops the rest of the edit: what wasn't tried fails with the same reason.
@@ -27,6 +28,11 @@ NOT_LISTED = "not on your AniList list"
 
 
 EDIT_STATUSES = ("CURRENT", "COMPLETED", "PAUSED", "DROPPED", "PLANNING")
+
+
+NOTES_MAX = 5000
+NOTES_DOCUMENT = f"mutation ($e: Int, $n: String) {{ SaveMediaListEntry(id: $e, notes: $n) {SELECTION} }}"
+READ_NOTES = "query ($e: Int) { MediaList(id: $e) { id notes } }"
 
 
 def status_document(status: str) -> str:
@@ -128,5 +134,35 @@ class AniListSite:
                 result.stored[series] = {"progress": answer["progress"]}
         self.repo.update_al_entry(series.media_id, **saved)
         self.repo.log_edit(series.media_id, entry["entry_id"], "status", entry["status"], status, "done")
+        result.saved.append(series)
+        return result
+
+    async def read_notes(self, series: Series) -> str:
+        """Your notes on the entry, from AniList (1 request), kept locally. Raises AniListError, or
+        LookupError when the series isn't on your list."""
+        entry = self.entry(series)
+        if entry is None:
+            raise LookupError(NOT_LISTED)
+        data = await self.client.graphql(READ_NOTES, {"e": entry["entry_id"]})
+        notes = ((data.get("MediaList") or {}).get("notes")) or ""
+        self.repo.update_al_entry(series.media_id, notes=notes)
+        return notes
+
+    async def set_notes(self, series: Series, notes: str) -> SiteResult:
+        from mdal.lists import SiteResult
+
+        result = SiteResult(self.name)
+        entry = self.entry(series)
+        if entry is None:
+            result.failed[series] = NOT_LISTED
+            return result
+        try:
+            await self.client.graphql(NOTES_DOCUMENT, {"e": entry["entry_id"], "n": notes})
+        except AniListError as exc:
+            self.repo.log_edit(series.media_id, entry["entry_id"], "notes", entry["notes"], notes, "failed", str(exc))
+            result.failed[series] = f"AniList refused the notes: {exc}"
+            return result
+        self.repo.update_al_entry(series.media_id, notes=notes)
+        self.repo.log_edit(series.media_id, entry["entry_id"], "notes", entry["notes"], notes, "done")
         result.saved.append(series)
         return result

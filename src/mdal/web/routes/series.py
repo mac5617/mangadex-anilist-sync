@@ -15,10 +15,9 @@ from mdal.recommend.ratings import rate
 from mdal.recommend.series import series_url
 from mdal.sync import add_entry
 from mdal.lists import EDIT_STATUSES
-from mdal.sync.list_edit import ListEditError, read_notes, save_notes
 from mdal.sync.orchestrator import refresh_item
 from mdal.sync.rules import STATUS_LABELS
-from mdal.sync.mal_writer import MalAddError, MalCommentsError, add_by_hand, save_comments
+from mdal.sync.mal_writer import MalAddError, add_by_hand
 from mdal.web.app import get_services, render, templates
 
 router = APIRouter()
@@ -224,12 +223,8 @@ async def series_notes(request: Request, kind: str, ident: str) -> HTMLResponse:
     key = series_key(kind, ident)
     media_id = _on_list(request, key)
     svc = get_services(request)
-    try:
-        await read_notes(svc.anilist, svc.repo, media_id)
-    except (AniListError, ListEditError) as exc:
-        svc.repo.update_al_entry(media_id, notes="")   # shown empty rather than asking again on every visit
-        return notes_panel(request, key, notes_error=f"Couldn't read your notes from AniList: {exc}")
-    return notes_panel(request, key)
+    problem = await svc.your_list.read_notes(f"al:{media_id}")
+    return notes_panel(request, key, notes_error=problem) if problem else notes_panel(request, key)
 
 
 @router.post("/series/{kind}/{ident}/notes", response_class=HTMLResponse)
@@ -240,20 +235,10 @@ async def series_save_notes(request: Request, kind: str, ident: str, notes: str 
         svc.repo.set_series_note(key, notes.strip()[:5000])
         return notes_panel(request, key, notes_saved="Saved in Shiori.")
     media_id = _on_list(request, key)
-    try:
-        await save_notes(svc.anilist, svc.repo, media_id, notes)
-    except (AniListError, ListEditError) as exc:
-        return notes_panel(request, key, notes_error=str(exc))
-    saved = "Saved to AniList."
-    view = svc.series.view(key)
-    if mal == "1" and view["mal_mirror"]:
-        mal_id = svc.repo.media([media_id])[media_id]["id_mal"]
-        try:
-            await save_comments(svc.mal, svc.repo, media_id, mal_id, notes.strip()[:5000])
-            saved = "Saved to AniList and MyAnimeList."
-        except (MalCommentsError, MalError) as exc:
-            return notes_panel(request, key, notes_saved=saved, notes_error=f"MyAnimeList: {exc}")
-    return notes_panel(request, key, notes_saved=saved)
+    edit = await svc.your_list.set_notes(f"al:{media_id}", notes, mirror=mal == "1")
+    if edit.ok:
+        return notes_panel(request, key, notes_saved=edit.note)
+    return notes_panel(request, key, notes_error=edit.note)
 
 
 def _cover(svc: Any, key: str) -> str | None:

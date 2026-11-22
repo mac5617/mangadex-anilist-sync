@@ -5,6 +5,7 @@ Rules:
   save would otherwise create it, so an edit costs 2 requests;
 - a score is a whole number 1-10, and one whose whole number didn't change isn't sent;
 - a status is one of MAL_STATUS's words (never rereading), and one the entry already has isn't sent;
+- notes go to the entry's comments;
 - every change is logged in list_edit with site 'mal', and the local copy follows what was saved;
 - a MyAnimeList error stops the rest of the edit: what wasn't tried fails with the same reason.
 """
@@ -94,6 +95,34 @@ class MalSite:
             else:
                 self.repo.update_mal_entry(series.mal_id, status=status)
                 result.saved.append(series)
+        return result
+
+    async def set_notes(self, series: Series, notes: str) -> SiteResult:
+        from mdal.lists import SiteResult
+
+        result = SiteResult(self.name)
+        if series.mal_id is None:
+            result.skipped[series] = series.mal_problem or "no MyAnimeList link"
+            return result
+        if self.entry(series) is None:
+            result.skipped[series] = NOT_LISTED
+            return result
+        mal_id, problem = series.mal_id, None
+        try:
+            entry = await self.client.my_list_status(mal_id)
+            if entry is None:
+                problem = NOT_LISTED
+                self.repo.log_edit(series.media_id, mal_id, "notes", None, notes, "failed", problem, site="mal")
+            else:
+                await self.client.update_comments(mal_id, notes)
+                self.repo.log_edit(series.media_id, mal_id, "notes", entry.get("comments"), notes, "done", site="mal")
+        except MalError as exc:
+            problem = f"MyAnimeList refused the notes: {exc}"
+            self.repo.log_edit(series.media_id, mal_id, "notes", None, notes, "failed", str(exc), site="mal")
+        if problem:
+            result.failed[series] = problem
+        else:
+            result.saved.append(series)
         return result
 
     async def _checked_edit(self, series: Series, field: str, new: Any, **send: Any) -> str | None:

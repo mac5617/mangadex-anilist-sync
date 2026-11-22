@@ -26,8 +26,7 @@ def test_only_clients_import_httpx():
     assert offenders == []
 
 
-MUTATION_MODULES = {SRC / "sync" / "writer.py", SRC / "sync" / "add_entry.py", SRC / "sync" / "list_edit.py",
-                    SRC / "lists" / "anilist.py"}
+MUTATION_MODULES = {SRC / "sync" / "writer.py", SRC / "sync" / "add_entry.py", SRC / "lists" / "anilist.py"}
 MUTATION = re.compile(r"SaveMediaListEntry|\bmutation\b")
 
 
@@ -101,8 +100,9 @@ def test_list_edit_status_literals():
 
 
 def test_mal_comments_only_from_mal_writer():
-    """MyAnimeList's save creates an entry that doesn't exist, so only mal_writer (which checks first) may call it."""
-    allowed = {SRC / "sync" / "mal_writer.py", SRC / "clients" / "myanimelist.py"}
+    """MyAnimeList's save creates an entry that doesn't exist, so only the MyAnimeList adapter (which checks first)
+    may call it."""
+    allowed = {SRC / "lists" / "myanimelist.py", SRC / "clients" / "myanimelist.py"}
     offenders = [str(p.relative_to(ROOT)) for p in python_files()
                  if p not in allowed and "update_comments" in p.read_text(encoding="utf-8")]
     assert offenders == []
@@ -113,4 +113,4 @@ def test_mal_list_edit_literals():
     # A list edit sets the status you picked, and only on entries it read first (never rereading).
     sent = set(re.findall(r'"(reading|completed|on_hold|dropped|plan_to_read)"', text))
     assert sent == {"reading", "completed", "on_hold", "dropped", "plan_to_read"} and "is_rereading" not in text
-    assert "my_list_status(" in text and "update_list_status" not in text and "update_comments" not in text
+    assert "my_list_status(" in text and "update_list_status" not in text

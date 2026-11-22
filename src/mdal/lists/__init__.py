@@ -16,7 +16,8 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from mdal.db.repo import Repo
-from mdal.lists.anilist import EDIT_STATUSES
+from mdal.clients.anilist import AniListError
+from mdal.lists.anilist import EDIT_STATUSES, NOTES_MAX
 from mdal.sync.orchestrator import mal_target, refresh_item
 from mdal.sync.rules import STATUS_LABELS
 
@@ -80,6 +81,8 @@ class Site(Protocol):
     async def set_scores(self, scores: dict[Series, float]) -> SiteResult: ...
 
     async def set_status(self, series: Series, status: str) -> SiteResult: ...
+
+    async def set_notes(self, series: Series, notes: str) -> SiteResult: ...
 
 
 class YourList:
@@ -153,6 +156,39 @@ class YourList:
         self._refresh(main.saved)
         edit = Edit("", sites=sites)
         edit.note = _status_note(edit, series, status)
+        return edit
+
+    async def read_notes(self, key: str) -> str | None:
+        """Read your notes from AniList into the local copy. Returns why it couldn't, or None. Notes that
+        can't be read are kept empty, so the page doesn't ask again on every visit."""
+        series = self.series([key])[key]
+        try:
+            await self.main.read_notes(series)
+        except (AniListError, LookupError) as exc:
+            if series.media_id is not None:
+                self.repo.update_al_entry(series.media_id, notes="")
+            return f"Couldn't read your notes from AniList: {exc}"
+        return None
+
+    async def set_notes(self, key: str, notes: str, mirror: bool = True) -> Edit:
+        """Replace your notes (trimmed, at most NOTES_MAX characters). `mirror=False` keeps this save off
+        MyAnimeList even while mirroring is on."""
+        if self.busy():
+            return Edit(BUSY, refused=True)
+        notes = notes.strip()[:NOTES_MAX]
+        series = self.series([key])[key]
+        main = await self.main.set_notes(series, notes)
+        sites = [main]
+        if mirror and self.mirroring() and main.took():
+            sites.append(await self.mirror.set_notes(series, notes))
+        edit = Edit("", sites=sites)
+        mirrored = edit.site("MyAnimeList")
+        if main.failed:
+            edit.note = main.failed[series]
+        elif mirrored and mirrored.failed:
+            edit.note = f"Saved to AniList; MyAnimeList: {mirrored.failed[series]}."
+        else:
+            edit.note = "Saved to AniList and MyAnimeList." if mirrored and mirrored.saved else "Saved to AniList."
         return edit
 
     def _refresh(self, saved: list[Series]) -> None:
