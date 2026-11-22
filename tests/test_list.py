@@ -14,7 +14,7 @@ from mdal.listtools import binge, stalled
 from mdal.recommend import ranking
 from mdal.lists.anilist import status_document
 from mdal.web.app import create_app
-from tests.factories import al_media_row
+from tests.factories import al_media_row, list_edits
 
 DAY = 86400
 
@@ -126,7 +126,7 @@ def test_ranking_a_series_by_comparison_saves_scores(services, lists):
     entries = services.repo.al_entries()
     assert entries[3]["score"] == 100 and entries[4]["score"] == 68
     assert [r["media_id"] for r in services.repo.ranking()] == [3, 4]
-    assert services.repo.list_edits()[0]["state"] == "done"
+    assert list_edits(services.repo)[0]["state"] == "done"
 
 
 def test_quick_score_and_bad_input(services, lists):

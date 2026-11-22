@@ -152,14 +152,14 @@ async def test_single_manga_ungrouped_response_is_accepted(fast, mock):
 async def test_blocked_mid_fetch_keeps_completed_steps(fast, mock):
     fake = library(3, 2).install(mock)
     await fetch_library(fast.mangadex, fast.repo)  # populates the chapter cache
-    cached = fast.repo.chapter_count()
+    cached = fast.repo.conn.execute("SELECT COUNT(*) FROM md_chapter").fetchone()[0]
     fake.series["m0000"].reads.append("m0000-new")
     fake.chapters["m0000-new"] = {"chapter": "9", "volume": None, "manga": "m0000"}
     fake.routes["chapter"].mock(side_effect=lambda req: httpx.Response(403))
 
     with pytest.raises(MangaDexBlocked):
         await fetch_library(fast.mangadex, fast.repo)
-    assert fast.repo.chapter_count() == cached
+    assert fast.repo.conn.execute("SELECT COUNT(*) FROM md_chapter").fetchone()[0] == cached
     assert "m0000-new" in [r["chapter_id"] for r in fast.repo.read_chapters("m0000")]
 
 

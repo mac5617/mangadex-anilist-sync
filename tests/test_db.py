@@ -6,6 +6,7 @@ from mdal.db.connection import _migrations, connect, schema_version
 
 LATEST = _migrations()[-1][0]
 from mdal.db.repo import SETTING_DEFAULTS, Repo
+from tests.factories import match
 
 TABLES = {
     "schema_version", "settings", "md_manga", "md_read", "md_chapter", "al_media",
@@ -79,13 +80,13 @@ def test_snapshot_replace_keeps_chapter_cache(repo):
     assert [r["md_id"] for r in repo.md_manga()] == ["m3"]
     reads = repo.conn.execute("SELECT md_id, chapter_id FROM md_read").fetchall()
     assert [tuple(r) for r in reads] == [("m3", "c9")]
-    assert repo.chapter_count() == 1
+    assert repo.conn.execute("SELECT COUNT(*) FROM md_chapter").fetchone()[0] == 1
 
 
 def test_mapping_state_check_constraint(repo):
     with pytest.raises(sqlite3.IntegrityError):
-        repo.upsert_mapping({"md_id": "m1", "state": "maybe", "tier": 4, "reasons": []})
-    repo.upsert_mapping({"md_id": "m1", "al_media_id": 5, "state": "auto", "tier": 2, "reasons": ["links.al"]})
+        match(repo, "m1", None, "maybe", tier=4)
+    match(repo, "m1", 5, "auto", reasons=["links.al"])
     assert repo.get_mapping("m1")["state"] == "auto"
 
 
@@ -114,7 +115,7 @@ def test_committed_write_survives_crash(db_path):
 
 
 def test_delete_mapping_removes_candidates(repo):
-    repo.upsert_mapping({"md_id": "m1", "state": "review", "tier": 4, "reasons": []})
+    match(repo, "m1", None, "review", tier=4)
     repo.conn.execute(
         "INSERT INTO match_candidate VALUES ('m1', 7, 0.8, '[]', 1)"
     )

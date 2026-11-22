@@ -13,7 +13,7 @@ from mdal.clients.myanimelist import API_URL as MAL_URL
 from mdal.lists import BUSY, Series, SiteResult, YourList
 from mdal.lists.anilist import AniListSite
 from mdal.lists.myanimelist import MalSite
-from tests.factories import al_media_row, connect_mal, md_manga_row
+from tests.factories import al_media_row, connect_mal, md_manga_row, match, list_edits
 
 
 # ---- an in-memory site: the test adapter at Your list's seam --------------------------------------
@@ -81,8 +81,7 @@ def world(services):
     repo.replace_md_snapshot([md_manga_row("a", "One"), md_manga_row("b", "Two", links={"mal": "999"}),
                               md_manga_row("c", "Three", links={"mal": "503"})], {})
     for md_id, media_id in (("a", 1), ("b", 2), ("c", 3)):
-        repo.upsert_mapping({"md_id": md_id, "al_media_id": media_id, "state": "confirmed", "tier": 1,
-                             "confidence": 1.0, "reasons": "[]", "links_hash": None, "updated_at": "x"})
+        match(repo, md_id, media_id, "confirmed", tier=1, confidence=1.0)
     return repo
 
 
@@ -254,7 +253,7 @@ async def test_anilist_edits_by_entry_id_halving_a_batch_too_complex(world, anil
     assert "mediaId:" not in fake.sent[0]["query"]              # addressed by entry id: nothing can be added
     assert [len(b["variables"]) // 2 for b in fake.sent] == [2, 1, 1]       # 2 too complex: halved to 1
     assert world.al_entries()[1]["score"] == 85
-    assert ("anilist", "score", "done") in {(e["site"], e["field"], e["state"]) for e in world.list_edits()}
+    assert ("anilist", "score", "done") in {(e["site"], e["field"], e["state"]) for e in list_edits(world)}
 
 
 class FakeAniListStatus:

@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 
 from mdal.sync.orchestrator import SyncAlreadyRunning
 from mdal.web.app import create_app
-from tests.factories import FakeAniList, FakeMangaDex, FakeSeries, al_media, seed_diffed_run
+from tests.factories import FakeAniList, FakeMangaDex, FakeSeries, al_media, seed_diffed_run, match
 
 
 @pytest.fixture
@@ -61,8 +61,7 @@ def test_status_fragment_stops_polling_when_idle(client, services):
 
 def test_nav_counts(client, services):
     seed_diffed_run(services.repo)
-    services.repo.upsert_mapping({"md_id": "k", "al_media_id": None, "state": "review", "tier": 4,
-                                  "confidence": 0.7, "reasons": [], "links_hash": "h"})
+    match(services.repo, "k", None, "review", tier=4, confidence=0.7, links_hash="h")
     html = client.get("/").text
     assert '<a href="/review">Matches <span class="count">1</span></a>' in html
 

@@ -17,7 +17,7 @@ from mdal.sync.changes import (
     undismiss,
     write_plan,
 )
-from tests.factories import al_media_row, md_manga_row, seed_diffed_run
+from tests.factories import al_media_row, md_manga_row, seed_diffed_run, match
 
 
 @pytest.fixture
@@ -31,7 +31,7 @@ def world(repo: Repo, rating: int | None = 8) -> None:
     repo.upsert_chapters([{"chapter_id": "c40", "md_id": "f", "chapter": "40", "volume": None, "missing": 0,
                            "fetched_at": "x"}])
     repo.upsert_media([al_media_row(1, "AL", id_mal=77, chapters=None)])
-    repo.upsert_mapping({"md_id": "f", "al_media_id": 1, "state": "confirmed", "tier": 1, "reasons": []})
+    match(repo, "f", 1, "confirmed", tier=1)
     repo.replace_al_entries([{"entry_id": 101, "media_id": 1, "status": "CURRENT", "progress": 5, "fetched_at": "x"}])
     repo.replace_mal_entries([{"mal_id": 77, "status": "CURRENT", "progress": 39, "chapters": 30,
                                "media_status": "FINISHED", "title": "MAL", "fetched_at": "x"}])

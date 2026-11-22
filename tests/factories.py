@@ -343,6 +343,15 @@ def al_media_row(media_id: int, romaji: str, **kw) -> dict:
     return row
 
 
+def match(repo, md_id: str, media_id: int | None, state: str = "auto", **fields) -> None:
+    """A MangaDex series' Match (or its lack: state "review", "unmatched", ...)."""
+    repo.save_match({"md_id": md_id, "al_media_id": media_id, "state": state, "tier": 2, "reasons": [], **fields}, [])
+
+
+def list_edits(repo, limit: int = 50) -> list:
+    return repo.conn.execute("SELECT * FROM list_edit ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+
+
 def seed_diffed_run(repo, *, evil_title: str = "<script>alert(1)</script> Evil") -> int:
     """A diffed run with one Change of each kind, built by the real rules: write, completion, status-only,
     implausible, exceeds_total, skip."""
@@ -374,8 +383,8 @@ def seed_diffed_run(repo, *, evil_title: str = "<script>alert(1)</script> Evil")
         **{md_id: [f"{md_id}-{n}"] for md_id, n in read_to.items()}, "w": ["w-12", "w-unnumbered-1", "w-unnumbered-2"],
     })
     for media_id, md_id in enumerate(("w", "c", "s", "i", "x"), start=1):
-        repo.upsert_mapping({"md_id": md_id, "al_media_id": media_id, "state": "confirmed", "tier": 1, "reasons": []})
-    repo.upsert_mapping({"md_id": "k", "al_media_id": None, "state": "unmatched", "tier": 4, "reasons": []})
+        match(repo, md_id, media_id, "confirmed", tier=1)
+    match(repo, "k", None, "unmatched", tier=4)
     run_id = repo.create_run("diffed")
     repo.replace_items(run_id, build_items(repo, run_id))
     repo.update_run(run_id, phase_detail="6 series")

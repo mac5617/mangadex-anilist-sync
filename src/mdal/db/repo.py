@@ -124,9 +124,6 @@ class Repo:
             for row in rows:
                 _upsert(self.conn, "md_chapter", row, ["chapter_id"])
 
-    def chapter_count(self) -> int:
-        return self.conn.execute("SELECT COUNT(*) FROM md_chapter").fetchone()[0]
-
     def chapter_cache_state(self) -> dict[str, int]:
         """chapter_id -> missing (0 resolved, 1 missed once, 2 permanently missing)."""
         return {r["chapter_id"]: r["missing"] for r in self.conn.execute("SELECT chapter_id, missing FROM md_chapter")}
@@ -191,13 +188,6 @@ class Repo:
     # ---- mapping --------------------------------------------------------
     def get_mapping(self, md_id: str) -> sqlite3.Row | None:
         return self.conn.execute("SELECT * FROM mapping WHERE md_id=?", (md_id,)).fetchone()
-
-    def upsert_mapping(self, row: dict[str, Any]) -> None:
-        row = {**row, "updated_at": row.get("updated_at") or now_iso()}
-        if not isinstance(row.get("reasons", ""), str):
-            row["reasons"] = json.dumps(row["reasons"])
-        with self.conn:
-            _upsert(self.conn, "mapping", row, ["md_id"])
 
     def mappings(self) -> dict[str, sqlite3.Row]:
         return {r["md_id"]: r for r in self.conn.execute("SELECT * FROM mapping")}
@@ -482,9 +472,6 @@ class Repo:
         """Series whose AniList score Shiori has set (ranking or quick scoring)."""
         return {r[0] for r in self.conn.execute(
             "SELECT DISTINCT media_id FROM list_edit WHERE site='anilist' AND field='score' AND state='done'")}
-
-    def list_edits(self, limit: int = 50) -> list[sqlite3.Row]:
-        return self.conn.execute("SELECT * FROM list_edit ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
 
     # ---- your ranking -------------------------------------------------------------
     def ranking(self) -> list[sqlite3.Row]:

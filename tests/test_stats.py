@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from mdal.fetch.anilist_list import fetch_list, fuzzy_date
 from mdal.stats import Bar, chart, entries, list_stats, nice_max, sync_stats
 from mdal.web.app import create_app
-from tests.factories import FakeAniList, al_media, al_media_row, md_manga_row
+from tests.factories import FakeAniList, al_media, al_media_row, md_manga_row, match
 
 
 @pytest.fixture
@@ -37,8 +37,7 @@ def seed_list(repo):
     repo.replace_md_snapshot([md_manga_row("ma", "A md", reading_status="completed"),
                               md_manga_row("mb", "B md", reading_status="completed")], {})
     for md_id, media in (("ma", 1), ("mb", 2)):
-        repo.upsert_mapping({"md_id": md_id, "al_media_id": media, "state": "auto", "tier": 2, "confidence": 1.0,
-                             "reasons": [], "links_hash": "h"})
+        match(repo, md_id, media, confidence=1.0, links_hash="h")
 
 
 def test_list_stats(services):

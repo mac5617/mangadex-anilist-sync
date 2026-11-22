@@ -11,7 +11,7 @@ from mdal.clients.anilist import ANILIST_URL
 from mdal.clients.myanimelist import API_URL as MAL_URL
 from mdal.recommend.llm import _entry
 from mdal.web.app import create_app
-from tests.factories import al_media_row, connect_mal
+from tests.factories import al_media_row, connect_mal, list_edits
 
 
 @pytest.fixture
@@ -50,7 +50,7 @@ def test_notes_are_read_once_then_saved_by_entry_id(listed):
     save = sent[-1]
     assert "SaveMediaListEntry(id: $e, notes: $n)" in save["query"] and save["variables"] == {"e": 101, "n": "Reread the Aogiri arc."}
     assert listed.repo.al_entries()[1]["notes"] == "Reread the Aogiri arc."
-    assert listed.repo.list_edits()[0]["field"] == "notes"
+    assert list_edits(listed.repo)[0]["field"] == "notes"
 
 
 def test_notes_mirror_to_mal_only_for_entries_on_your_mal_list(listed):

@@ -5,7 +5,7 @@ import pytest
 from mdal.db.connection import connect
 from mdal.db.repo import Repo
 from mdal.matching.matches import is_matched, library_series, matched, not_on_list
-from tests.factories import al_media_row, md_manga_row
+from tests.factories import al_media_row, match, md_manga_row
 
 
 @pytest.fixture
@@ -15,7 +15,7 @@ def repo(tmp_path):
     r.upsert_media([al_media_row(1, "One"), al_media_row(2, "Two")])
     for md_id, media_id, state in (("b", 1, "auto"), ("a", 1, "confirmed"), ("c", 2, "review"),
                                    ("d", None, "auto"), ("e", None, "unmatched")):
-        r.upsert_mapping({"md_id": md_id, "al_media_id": media_id, "state": state, "tier": 1, "reasons": []})
+        match(r, md_id, media_id, state)
     return r
 
 

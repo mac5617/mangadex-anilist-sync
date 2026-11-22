@@ -5,7 +5,7 @@ import respx
 
 from mdal.lists.anilist import ADD_STATUSES
 from mdal.sync.add_entry import not_listed_rows
-from tests.factories import FakeAniList, al_media, al_media_row, md_manga_row
+from tests.factories import FakeAniList, al_media, al_media_row, md_manga_row, match
 
 
 @pytest.fixture
@@ -45,8 +45,7 @@ def repo(services):
     r.replace_al_entries([{"entry_id": 10, "media_id": 1, "status": "CURRENT", "progress": 1, "fetched_at": "x"}])
     for md_id, media_id, state in [("on", 1, "auto"), ("fin", 2, "confirmed"), ("rel", 3, "auto"),
                                    ("rev", 3, "review"), ("over", 4, "auto")]:
-        r.upsert_mapping({"md_id": md_id, "al_media_id": media_id if state != "review" else None, "state": state,
-                          "tier": 2, "confidence": 1.0, "reasons": [], "links_hash": "h"})
+        match(r, md_id, media_id if state != "review" else None, state, confidence=1.0, links_hash="h")
     return r
 
 
