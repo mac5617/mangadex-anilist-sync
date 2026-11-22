@@ -1,5 +1,5 @@
 {% import "_macros.html" as ui %}
-{%- set dismissed = r.action == "skip" and r.flag_kind -%}
+{%- set dismissed = r.dismissed -%}
 {%- set rid = r.run_id ~ ":" ~ r.md_id -%}
 <tr class="r-{{ r.action }}" data-md-id="{{ r.md_id }}" data-run="{{ r.run_id }}" id="row-{{ r.run_id }}-{{ r.md_id }}">
   {% if approvable %}<td class="check">

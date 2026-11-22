@@ -17,7 +17,6 @@ from mdal.sync.rules import AlEntry, AlMediaInfo, MdInfo, evaluate, score_from_m
 
 TARGETS = ("anilist", "mal")
 SITE_NAMES = {"anilist": "AniList", "mal": "MyAnimeList"}
-DISMISSED_PREFIX = "dismissed by you: "
 MAPPING_SKIPS = {
     None: "awaiting match review",
     "review": "awaiting match review",
@@ -29,6 +28,10 @@ NOTHING_LEFT = {"write_state": "dropped", "verify_note": "dropped: nothing left 
 
 class ApprovalError(Exception):
     """Shown to the user as-is."""
+
+
+class DismissalError(Exception):
+    """This Change can't be dismissed, or wasn't."""
 
 
 @dataclass(frozen=True)
@@ -89,6 +92,15 @@ def _sends_nothing(item: Any, completes: bool, scored: bool) -> bool:
 def nothing_to_send(item: Any) -> bool:
     """An approved Change with nothing left to send, as it stands after the writer's re-read."""
     return _sends_nothing(item, sends_completion(item), sends_score(item))
+
+
+def is_dismissed(item: Any) -> bool:
+    """A Flag you set aside: skipped, but still naming what was wrong."""
+    return item["action"] == "skip" and bool(item["flag_kind"])
+
+
+def shown_reason(item: Any) -> str | None:
+    return f"dismissed by you: {item['reason']}" if is_dismissed(item) else item["reason"]
 
 
 def is_selectable(item: Any) -> bool:
@@ -187,7 +199,7 @@ def _evaluated(
     action, reason = d.action, d.reason
     gone = dismissed.get(md_id)
     if action == "flag" and gone is not None and (gone["md_progress"], gone["flag_kind"]) == (d.md_progress, d.flag_kind):
-        action, reason = "skip", f"{DISMISSED_PREFIX}{d.reason}"
+        action = "skip"
     return {
         "al_entry_id": entry.entry_id if entry else None,
         "al_progress": d.al_progress,
@@ -210,7 +222,7 @@ def _with_score(item: dict[str, Any], score: int | None, site: str) -> dict[str,
     if score is None or item["flag_kind"] == "exceeds_total":
         return item
     if item["action"] == "skip":
-        if item["al_entry_id"] is None or item["reason"].startswith(DISMISSED_PREFIX):
+        if item["al_entry_id"] is None or is_dismissed(item):
             return item
         item = {**item, "action": "write", "reason": f"rated {score}/10 on MangaDex; {site} has no score"}
     return {**item, "set_score": score, "score_approved": 1}
@@ -332,9 +344,33 @@ def refresh_item(repo: Repo, md_id: str) -> bool:
             continue
         if not repo.conn.execute("SELECT 1 FROM sync_item WHERE run_id=? AND md_id=?", (run["run_id"], md_id)).fetchone():
             continue
-        for item in build_items(repo, run["run_id"], {md_id}, target):
-            with repo.conn:
-                repo.conn.execute("DELETE FROM sync_item WHERE run_id=? AND md_id=?", (run["run_id"], md_id))
-            repo.upsert_item(item)
+        _rebuild(repo, run["run_id"], md_id, target)
         refreshed = True
     return refreshed
+
+
+def _rebuild(repo: Repo, run_id: int, md_id: str, target: str) -> bool:
+    """Recompute one Change from stored data. False when the series has left the library (the row stays)."""
+    items = build_items(repo, run_id, {md_id}, target)
+    for item in items:
+        with repo.conn:
+            repo.conn.execute("DELETE FROM sync_item WHERE run_id=? AND md_id=?", (run_id, md_id))
+        repo.upsert_item(item)
+    return bool(items)
+
+
+def dismiss(repo: Repo, run: Any, item: Any) -> None:
+    """Set this Flag aside on the run's site, until your MangaDex progress changes."""
+    if item["action"] != "flag" or item["md_progress"] is None:
+        raise DismissalError("only flagged rows can be dismissed")
+    repo.dismiss_flag(item["md_id"], run["target"], item["md_progress"], item["flag_kind"], item["reason"])
+    repo.update_items(run["run_id"], [(item["md_id"], {"action": "skip"})])
+
+
+def undismiss(repo: Repo, run: Any, item: Any) -> None:
+    """Bring the Change back as the rules now see it, including any score offer."""
+    if not is_dismissed(item):
+        raise DismissalError("this row was not dismissed")
+    repo.undismiss_flag(item["md_id"], run["target"])
+    if not _rebuild(repo, run["run_id"], item["md_id"], run["target"]):
+        repo.update_items(run["run_id"], [(item["md_id"], {"action": "flag"})])

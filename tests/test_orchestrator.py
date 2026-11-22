@@ -3,6 +3,7 @@ import pytest
 import respx
 
 from mdal.clients.mangadex import API_URL
+from mdal.sync.changes import shown_reason
 from mdal.sync.orchestrator import SyncAlreadyRunning, SyncStateError
 from tests.factories import FakeAniList, FakeMangaDex, FakeSeries, al_media
 
@@ -167,7 +168,7 @@ async def test_dismissed_flag_stays_dismissed_until_progress_changes(fast, world
     second = await run(fast)
     f2 = {i["md_id"]: i for i in fast.repo.items(second)}["f"]
     assert (f2["action"], f2["flag_kind"]) == ("skip", "implausible")
-    assert f2["reason"].startswith("dismissed by you: ")
+    assert shown_reason(f2).startswith("dismissed by you: ")
 
     md.series["f"].reads.append("f2")
     md.chapters["f2"] = {"chapter": "41", "volume": None, "manga": "f"}

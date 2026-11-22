@@ -7,7 +7,7 @@ import pytest
 from mdal.backup import restore
 from mdal.db.connection import _migrations, connect, schema_version
 from mdal.db.repo import Repo
-from mdal.sync.changes import build_items
+from mdal.sync.changes import build_items, dismiss, undismiss
 from tests.factories import al_media_row, md_manga_row
 
 
@@ -68,3 +68,45 @@ def test_a_backup_from_before_per_site_dismissals_restores_to_both(repo):
     counts = restore(repo, {"format": "shiori-backup", "tables": {"dismissed_flag": [row]}})
     assert counts["dismissed_flag"] == 1
     assert "f" in repo.dismissed_flags("anilist") and "f" in repo.dismissed_flags("mal")
+
+
+def open_change(repo: Repo, target: str = "anilist"):
+    run_id = repo.create_run("diffed", target)
+    repo.replace_items(run_id, build_items(repo, run_id, target=target))
+    return repo.get_run(run_id), repo.items(run_id)[0]
+
+
+def test_show_again_brings_the_score_offer_back(repo):
+    world(repo)
+    run, item = open_change(repo)
+    dismiss(repo, run, item)
+    repo.replace_items(run["run_id"], build_items(repo, run["run_id"]))   # a rebuilt dismissed row offers no score
+    assert repo.items(run["run_id"])[0]["set_score"] is None
+    undismiss(repo, run, repo.items(run["run_id"])[0])
+    back = repo.items(run["run_id"])[0]
+    assert (back["action"], back["set_score"]) == ("flag", 8)
+
+
+def test_show_again_after_the_series_left_the_library(repo):
+    world(repo)
+    run, item = open_change(repo)
+    dismiss(repo, run, item)
+    repo.replace_md_snapshot([], {})
+    undismiss(repo, run, repo.items(run["run_id"])[0])
+    assert repo.items(run["run_id"])[0]["action"] == "flag"
+    assert "f" not in repo.dismissed_flags("anilist")
+
+
+def test_stored_dismissed_reasons_lose_their_prefix(tmp_path):
+    path = tmp_path / "old.db"
+    old = sqlite3.connect(path)
+    schema_version(old)
+    for version, sql in _migrations():
+        if version <= 16:
+            old.executescript(f"BEGIN;\n{sql}\nINSERT INTO schema_version(version) VALUES ({version});\nCOMMIT;")
+    old.execute("INSERT INTO sync_run(run_id, started_at, state) VALUES (1, 'then', 'cancelled')")
+    old.execute("INSERT INTO sync_item(run_id, md_id, action, flag_kind, reason) "
+                "VALUES (1, 'f', 'skip', 'implausible', 'dismissed by you: a big jump')")
+    old.commit()
+    old.close()
+    assert Repo(connect(path)).items(1)[0]["reason"] == "a big jump"

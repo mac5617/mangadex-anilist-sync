@@ -344,7 +344,10 @@ def al_media_row(media_id: int, romaji: str, **kw) -> dict:
 
 
 def seed_diffed_run(repo, *, evil_title: str = "<script>alert(1)</script> Evil") -> int:
-    """A diffed run with one row of each kind: write, completion, status-only, implausible, exceeds_total, skip."""
+    """A diffed run with one Change of each kind, built by the real rules: write, completion, status-only,
+    implausible, exceeds_total, skip."""
+    from mdal.sync.changes import build_items
+
     repo.replace_md_snapshot([
         md_manga_row("w", "Writer Series"),
         md_manga_row("c", "Completing Series"),
@@ -364,23 +367,17 @@ def seed_diffed_run(repo, *, evil_title: str = "<script>alert(1)</script> Evil")
         {"entry_id": 100 + i, "media_id": i, "status": "CURRENT", "progress": p, "fetched_at": "x"}
         for i, p in [(1, 5), (2, 110), (3, 50), (4, 10), (5, 9)]
     ])
+    read_to = {"w": 12, "c": 120, "s": 50, "i": 400, "x": 11}
+    repo.upsert_chapters([{"chapter_id": f"{md_id}-{n}", "md_id": md_id, "chapter": str(n), "volume": None, "missing": 0,
+                           "fetched_at": "x"} for md_id, n in read_to.items()])
+    repo.replace_md_snapshot([dict(r) for r in repo.md_manga()], {
+        **{md_id: [f"{md_id}-{n}"] for md_id, n in read_to.items()}, "w": ["w-12", "w-unnumbered-1", "w-unnumbered-2"],
+    })
+    for media_id, md_id in enumerate(("w", "c", "s", "i", "x"), start=1):
+        repo.upsert_mapping({"md_id": md_id, "al_media_id": media_id, "state": "confirmed", "tier": 1, "reasons": []})
+    repo.upsert_mapping({"md_id": "k", "al_media_id": None, "state": "unmatched", "tier": 4, "reasons": []})
     run_id = repo.create_run("diffed")
-    base = {"run_id": run_id}
-    repo.replace_items(run_id, [
-        {**base, "md_id": "w", "al_media_id": 1, "al_entry_id": 101, "al_progress": 5, "md_progress": 12,
-         "action": "write", "reason": "read to 12 on MangaDex; AniList has 5", "unresolved_reads": 2},
-        {**base, "md_id": "c", "al_media_id": 2, "al_entry_id": 102, "al_progress": 110, "md_progress": 120,
-         "action": "write", "reason": "read to 120 on MangaDex; AniList has 110", "set_status": "COMPLETED",
-         "status_source": "AniList", "status_approved": 1, "total": 120},
-        {**base, "md_id": "s", "al_media_id": 3, "al_entry_id": 103, "al_progress": 50, "md_progress": 50,
-         "action": "write", "reason": "at final chapter; mark completed", "set_status": "COMPLETED",
-         "status_source": "AniList", "status_approved": 1, "total": 50},
-        {**base, "md_id": "i", "al_media_id": 4, "al_entry_id": 104, "al_progress": 10, "md_progress": 400,
-         "action": "flag", "flag_kind": "implausible", "reason": "jump of 390 chapters exceeds the limit of 200"},
-        {**base, "md_id": "x", "al_media_id": 5, "al_entry_id": 105, "al_progress": 9, "md_progress": 11,
-         "action": "flag", "flag_kind": "exceeds_total", "reason": "MangaDex 11 exceeds AniList's total of 10 chapters"},
-        {**base, "md_id": "k", "action": "skip", "reason": "no match"},
-    ])
+    repo.replace_items(run_id, build_items(repo, run_id))
     repo.update_run(run_id, phase_detail="6 series")
     return run_id
 
