@@ -2,7 +2,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from mdal.web.app import create_app
-from mdal.web.routes.settings import TUNABLES
+from mdal.tunables import TUNABLES
 from tests.conftest import FAKE_ENV
 
 VALID = {
