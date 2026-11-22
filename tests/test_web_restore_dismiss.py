@@ -97,14 +97,14 @@ def test_dismiss_moves_row_to_skipped_and_updates_counts(client, services, run_i
     assert f'hx-post="/sync/{run_id}/undismiss/x"' in x and 'name="sel"' not in x
     assert 'id="diff-stats" hx-swap-oob="true"' in html and 'id="diff-tabs" hx-swap-oob="true"' in html
     assert "Flagged (1)" in html and "Skipped (2)" in html
-    assert services.repo.dismissed_flags()["x"]["md_progress"] == 11
+    assert services.repo.dismissed_flags("anilist")["x"]["md_progress"] == 11
 
 
 def test_show_again(client, services, run_id):
     client.post(f"/sync/{run_id}/dismiss/x")
     html = client.post(f"/sync/{run_id}/undismiss/x").text
     assert 'class="r-flag"' in row(html, "x") and "Flagged (2)" in html
-    assert "x" not in services.repo.dismissed_flags()
+    assert "x" not in services.repo.dismissed_flags("anilist")
 
 
 def test_dismissed_row_cannot_be_approved(client, services, run_id):

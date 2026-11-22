@@ -37,6 +37,13 @@ def make_backup(repo: Repo) -> dict[str, Any]:
     return {"format": FORMAT, "version": __version__, "exported_at": now_iso(), "tables": tables, "settings": settings}
 
 
+def _site_copies(table: str, row: dict[str, Any]) -> list[dict[str, Any]]:
+    """A Dismissal from a backup older than per-site Dismissals applied to both sites, so it's restored for both."""
+    if table == "dismissed_flag" and "site" not in row:
+        return [{**row, "site": site} for site in ("anilist", "mal")]
+    return [row]
+
+
 def restore(repo: Repo, data: Any) -> dict[str, int]:
     """Put a backup back. Rows replace rows with the same key; nothing else is deleted. Returns rows per table."""
     if not isinstance(data, dict) or data.get("format") != FORMAT:
@@ -51,12 +58,13 @@ def restore(repo: Repo, data: Any) -> dict[str, int]:
             for row in rows:
                 if not isinstance(row, dict):
                     continue
-                cols = [c for c in row if c in columns]
-                if TABLES[table] not in cols:
+                if TABLES[table] not in row or TABLES[table] not in columns:
                     continue
                 try:
-                    repo.conn.execute(f"INSERT OR REPLACE INTO {table} ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})",
-                                      [row[c] for c in cols])
+                    for copy in _site_copies(table, row):
+                        cols = [c for c in copy if c in columns]
+                        repo.conn.execute(f"INSERT OR REPLACE INTO {table} ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})",
+                                          [copy[c] for c in cols])
                     n += 1
                 except sqlite3.IntegrityError:
                     continue            # a value this version no longer accepts

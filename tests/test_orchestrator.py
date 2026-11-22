@@ -162,7 +162,7 @@ async def test_dismissed_flag_stays_dismissed_until_progress_changes(fast, world
     first = await run(fast)
     f = {i["md_id"]: i for i in fast.repo.items(first)}["f"]
     assert f["action"] == "flag"
-    fast.repo.dismiss_flag("f", f["md_progress"], f["flag_kind"], f["reason"])
+    fast.repo.dismiss_flag("f", "anilist", f["md_progress"], f["flag_kind"], f["reason"])
 
     second = await run(fast)
     f2 = {i["md_id"]: i for i in fast.repo.items(second)}["f"]

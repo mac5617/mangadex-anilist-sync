@@ -304,7 +304,7 @@ def dismiss_flag(request: Request, run_id: int, md_id: str) -> HTMLResponse:
     item = _open_item(repo, run_id, md_id)
     if item["action"] != "flag" or item["md_progress"] is None:
         raise HTTPException(409, "only flagged rows can be dismissed")
-    repo.dismiss_flag(md_id, item["md_progress"], item["flag_kind"], item["reason"])
+    repo.dismiss_flag(md_id, repo.get_run(run_id)["target"], item["md_progress"], item["flag_kind"], item["reason"])
     # Flip this row only; the next sync applies the stored dismissal itself (changes.build_items).
     repo.update_items(run_id, [(md_id, {"action": "skip", "reason": f"{DISMISSED_PREFIX}{item['reason']}"})])
     return _row_update(request, run_id, md_id)
@@ -316,7 +316,7 @@ def undismiss_flag(request: Request, run_id: int, md_id: str) -> HTMLResponse:
     item = _open_item(repo, run_id, md_id)
     if item["action"] != "skip" or not item["flag_kind"] or not (item["reason"] or "").startswith(DISMISSED_PREFIX):
         raise HTTPException(409, "this row was not dismissed")
-    repo.undismiss_flag(md_id)
+    repo.undismiss_flag(md_id, repo.get_run(run_id)["target"])
     repo.update_items(run_id, [(md_id, {"action": "flag", "reason": item["reason"][len(DISMISSED_PREFIX):]})])
     return _row_update(request, run_id, md_id)
 

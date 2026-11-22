@@ -246,17 +246,18 @@ class Repo:
             self.conn.execute("DELETE FROM mapping WHERE md_id=?", (md_id,))
 
     # ---- dismissed flags --------------------------------------------------
-    def dismiss_flag(self, md_id: str, md_progress: int, flag_kind: str, reason: str | None) -> None:
+    def dismiss_flag(self, md_id: str, site: str, md_progress: int, flag_kind: str, reason: str | None) -> None:
         with self.conn:
-            _upsert(self.conn, "dismissed_flag", {"md_id": md_id, "md_progress": md_progress, "flag_kind": flag_kind,
-                                                  "reason": reason, "dismissed_at": now_iso()}, ["md_id"])
+            _upsert(self.conn, "dismissed_flag", {"md_id": md_id, "site": site, "md_progress": md_progress,
+                                                  "flag_kind": flag_kind, "reason": reason, "dismissed_at": now_iso()},
+                    ["md_id", "site"])
 
-    def undismiss_flag(self, md_id: str) -> None:
+    def undismiss_flag(self, md_id: str, site: str) -> None:
         with self.conn:
-            self.conn.execute("DELETE FROM dismissed_flag WHERE md_id=?", (md_id,))
+            self.conn.execute("DELETE FROM dismissed_flag WHERE md_id=? AND site=?", (md_id, site))
 
-    def dismissed_flags(self) -> dict[str, sqlite3.Row]:
-        return {r["md_id"]: r for r in self.conn.execute("SELECT * FROM dismissed_flag")}
+    def dismissed_flags(self, site: str) -> dict[str, sqlite3.Row]:
+        return {r["md_id"]: r for r in self.conn.execute("SELECT * FROM dismissed_flag WHERE site=?", (site,))}
 
     # ---- sync runs ------------------------------------------------------
     def create_run(self, state: str = "fetching", target: str = "anilist") -> int:

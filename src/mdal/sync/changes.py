@@ -186,7 +186,7 @@ def _evaluated(
     )
     action, reason = d.action, d.reason
     gone = dismissed.get(md_id)
-    if action == "flag" and gone is not None and gone["md_progress"] == d.md_progress:
+    if action == "flag" and gone is not None and (gone["md_progress"], gone["flag_kind"]) == (d.md_progress, d.flag_kind):
         action, reason = "skip", f"{DISMISSED_PREFIX}{d.reason}"
     return {
         "al_entry_id": entry.entry_id if entry else None,
@@ -253,7 +253,7 @@ def mal_target(row: Any, mapping: Any, media: dict[int, Any]) -> tuple[int | Non
 def build_items(repo: Repo, run_id: int, md_ids: set[str] | None = None, target: str = "anilist") -> list[dict[str, Any]]:
     """One sync_item per library series (§8), or only `md_ids`. Pure DB reads; no API calls."""
     mappings = repo.mappings()
-    dismissed = repo.dismissed_flags()
+    dismissed = repo.dismissed_flags(target)
     jump_limit = repo.get_setting("jump_limit")
     rows = [r for r in repo.md_manga() if md_ids is None or r["md_id"] in md_ids]
     mapped_ids = [m["al_media_id"] for m in mappings.values() if m["al_media_id"] is not None]
