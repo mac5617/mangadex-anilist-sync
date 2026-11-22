@@ -128,7 +128,7 @@ class Services:
         return self.settings.secret_values() + [v for v in saved if v]
 
     def mirror_to_mal(self) -> bool:
-        """Whether list edits (scores, Paused/Dropped, notes) are repeated on MyAnimeList."""
+        """Whether list edits (adds, scores, statuses, notes) are repeated on MyAnimeList (mdal/lists)."""
         return bool(self.repo.get_setting("mal_mirror")) and self.mal.connected
 
     def anilist_token(self) -> str:

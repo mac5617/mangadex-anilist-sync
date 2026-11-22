@@ -40,7 +40,9 @@ src/mdal/
   sync/estimate.py               # request count + duration
   sync/orchestrator.py           # state machine, run persistence
   sync/writer.py                 # batched aliased mutations, resume, verify
-  sync/add_entry.py              # single "add to AniList" mutation (FR-30)
+  sync/add_entry.py              # Unlisted rows and add proposals (FR-30)
+  lists/__init__.py              # YourList: list edits outside syncs (adds, scores, statuses, notes), AniList then MyAnimeList
+  lists/anilist.py  lists/myanimelist.py   # the two site adapters behind YourList
   web/app.py  web/routes/{dashboard,sync,review,notlisted,history,settings,auth}.py
   web/templates/*.html  web/static/{htmx.min.js,app.css}
 tests/ (mirrors src)
@@ -49,6 +51,8 @@ Dependency rules, enforced by a test that scans imports:
 - Only `clients/*` may import `httpx`.
 - `matching/normalize.py`, `matching/score.py`, `sync/rules.py` and `sync/estimate.py` are pure: no I/O, no DB.
 - `web/*` calls `sync/*`, `matching/pipeline` and `db/repo`, never `clients/*` directly. The one exception is `web/routes/auth.py`, which uses `clients/anilist_oauth`.
+- `web/*` makes list edits through `YourList` (`mdal/lists`), never through the site adapters behind it.
+- Mutations live only in `sync/writer.py` and `lists/anilist.py`; MyAnimeList writes only in `sync/mal_writer.py` and `lists/myanimelist.py`.
 
 ## 3. Configuration
 - `.env` (secrets + identity): `MANGADEX_USERNAME`, `MANGADEX_PASSWORD`, `MANGADEX_CLIENT_ID`, `MANGADEX_CLIENT_SECRET`, `ANILIST_CLIENT_ID`, `ANILIST_CLIENT_SECRET`, `ANILIST_REDIRECT_URI` (default `http://127.0.0.1:8765/auth/anilist/callback`), `ANILIST_ACCESS_TOKEN` (written by the app after OAuth), `MDAL_DB_PATH` (optional), `MDAL_PORT` (optional).

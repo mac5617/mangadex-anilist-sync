@@ -58,10 +58,11 @@
     <p class="muted">The sign-in renews itself; reconnect if MyAnimeList starts rejecting it.</p>
     <form method="post" action="/settings/mal-mirror" class="row">
       <label class="check-line"><input type="checkbox" name="on" value="1"{% if mal_mirror %} checked{% endif %}>
-        Also apply list edits here: scores from ranking, Paused/Dropped from Stalled, and notes</label>
+        List edits, including adds, also go to MyAnimeList</label>
       <button class="secondary">Save</button>
     </form>
-    <p class="muted small">Only for series already on your MyAnimeList list; each edit is checked first. Syncs work as before.</p>
+    <p class="muted small">Adds from a series page or Unlisted, scores, statuses and notes. An add puts the series on
+      your MyAnimeList list; every other edit only changes series already there, checked first. Syncs work as before.</p>
     <form method="post" action="/auth/mal/disconnect"><button class="secondary">Disconnect</button></form>
   {% else %}
     <p><span class="badge err">not connected</span></p>

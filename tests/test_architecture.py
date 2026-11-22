@@ -67,7 +67,7 @@ def test_pure_modules_do_no_io():
     assert offenders == []
 
 
-def test_mal_writes_only_from_mal_writer():
+def test_mal_writes_only_from_the_mal_writer_and_adapter():
     """MyAnimeList writes: syncs from sync/mal_writer.py, list edits from lists/myanimelist.py, nowhere else."""
     allowed = {SRC / "sync" / "mal_writer.py", SRC / "lists" / "myanimelist.py", SRC / "clients" / "myanimelist.py"}
     offenders = [
@@ -86,9 +86,9 @@ def test_mal_writer_status_literals():
     assert sent == {"reading", "completed"}
 
 
-def test_list_edit_status_literals():
+def test_anilist_adapter_status_literals():
     text = (SRC / "lists" / "anilist.py").read_text(encoding="utf-8")
-    # Outside syncs, statuses are set by hand (Stalled, series pages): never Rereading.
+    # List edits set statuses you picked (series pages, Stalled, adds): never Rereading.
     assert set(re.findall(r"\b(COMPLETED|CURRENT|PLANNING|PAUSED|DROPPED|REPEATING)\b", text)) == {
         "CURRENT", "COMPLETED", "PAUSED", "DROPPED", "PLANNING"}
     # Edits address an entry by id, so they can't create one; only the add names a mediaId.
@@ -97,7 +97,7 @@ def test_list_edit_status_literals():
     assert all("mediaId:" not in d for d in (NOTES_DOCUMENT, score_document(3), status_document("PAUSED")))
 
 
-def test_mal_comments_only_from_mal_writer():
+def test_mal_comments_only_from_the_mal_adapter():
     """MyAnimeList's save creates an entry that doesn't exist, so only the MyAnimeList adapter (which checks first)
     may call it."""
     allowed = {SRC / "lists" / "myanimelist.py", SRC / "clients" / "myanimelist.py"}
@@ -106,9 +106,17 @@ def test_mal_comments_only_from_mal_writer():
     assert offenders == []
 
 
-def test_mal_list_edit_literals():
-    text = (SRC / "lists" / "myanimelist.py").read_text(encoding="utf-8")
-    # A list edit sets the status you picked, and only on entries it read first (never rereading).
-    sent = set(re.findall(r'"(reading|completed|on_hold|dropped|plan_to_read)"', text))
-    assert sent == {"reading", "completed", "on_hold", "dropped", "plan_to_read"} and "is_rereading" not in text
-    assert "my_list_status(" in text and "update_list_status" not in text
+def test_mal_adapter_statuses_and_writes():
+    # A list edit sends the status you picked in MyAnimeList's words, never rereading (see test_your_list.py for
+    # reading each entry first), and never through the sync's write.
+    from mdal.lists.myanimelist import MAL_STATUS
+    assert set(MAL_STATUS.values()) == {"reading", "completed", "on_hold", "dropped", "plan_to_read"}
+    assert "update_list_status" not in (SRC / "lists" / "myanimelist.py").read_text(encoding="utf-8")
+
+
+def test_pages_edit_your_list_only_through_your_list():
+    """Routes call YourList (mdal.lists); the site adapters behind it are its own business."""
+    adapters = re.compile(r"^\s*(from|import)\s+mdal\.lists\.(anilist|myanimelist)\b", re.MULTILINE)
+    offenders = [str(p.relative_to(ROOT)) for p in (SRC / "web").rglob("*.py")
+                 if adapters.search(p.read_text(encoding="utf-8"))]
+    assert offenders == []

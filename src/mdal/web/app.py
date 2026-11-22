@@ -98,7 +98,7 @@ def render(request: Request, name: str, context: dict[str, Any] | None = None, s
     """TemplateResponse plus the nav counts every full page shows."""
     svc = get_services(request)
     repo = svc.repo
-    # where list edits (scores, statuses, notes) go: named in page copy so it says what really happens
+    # where list edits (adds, scores, statuses, notes) go: named in page copy so it says what really happens
     edits_to = "AniList and MyAnimeList" if svc.mirror_to_mal() else "AniList"
     ctx = {"nav": {"review": repo.review_count(), "not_on_list": len(repo.not_on_list())}, "edits_to": edits_to,
            **(context or {})}

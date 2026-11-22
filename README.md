@@ -197,7 +197,8 @@ waiting for approval stays open while you run a MyAnimeList sync, and the other 
   instead of asking MangaDex again, so syncing both sites back to back costs MangaDex nothing extra.
 
 **Matches → Unlisted** lists the same not-yet-listed series one at a time, for adding with a status and progress
-of your choice. Each add re-checks your AniList list first.
+of your choice. Each add re-checks your AniList list first, and goes to MyAnimeList too while list edits are
+mirrored there (see below).
 
 ### Stats
 
@@ -364,12 +365,21 @@ on series you liked or dropped are quoted, shortened, to your local model, so As
 
 ### On MyAnimeList too
 
-With MyAnimeList connected, list edits are repeated there for series on your MAL list: scores from ranking and
-quick scoring (MyAnimeList scores are whole numbers, so 8.4 becomes 8, and a score whose whole number didn't
-change isn't sent), Paused/Dropped from Stalled (on hold / dropped), and notes (comments). Each edit reads the
-entry first, because MyAnimeList's save would otherwise create it, so it costs 2 MyAnimeList requests.
-**Settings → MyAnimeList** turns this off. Which series are on your MAL list comes from the last MyAnimeList
-sync, so run **Sync MyAnimeList** once if you never have.
+With MyAnimeList connected, list edits go there after AniList takes them:
+
+- **Adds** from a series page or Unlisted put the series on your MyAnimeList list too, and **Add to
+  MyAnimeList** on a series page adds one that is only on AniList. An add reads the entry first and leaves a
+  series already on MyAnimeList as it is.
+- **Scores** from ranking, quick scoring and series pages. MyAnimeList scores are whole numbers, so 8.4 becomes
+  8, and a score whose whole number didn't change isn't sent.
+- **Statuses** from series pages and Stalled (on hold, dropped and so on), and **notes** (comments).
+  These change only series already on your MAL list: each reads the entry first, because MyAnimeList's save
+  would otherwise create it, so it costs 2 MyAnimeList requests.
+
+The MyAnimeList entry is the one Sync uses: AniList's MyAnimeList link, else MangaDex's; when the two disagree
+the series is left off MyAnimeList. No list edit is made while a sync is running. **Settings → MyAnimeList**
+turns this off. Which series are on your MAL list comes from the last MyAnimeList sync, so run
+**Sync MyAnimeList** once if you never have.
 
 ### Stalled and Ready to binge
 
