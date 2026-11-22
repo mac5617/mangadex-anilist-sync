@@ -19,8 +19,9 @@ from typing import Any, Protocol
 from mdal.db.repo import Repo
 from mdal.clients.anilist import AniListError
 from mdal.lists.anilist import ADD_STATUSES, EDIT_STATUSES, NOTES_MAX
+from mdal.matching.mal_link import media_link
 from mdal.matching.matches import is_matched
-from mdal.sync.changes import mal_target, refresh_item
+from mdal.sync.changes import refresh_item
 from mdal.sync.rules import STATUS_LABELS
 
 BUSY = "Shiori is syncing; try again when it finishes."
@@ -135,7 +136,8 @@ class YourList:
         out = {}
         for key, media_id in media_ids.items():
             md_ids = tuple(matched.get(media_id, ())) if media_id is not None else ()
-            mal_id, problem = _mal_link(media_id, media, [(library[d], mappings[d]) for d in md_ids if d in library])
+            al_mal = media[media_id]["id_mal"] if media_id in media else None
+            mal_id, problem = media_link(al_mal, [library[d] for d in md_ids if d in library])
             out[key] = Series(key, media_id, md_ids, mal_id, problem)
         return out
 
@@ -235,27 +237,6 @@ class YourList:
     def _refresh(self, saved: list[Series]) -> None:
         for md_id in {d for s in saved for d in s.md_ids}:
             self.refresh(self.repo, md_id)
-
-
-def _mal_link(media_id: int | None, media: dict[int, Any], library: list[tuple[Any, Any]]) -> tuple[int | None, str | None]:
-    """Sync's rule (changes.mal_target) for each MangaDex series matched to the media: AniList's link, else
-    MangaDex's; links that disagree mean there is none."""
-    row = media.get(media_id) if media_id is not None else None
-    al_mal = row["id_mal"] if row is not None else None
-    if not library:
-        return (al_mal, None) if al_mal else (None, "no MyAnimeList id (the AniList match has none)")
-    ids, why = set(), None
-    for md_row, mapping in library:
-        mal_id, _, reason = mal_target(md_row, mapping, media)
-        if mal_id is None and al_mal:
-            return None, reason                       # AniList and MangaDex disagree
-        if mal_id is None:
-            why = why or reason
-        else:
-            ids.add(mal_id)
-    if len(ids) > 1:
-        return None, f"MangaDex links different MyAnimeList entries ({', '.join(map(str, sorted(ids)))})"
-    return (ids.pop(), None) if ids else (None, why)
 
 
 def _score_note(edit: Edit, score: float) -> str:

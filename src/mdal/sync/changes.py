@@ -6,12 +6,12 @@ and what that costs. Approval and the estimate on the changes page read the same
 
 from __future__ import annotations
 
-import json
 from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
 from mdal.db.repo import Repo
+from mdal.matching.mal_link import series_link
 from mdal.matching.matches import is_matched
 from mdal.sync.estimate import estimate
 from mdal.sync.rules import AlEntry, AlMediaInfo, evaluate_series, score_from_md
@@ -239,40 +239,6 @@ def _with_score(item: dict[str, Any], score: int | None, site: str) -> dict[str,
     return {**item, "set_score": score, "score_approved": 1}
 
 
-def md_mal_link(row: Any) -> int | None:
-    """The MyAnimeList id from MangaDex's links, if it is a plain number."""
-    try:
-        value = json.loads(row["links"] or "{}").get("mal")
-    except (ValueError, AttributeError):
-        return None
-    text = str(value or "").strip()
-    return int(text) if text.isdigit() and int(text) > 0 else None
-
-
-def mal_target(row: Any, mapping: Any, media: dict[int, Any]) -> tuple[int | None, int | None, str | None]:
-    """(mal_id, al_media_id, skip reason) for one series.
-
-    The AniList match's idMal is preferred (it was matched or confirmed); MangaDex's own MAL link is
-    the fallback, so series that are unmatched on AniList can still sync. A series whose AniList match
-    awaits review waits too (its links are often the reason it needs review), and if the two ids
-    disagree the series is skipped rather than guessed.
-    """
-    state = mapping["state"] if mapping else None
-    if state == "review":
-        return None, None, "awaiting match review"
-    matched = is_matched(mapping)
-    al_id = mapping["al_media_id"] if matched else None
-    al_mal = media[al_id]["id_mal"] if al_id is not None and al_id in media else None
-    md_mal = md_mal_link(row)
-    if al_mal and md_mal and al_mal != md_mal:
-        return None, al_id, f"AniList and MangaDex link different MyAnimeList entries ({al_mal} and {md_mal})"
-    mal_id = al_mal or md_mal
-    if mal_id is None:
-        why = "the AniList match has none" if matched else "no AniList match, and no MyAnimeList link on MangaDex"
-        return None, al_id, f"no MyAnimeList id ({why})"
-    return mal_id, al_id, None
-
-
 def build_items(repo: Repo, run_id: int, md_ids: set[str] | None = None, target: str = "anilist") -> list[dict[str, Any]]:
     """One sync_item per library series (§8), or only `md_ids`. Pure DB reads; no API calls."""
     mappings = repo.mappings()
@@ -339,7 +305,7 @@ def _build_mal_items(
     items: list[dict[str, Any]] = []
     for row in rows:
         md_id = row["md_id"]
-        mal_id, al_id, skip = mal_target(row, mappings.get(md_id), media)
+        mal_id, al_id, skip = series_link(row, mappings.get(md_id), media)
         base: dict[str, Any] = {"run_id": run_id, "md_id": md_id, "al_media_id": al_id, "mal_id": mal_id}
         if skip:
             items.append({**base, "action": "skip", "reason": skip})

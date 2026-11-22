@@ -1,9 +1,12 @@
 """Matches through their interface."""
 
+import json
+
 import pytest
 
 from mdal.db.connection import connect
 from mdal.db.repo import Repo
+from mdal.matching.mal_link import media_link, series_link
 from mdal.matching.matches import is_matched, library_series, matched, not_on_list
 from tests.factories import al_media_row, match, md_manga_row
 
@@ -45,3 +48,28 @@ def test_not_on_list_leaves_out_what_is_listed(repo):
     assert [r["md_id"] for r in not_on_list(repo)] == ["a", "b"]
     repo.replace_al_entries([{"entry_id": 9, "media_id": 1, "status": "CURRENT", "progress": 1, "fetched_at": "x"}])
     assert not_on_list(repo) == []
+
+
+def linked(mal=None):
+    return {"links": json.dumps({"mal": mal} if mal else {})}
+
+
+@pytest.mark.parametrize("al_mal, links, expected", [
+    (22, [], 22),                     # no library series: AniList's link
+    (22, [None], 22),
+    (22, ["22", None], 22),
+    (None, ["33"], 33),               # linked only by MangaDex
+    (None, ["33", "33"], 33),
+    (None, [None], None),
+    (None, [], None),
+    (22, ["33"], None),               # disagree: no link, so nothing is written to a guess
+    (22, ["22", "33"], None),
+    (None, ["33", "44"], None),
+])
+def test_media_link(al_mal, links, expected):
+    mal_id, why = media_link(al_mal, [linked(m) for m in links])
+    assert mal_id == expected and (why is None) == (expected is not None)
+
+
+def test_series_link_waits_for_a_match_under_review():
+    assert series_link(linked("33"), {"state": "review", "al_media_id": None}, {}) == (None, None, "awaiting match review")

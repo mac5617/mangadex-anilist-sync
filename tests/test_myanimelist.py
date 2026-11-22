@@ -19,7 +19,7 @@ from mdal.clients.myanimelist import (
 )
 from mdal.clients.ratelimit import PacedQueue
 from mdal.config import Settings
-from mdal.sync.changes import mal_target
+from mdal.matching.mal_link import media_link, series_link
 from mdal.sync.runs import SyncStateError
 from mdal.web.app import create_app
 from tests.factories import FakeAniList, FakeMal, FakeMangaDex, FakeSeries, al_media, connect_mal, fake_sites
@@ -159,11 +159,11 @@ def _row(links):
     ({}, {"state": "auto", "al_media_id": 1}, {1: {"id_mal": None}}, (None, 1, "no MyAnimeList id (the AniList match has none)")),
 ])
 def test_mal_target(links, mapping, media, expected):
-    assert mal_target(_row(links), mapping, media) == expected
+    assert series_link(_row(links), mapping, media) == expected
 
 
 def test_mal_target_conflict_is_skipped():
-    mal_id, _, reason = mal_target(_row({"mal": "99"}), {"state": "auto", "al_media_id": 1}, {1: {"id_mal": 22}})
+    mal_id, _, reason = series_link(_row({"mal": "99"}), {"state": "auto", "al_media_id": 1}, {1: {"id_mal": 22}})
     assert mal_id is None and "different MyAnimeList entries (22 and 99)" in reason
 
 
