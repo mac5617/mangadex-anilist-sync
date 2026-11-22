@@ -6,6 +6,7 @@ Values stay in the `settings` table.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -14,6 +15,8 @@ from mdal.db.repo import SETTING_DEFAULTS, Repo
 
 if TYPE_CHECKING:
     from mdal.services import Services
+
+log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -118,11 +121,25 @@ def name(key: str) -> str:
     return _BY_KEY[key].label if key in _BY_KEY else _NAMES.get(key, key.replace("_", " "))
 
 
+def usable(repo: Repo, key: str) -> Any:
+    """The stored value, or the default while what's stored isn't valid. The stored value is left alone."""
+    value = repo.get_setting(key)
+    if is_valid(key, value):
+        return value
+    log.warning("the stored %s is not valid; using the default", key)
+    return SETTING_DEFAULTS[key]
+
+
+def interval(repo: Repo, key: str) -> float:
+    """Seconds between requests for a rate setting."""
+    return RATES[key][1] / usable(repo, key)
+
+
 def apply(services: Services) -> None:
     """Live request queues and the title language follow what's stored immediately."""
-    for key, (queue, seconds) in RATES.items():
-        getattr(services, queue).set_interval(seconds / services.repo.get_setting(key))
-    titles.set_language(services.repo.get_setting("title_language"))
+    for key, (queue, _) in RATES.items():
+        getattr(services, queue).set_interval(interval(services.repo, key))
+    titles.set_language(usable(services.repo, "title_language"))
 
 
 def reset(repo: Repo, key: str) -> Any:

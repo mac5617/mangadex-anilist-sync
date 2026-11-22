@@ -8,7 +8,9 @@ from fastapi.testclient import TestClient
 
 from mdal import titles, tunables
 from mdal.backup import make_backup, restore
-from mdal.db.repo import SETTING_DEFAULTS
+from mdal.db.connection import connect
+from mdal.db.repo import SETTING_DEFAULTS, Repo
+from mdal.services import Services
 from mdal.tunables import TUNABLES
 from mdal.web.app import create_app
 
@@ -122,3 +124,25 @@ def test_an_older_backup_cannot_change_who_is_signed_in(services):
     restored = restore(services.repo, backup(**IDENTITY))
     assert services.repo.get_setting("anilist_user_id") == 222 and services.repo.get_setting("mal_user_name") is None
     assert restored.kept == []
+
+
+@pytest.mark.parametrize("key, bad, queue", [
+    ("anilist_rpm", 0, "anilist_queue"), ("anilist_rpm", 1000, "anilist_queue"), ("mangadex_rps", "fast", "mangadex_queue"),
+    ("mal_rpm", None, "mal_queue"), ("mangaupdates_rps", 99, "mangaupdates_queue"),
+])
+def test_a_bad_stored_rate_starts_on_the_default(tmp_path, env_file, key, bad, queue):
+    path = tmp_path / "bad.db"
+    repo = Repo(connect(path))
+    repo.set_setting(key, bad)
+    started = Services(env_file, repo)
+    assert getattr(started, queue).min_interval == tunables.RATES[key][1] / SETTING_DEFAULTS[key]
+    assert repo.get_setting(key) == bad                           # left for you to see and fix
+    repo.conn.close()
+
+
+def test_a_bad_stored_title_language_starts_on_the_default(tmp_path, env_file):
+    repo = Repo(connect(tmp_path / "bad.db"))
+    repo.set_setting("title_language", "klingon")
+    Services(env_file, repo)
+    assert titles.language() == SETTING_DEFAULTS["title_language"] and repo.get_setting("title_language") == "klingon"
+    repo.conn.close()

@@ -15,7 +15,7 @@ from mdal.matching.mal_link import media_links, series_link
 from mdal.matching.matches import is_matched, library_series
 from mdal.sync.estimate import estimate
 from mdal.scores import score_offer
-from mdal.tunables import SYNC_SITES
+from mdal.tunables import SYNC_SITES, usable
 from mdal.sync.rules import AlEntry, AlMediaInfo, evaluate_series
 
 TARGETS = SYNC_SITES
@@ -192,9 +192,9 @@ def plan_estimate(repo: Repo, target: str, plan: WritePlan) -> Estimate:
     """The write-phase cost of a Write plan. MyAnimeList has no batch write: one request per entry."""
     n = len(plan.writes)
     if target == "mal":
-        requests, seconds = estimate(n, 1, repo.get_setting("mal_rpm"))
+        requests, seconds = estimate(n, 1, usable(repo, "mal_rpm"))
     else:
-        requests, seconds = estimate(n, repo.get_setting("anilist_write_batch"), repo.get_setting("anilist_rpm"))
+        requests, seconds = estimate(n, usable(repo, "anilist_write_batch"), usable(repo, "anilist_rpm"))
     return Estimate(n, sum(w.completes for w in plan.writes), requests, seconds, SITE_NAMES[target],
                     sum(w.scored for w in plan.writes))
 

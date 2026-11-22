@@ -10,7 +10,7 @@ from pathlib import Path
 
 from dotenv import set_key, unset_key
 
-from mdal import titles
+from mdal import titles, tunables
 from mdal.clients.anilist import AniListClient
 from mdal.clients.anilist_oauth import AniListOAuth
 from mdal.clients.mangadex import MangaDexClient, MangaDexCredentials
@@ -81,17 +81,17 @@ class Services:
         self.env_file = env_file
         self.repo = repo
         self.settings = settings or Settings(_env_file=env_file)
-        titles.set_language(repo.get_setting("title_language"))
-        self.anilist_queue = PacedQueue(60.0 / repo.get_setting("anilist_rpm"))
-        self.mangadex_queue = PacedQueue(1.0 / repo.get_setting("mangadex_rps"))
+        titles.set_language(tunables.usable(repo, "title_language"))
+        self.anilist_queue = PacedQueue(tunables.interval(repo, "anilist_rpm"))
+        self.mangadex_queue = PacedQueue(tunables.interval(repo, "mangadex_rps"))
         self.anilist = AniListClient(self.anilist_token, self.anilist_queue)
         self.mangadex_guard = DbGuard(repo)
         self.mangadex = MangaDexClient(self.mangadex_credentials, self.mangadex_queue, guard=self.mangadex_guard)
         self.oauth = AniListOAuth(lambda: self.settings, self.anilist_queue)
-        self.mal_queue = PacedQueue(60.0 / repo.get_setting("mal_rpm"))
+        self.mal_queue = PacedQueue(tunables.interval(repo, "mal_rpm"))
         self.mal_store = DbMalStore(repo)
         self.mal = MalClient(lambda: self.settings, self.mal_queue, self.mal_store)
-        self.mangaupdates_queue = PacedQueue(1.0 / repo.get_setting("mangaupdates_rps"))
+        self.mangaupdates_queue = PacedQueue(tunables.interval(repo, "mangaupdates_rps"))
         self.mangaupdates = MangaUpdatesClient(self.mangaupdates_queue)
         self.orchestrator = SyncOrchestrator(self)
         self.your_list = YourList(repo, AniListSite(repo, self.anilist, lambda: repo.get_setting("anilist_write_batch"),
