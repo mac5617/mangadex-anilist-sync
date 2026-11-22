@@ -16,10 +16,13 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from mdal.db.repo import Repo
+from mdal.lists.anilist import EDIT_STATUSES
 from mdal.sync.orchestrator import mal_target, refresh_item
+from mdal.sync.rules import STATUS_LABELS
 
 BUSY = "Shiori is syncing; try again when it finishes."
 BAD_SCORE = "A score is a number from 0.1 to 10."
+BAD_STATUS = "That status can't be set here."
 MATCHED = ("auto", "confirmed")
 
 
@@ -40,6 +43,7 @@ class SiteResult:
     unchanged: list[Series] = field(default_factory=list)
     skipped: dict[Series, str] = field(default_factory=dict)    # not for this site, and why
     failed: dict[Series, str] = field(default_factory=dict)
+    stored: dict[Series, dict[str, Any]] = field(default_factory=dict)  # what the site filled in itself
 
     def took(self) -> list[Series]:
         return self.saved + self.unchanged
@@ -74,6 +78,8 @@ class Site(Protocol):
     def entry(self, series: Series) -> Any: ...
 
     async def set_scores(self, scores: dict[Series, float]) -> SiteResult: ...
+
+    async def set_status(self, series: Series, status: str) -> SiteResult: ...
 
 
 class YourList:
@@ -133,6 +139,22 @@ class YourList:
         edit.note = _scores_note(edit)
         return edit
 
+    async def set_status(self, key: str, status: str) -> Edit:
+        """One series' status, in AniList's words (EDIT_STATUSES)."""
+        if self.busy():
+            return Edit(BUSY, refused=True)
+        if status not in EDIT_STATUSES:
+            return Edit(BAD_STATUS, refused=True)
+        series = self.series([key])[key]
+        main = await self.main.set_status(series, status)
+        sites = [main]
+        if self.mirroring() and main.took():
+            sites.append(await self.mirror.set_status(series, status))
+        self._refresh(main.saved)
+        edit = Edit("", sites=sites)
+        edit.note = _status_note(edit, series, status)
+        return edit
+
     def _refresh(self, saved: list[Series]) -> None:
         for md_id in {d for s in saved for d in s.md_ids}:
             self.refresh(self.repo, md_id)
@@ -181,3 +203,19 @@ def _scores_note(edit: Edit) -> str:
         text = f"{len(s.saved)} scores saved to AniList" if i == 0 else f"{len(s.saved)} on {s.site}"
         parts.append(text + (f", {len(s.failed)} failed" if s.failed else ""))
     return "; ".join(parts) or "nothing to save"
+
+
+def _status_note(edit: Edit, series: Series, status: str) -> str:
+    label = STATUS_LABELS[status]
+    main, mirror = edit.sites[0], edit.site("MyAnimeList")
+    if main.failed:
+        return f"AniList didn't save it: {main.failed[series]}"
+    mal_saved = bool(mirror and mirror.saved)
+    if not main.saved:
+        return f"Marked {label} on MyAnimeList (AniList already had it)." if mal_saved else f"Already {label}."
+    note = f"Marked {label} on AniList"
+    if (progress := main.stored.get(series, {}).get("progress")) is not None:
+        note += f" (it set progress to {progress})"
+    if mirror and mirror.failed:
+        return f"{note}; MyAnimeList: {mirror.failed[series]}."
+    return f"{note} and MyAnimeList." if mal_saved else f"{note}."

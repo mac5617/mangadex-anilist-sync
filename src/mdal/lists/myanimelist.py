@@ -4,6 +4,7 @@ Rules:
 - only an entry already on your MyAnimeList list is edited, and each edit reads the entry first: MyAnimeList's
   save would otherwise create it, so an edit costs 2 requests;
 - a score is a whole number 1-10, and one whose whole number didn't change isn't sent;
+- a status is one of MAL_STATUS's words (never rereading), and one the entry already has isn't sent;
 - every change is logged in list_edit with site 'mal', and the local copy follows what was saved;
 - a MyAnimeList error stops the rest of the edit: what wasn't tried fails with the same reason.
 """
@@ -20,6 +21,9 @@ if TYPE_CHECKING:
     from mdal.lists import Series, SiteResult
 
 NOT_LISTED = "not on your MyAnimeList list"
+# AniList's words -> MyAnimeList's. The local copy (mal_entry) keeps AniList's words.
+MAL_STATUS = {"CURRENT": "reading", "COMPLETED": "completed", "PAUSED": "on_hold", "DROPPED": "dropped",
+              "PLANNING": "plan_to_read"}
 
 
 def mal_score(score: float) -> int:
@@ -63,6 +67,32 @@ class MalSite:
                 result.failed[series] = problem
             else:
                 self.repo.update_mal_entry(series.mal_id, score=value)
+                result.saved.append(series)
+        return result
+
+    async def set_status(self, series: Series, status: str) -> SiteResult:
+        from mdal.lists import SiteResult
+
+        if status not in MAL_STATUS:
+            raise ValueError(f"refusing to set status {status!r}")
+        result = SiteResult(self.name)
+        entry = self.entry(series)
+        if series.mal_id is None:
+            result.skipped[series] = series.mal_problem or "no MyAnimeList link"
+        elif entry is None:
+            result.skipped[series] = NOT_LISTED
+        elif entry["status"] == status:
+            result.unchanged.append(series)
+        else:
+            word = MAL_STATUS[status]
+            try:
+                problem = await self._checked_edit(series, "status", word, status=word)
+            except MalError as exc:
+                problem = str(exc)
+            if problem:
+                result.failed[series] = problem
+            else:
+                self.repo.update_mal_entry(series.mal_id, status=status)
                 result.saved.append(series)
         return result
 

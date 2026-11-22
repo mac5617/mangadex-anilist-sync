@@ -20,6 +20,7 @@ from tests.factories import al_media_row, connect_mal, md_manga_row
 class MemorySite:
     def __init__(self, name: str, listed: dict[str, float | None], fail: dict[str, str] | None = None) -> None:
         self.name, self.listed, self.fail = name, dict(listed), dict(fail or {})
+        self.statuses = {k: "CURRENT" for k in listed}
         self.sent: list[dict[str, float]] = []
 
     def entry(self, series: Series):
@@ -42,6 +43,20 @@ class MemorySite:
             else:
                 self.listed[s.key] = score
                 result.saved.append(s)
+        return result
+
+    async def set_status(self, series: Series, status: str) -> SiteResult:
+        result = SiteResult(self.name)
+        if series.key not in self.statuses:
+            result.skipped[series] = f"not on your {self.name} list"
+        elif self.statuses[series.key] == status:
+            result.unchanged.append(series)
+        elif series.key in self.fail:
+            result.failed[series] = self.fail[series.key]
+        else:
+            self.sent.append({series.key: status})
+            self.statuses[series.key] = status
+            result.saved.append(series)
         return result
 
 
@@ -134,6 +149,39 @@ async def test_many_scores_get_a_counting_note(world):
     assert edit.problems() == ["no"]
 
 
+async def test_a_status_goes_to_both_sites(world):
+    al, mal = MemorySite("AniList", {"al:1": None}), MemorySite("MyAnimeList", {"al:1": None})
+    lists, refreshed = make(world, al, mal)
+    edit = await lists.set_status("al:1", "PAUSED")
+    assert edit.ok and edit.note == "Marked Paused on AniList and MyAnimeList."
+    assert al.statuses["al:1"] == mal.statuses["al:1"] == "PAUSED" and refreshed == ["a"]
+    again = await lists.set_status("al:1", "PAUSED")
+    assert again.ok and again.note == "Already Paused."
+
+
+async def test_statuses_are_refused_while_busy_and_rereading_never(world):
+    al = MemorySite("AniList", {"al:1": None})
+    lists, _ = make(world, al, MemorySite("MyAnimeList", {}), busy=True)
+    assert (await lists.set_status("al:1", "DROPPED")).note == BUSY
+    lists, _ = make(world, al, MemorySite("MyAnimeList", {}))
+    edit = await lists.set_status("al:1", "REPEATING")
+    assert edit.refused and edit.note == "That status can't be set here." and al.sent == []
+
+
+async def test_a_status_anilist_refuses_never_reaches_myanimelist(world):
+    mal = MemorySite("MyAnimeList", {"al:1": None})
+    lists, _ = make(world, MemorySite("AniList", {"al:1": None}, fail={"al:1": "nope"}), mal)
+    edit = await lists.set_status("al:1", "DROPPED")
+    assert not edit.ok and edit.note == "AniList didn't save it: nope" and mal.sent == []
+
+
+async def test_a_status_myanimelist_refuses_is_named(world):
+    mal = MemorySite("MyAnimeList", {"al:1": None}, fail={"al:1": "MAL is down"})
+    lists, _ = make(world, MemorySite("AniList", {"al:1": None}), mal)
+    edit = await lists.set_status("al:1", "DROPPED")
+    assert not edit.ok and edit.note == "Marked Dropped on AniList; MyAnimeList: MAL is down."
+
+
 # ---- the AniList adapter -------------------------------------------------------------------------
 class FakeAniListScores:
     def __init__(self, complexity_over: int = 99):
@@ -174,6 +222,36 @@ async def test_anilist_edits_by_entry_id_halving_a_batch_too_complex(world, anil
     assert [len(b["variables"]) // 2 for b in fake.sent] == [2, 1, 1]       # 2 too complex: halved to 1
     assert world.al_entries()[1]["score"] == 85
     assert ("anilist", "score", "done") in {(e["site"], e["field"], e["state"]) for e in world.list_edits()}
+
+
+class FakeAniListStatus:
+    def __init__(self):
+        self.sent = []
+
+    def handle(self, request):
+        body = json.loads(request.content)
+        self.sent.append(body)
+        status = body["query"].split("status: ")[1].split(")")[0]
+        return httpx.Response(200, json={"data": {"SaveMediaListEntry": {
+            "id": body["variables"]["e"], "mediaId": 0, "status": status, "score": 0,
+            "progress": 100 if status == "COMPLETED" else None}}})        # AniList fills in the total
+
+
+async def test_anilist_status_by_entry_id_and_what_anilist_filled_in(services, world):
+    services.store_anilist_token("al-token-xyz")
+    services.anilist_queue.set_interval(0)
+    world.replace_al_entries([{"entry_id": 101, "media_id": 1, "status": "CURRENT", "progress": 40, "score": None,
+                               "fetched_at": "x"}])
+    fake = FakeAniListStatus()
+    with respx.mock(assert_all_mocked=True) as router:
+        router.post(ANILIST_URL).mock(side_effect=fake.handle)
+        site = AniListSite(world, services.anilist)
+        lists, _ = make(world, site, MemorySite("MyAnimeList", {}), mirroring=False)
+        edit = await lists.set_status("al:1", "COMPLETED")
+    assert edit.note == "Marked Completed on AniList (it set progress to 100)."
+    assert "SaveMediaListEntry(id: $e, status: COMPLETED)" in fake.sent[0]["query"] and fake.sent[0]["variables"] == {"e": 101}
+    entry = world.al_entries()[1]
+    assert (entry["status"], entry["progress"]) == ("COMPLETED", 100)
 
 
 # ---- the MyAnimeList adapter ---------------------------------------------------------------------
@@ -243,6 +321,20 @@ async def test_a_myanimelist_error_stops_the_rest(world, mal):
     assert all(c[0] == "GET" for c in fake.calls) and len({c[1] for c in fake.calls}) == 1
 
 
+async def test_myanimelist_status_in_its_own_words_after_reading_the_entry(world, mal):
+    site, fake = mal({501, 503})
+    lists, _ = make(world, MemorySite("AniList", {}), site)
+    s = lists.series(["al:1", "md:c", "al:2"])
+    saved = await site.set_status(s["al:1"], "PAUSED")
+    assert saved.saved == [s["al:1"]] and fake.calls == [("GET", 501), ("PATCH", 501, {"status": "on_hold"})]
+    assert world.mal_entries()[501]["status"] == "PAUSED"                 # the local copy keeps AniList's words
+    assert (await site.set_status(s["md:c"], "CURRENT")).unchanged == [s["md:c"]]
+    assert "different" in (await site.set_status(s["al:2"], "PAUSED")).skipped[s["al:2"]]
+    assert len(fake.calls) == 2
+    with pytest.raises(ValueError):
+        await site.set_status(s["al:1"], "REPEATING")
+
+
 # ---- the contract every site keeps -----------------------------------------------------------------
 @pytest.fixture(params=["memory", "anilist", "myanimelist"])
 def any_site(request, world):
@@ -263,6 +355,17 @@ async def test_contract_a_new_score_is_saved_then_unchanged(world, any_site):
     other = await any_site.set_scores({s["md:nope"]: 7})       # not on this site's list
     assert not other.saved and not other.unchanged
     assert any_site.entry(s["al:1"]) is not None and any_site.entry(s["md:nope"]) is None
+
+
+async def test_contract_a_new_status_is_saved_then_unchanged(world, any_site):
+    lists, _ = make(world, MemorySite("AniList", {}), MemorySite("MyAnimeList", {}))
+    s = lists.series(["al:1", "md:nope"])
+    first = await any_site.set_status(s["al:1"], "DROPPED")
+    assert first.saved == [s["al:1"]] and not first.failed
+    again = await any_site.set_status(s["al:1"], "DROPPED")
+    assert again.unchanged == [s["al:1"]] and not again.saved
+    other = await any_site.set_status(s["md:nope"], "DROPPED")
+    assert not other.saved and not other.unchanged
 
 
 # ---- busy, and the Ranker's save that waits for it ------------------------------------------------

@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 from mdal.clients.anilist import ANILIST_URL
 from mdal.listtools import binge, stalled
 from mdal.recommend import ranking
-from mdal.sync.list_edit import ListEditError, status_document
+from mdal.lists.anilist import status_document
 from mdal.web.app import create_app
 from tests.factories import al_media_row
 
@@ -67,7 +67,7 @@ def test_stalled_and_binge():
 def test_list_edit_status_whitelist():
     assert "status: PAUSED" in status_document("PAUSED") and "status: COMPLETED" in status_document("COMPLETED")
     for refused in ("REPEATING", "COMPLETED) { id } x: SaveMediaListEntry(id: 1", ""):
-        with pytest.raises(ListEditError):
+        with pytest.raises(ValueError):
             status_document(refused)
 
 

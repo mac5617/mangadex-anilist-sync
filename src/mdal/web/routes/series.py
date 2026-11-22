@@ -14,8 +14,8 @@ from mdal.recommend.feedback import VERDICTS
 from mdal.recommend.ratings import rate
 from mdal.recommend.series import series_url
 from mdal.sync import add_entry
-from mdal.sync.list_edit import EDIT_STATUSES, ListEditError, read_notes, save_notes, set_status
-from mdal.sync.mal_list_edit import mirror_status, on_mal
+from mdal.lists import EDIT_STATUSES
+from mdal.sync.list_edit import ListEditError, read_notes, save_notes
 from mdal.sync.orchestrator import refresh_item
 from mdal.sync.rules import STATUS_LABELS
 from mdal.sync.mal_writer import MalAddError, MalCommentsError, add_by_hand, save_comments
@@ -113,27 +113,8 @@ async def series_status(request: Request, kind: str, ident: str, status: str = F
     def answer(note: str, ok: bool) -> HTMLResponse:
         return verdict_panel(request, key, status_note=note, status_ok=ok, oob_yours=True)
 
-    if status == s["entry"]["status_code"]:
-        return answer(f"Already {STATUS_LABELS[status]}.", True)
-    if svc.orchestrator.lock.locked():
-        return answer("A sync is running; change the status after it finishes.", False)
-    media_id = s["al_id"]
-    try:
-        saved = await set_status(svc.anilist, svc.repo, media_id, status)
-    except (ListEditError, AniListError) as exc:
-        return answer(f"AniList didn't save it: {exc}", False)
-    note = f"Marked {STATUS_LABELS[status]} on AniList"
-    if saved.get("progress") is not None and saved["progress"] != s["entry"]["progress"]:
-        note += f" (it set progress to {saved['progress']})"
-    if svc.mirror_to_mal() and media_id in on_mal(svc.repo, [media_id]):
-        try:
-            problem = await mirror_status(svc.mal, svc.repo, media_id, status)
-        except MalError as exc:
-            problem = str(exc)
-        if problem:
-            return answer(f"{note}; MyAnimeList: {problem}.", False)
-        note += " and MyAnimeList"
-    return answer(note + ".", True)
+    edit = await svc.your_list.set_status(f"al:{s['al_id']}", status)
+    return answer(edit.note, edit.ok)
 
 
 @router.post("/series/{kind}/{ident}/add", response_class=HTMLResponse)

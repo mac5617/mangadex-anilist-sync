@@ -13,7 +13,6 @@ from typing import TYPE_CHECKING, Any
 from mdal.db.repo import now_iso
 from mdal.recommend import ranking
 from mdal.lists.myanimelist import mal_score
-from mdal.sync.mal_list_edit import on_mal
 
 if TYPE_CHECKING:
     from mdal.services import Services
@@ -89,8 +88,9 @@ class Ranker:
         ids = {r["media_id"] for r in self.repo.ranking()} | self.repo.scored_by_shiori()
         scores = {m: entries[m]["score"] for m in ids if m in entries and entries[m]["score"]}
         listed = self.repo.mal_entries()
-        return {m: scores[m] for m, mal_id in on_mal(self.repo, list(scores)).items()
-                if (listed[mal_id]["score"] or 0) != mal_score(scores[m] / 10)}
+        series = self.services.your_list.series([f"al:{m}" for m in scores])
+        return {m: scores[m] for m in scores if (mal_id := series[f"al:{m}"].mal_id) in listed
+                and (listed[mal_id]["score"] or 0) != mal_score(scores[m] / 10)}
 
     def status(self) -> dict[str, Any]:
         return self.repo.get_setting("rank_save") or {}

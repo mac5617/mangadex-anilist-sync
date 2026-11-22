@@ -69,10 +69,8 @@ def test_pure_modules_do_no_io():
 
 
 def test_mal_writes_only_from_mal_writer():
-    """MyAnimeList writes: syncs from sync/mal_writer.py, list edits from lists/myanimelist.py and
-    sync/mal_list_edit.py, nowhere else."""
-    allowed = {SRC / "sync" / "mal_writer.py", SRC / "sync" / "mal_list_edit.py", SRC / "lists" / "myanimelist.py",
-               SRC / "clients" / "myanimelist.py"}
+    """MyAnimeList writes: syncs from sync/mal_writer.py, list edits from lists/myanimelist.py, nowhere else."""
+    allowed = {SRC / "sync" / "mal_writer.py", SRC / "lists" / "myanimelist.py", SRC / "clients" / "myanimelist.py"}
     offenders = [
         str(p.relative_to(ROOT))
         for p in python_files()
@@ -95,7 +93,7 @@ def test_mal_writer_status_literals():
 
 
 def test_list_edit_status_literals():
-    text = (SRC / "sync" / "list_edit.py").read_text(encoding="utf-8")
+    text = (SRC / "lists" / "anilist.py").read_text(encoding="utf-8")
     # Outside syncs, statuses are set by hand (Stalled, series pages): never Rereading.
     assert set(re.findall(r"\b(COMPLETED|CURRENT|PLANNING|PAUSED|DROPPED|REPEATING)\b", text)) == {
         "CURRENT", "COMPLETED", "PAUSED", "DROPPED", "PLANNING"}
@@ -111,7 +109,7 @@ def test_mal_comments_only_from_mal_writer():
 
 
 def test_mal_list_edit_literals():
-    text = (SRC / "sync" / "mal_list_edit.py").read_text(encoding="utf-8")
+    text = (SRC / "lists" / "myanimelist.py").read_text(encoding="utf-8")
     # A list edit sets the status you picked, and only on entries it read first (never rereading).
     sent = set(re.findall(r'"(reading|completed|on_hold|dropped|plan_to_read)"', text))
     assert sent == {"reading", "completed", "on_hold", "dropped", "plan_to_read"} and "is_rereading" not in text

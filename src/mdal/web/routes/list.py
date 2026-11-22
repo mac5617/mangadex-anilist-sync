@@ -9,7 +9,6 @@ from typing import Any
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
-from mdal.clients.anilist import AniListError
 from mdal.clients.mangaupdates import MangaUpdatesError
 from mdal.fetch.mangaupdates import lookup_mu
 from mdal.listtools import binge, stalled
@@ -17,9 +16,6 @@ from mdal.recommend import ranking
 from mdal.recommend.fresh import english_meta
 from mdal.recommend.series import big_cover, series_url
 from mdal.stats import entry_rows
-from mdal.clients.myanimelist import MalError
-from mdal.sync.list_edit import ListEditError, set_status
-from mdal.sync.mal_list_edit import mirror_status, on_mal
 from mdal.web.app import get_services, render, templates
 
 router = APIRouter()
@@ -235,21 +231,8 @@ async def change_status(request: Request, media_id: int, status: str = Form(...)
     svc = get_services(request)
     if status not in ("PAUSED", "DROPPED"):   # what Stalled offers
         raise HTTPException(400, "Only Paused or Dropped can be set here.")
-    try:
-        await set_status(svc.anilist, svc.repo, media_id, status)
-        note, ok = f"Marked {STATUS_WORDS[status]} on AniList.", True
-    except (ListEditError, AniListError) as exc:
-        return templates.TemplateResponse(request, "_status_done.html", {"note": str(exc), "ok": False, "media_id": media_id})
-    if svc.mirror_to_mal():
-        try:
-            problem = await mirror_status(svc.mal, svc.repo, media_id, status)
-        except MalError as exc:
-            problem = str(exc)
-        if problem:
-            note, ok = f"Marked {STATUS_WORDS[status]} on AniList; MyAnimeList: {problem}.", False
-        elif media_id in on_mal(svc.repo, [media_id]):
-            note = f"Marked {STATUS_WORDS[status]} on AniList and MyAnimeList."
-    return templates.TemplateResponse(request, "_status_done.html", {"note": note, "ok": ok, "media_id": media_id})
+    edit = await svc.your_list.set_status(f"al:{media_id}", status)
+    return templates.TemplateResponse(request, "_status_done.html", {"note": edit.note, "ok": edit.ok, "media_id": media_id})
 
 
 @router.get("/list/binge", response_class=HTMLResponse)

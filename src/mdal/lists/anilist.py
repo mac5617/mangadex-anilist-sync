@@ -3,6 +3,7 @@
 Like sync/writer.py, this module may contain a mutation. Its rules:
 - it only edits an entry that exists, addressed by its entry `id` (never `mediaId`), so nothing can be added;
 - a score is sent as `scoreRaw` (1-100), and one that is already AniList's score isn't sent;
+- a status is one of the literals in EDIT_STATUSES (never Rereading), and one AniList already has isn't sent;
 - scores go in batches; a batch AniList finds too complex is halved, down to one;
 - every change is logged in list_edit, and the local copy of the entry follows what AniList answered;
 - an AniList error stops the rest of the edit: what wasn't tried fails with the same reason.
@@ -23,6 +24,15 @@ if TYPE_CHECKING:
 
 SELECTION = "{ id mediaId status progress score(format: POINT_100) }"
 NOT_LISTED = "not on your AniList list"
+
+
+EDIT_STATUSES = ("CURRENT", "COMPLETED", "PAUSED", "DROPPED", "PLANNING")
+
+
+def status_document(status: str) -> str:
+    if status not in EDIT_STATUSES:
+        raise ValueError(f"refusing to set status {status!r}")
+    return f"mutation ($e: Int) {{ SaveMediaListEntry(id: $e, status: {status}) {SELECTION} }}"
 
 
 def score_document(n: int) -> str:
@@ -89,4 +99,34 @@ class AniListSite:
                     self.repo.log_edit(series.media_id, entry["entry_id"], "score", entry["score"], value, "failed",
                                        result.failed[series])
             start += len(chunk)
+        return result
+
+    async def set_status(self, series: Series, status: str) -> SiteResult:
+        """Set the entry's status. AniList may fill in progress itself (on Completed); `stored` says so."""
+        from mdal.lists import SiteResult
+
+        result = SiteResult(self.name)
+        query = status_document(status)
+        entry = self.entry(series)
+        if entry is None:
+            result.failed[series] = NOT_LISTED
+            return result
+        if entry["status"] == status:
+            result.unchanged.append(series)
+            return result
+        try:
+            data = await self.client.graphql(query, {"e": entry["entry_id"]})
+        except AniListError as exc:
+            self.repo.log_edit(series.media_id, entry["entry_id"], "status", entry["status"], status, "failed", str(exc))
+            result.failed[series] = str(exc)
+            return result
+        answer = data.get("SaveMediaListEntry") or {}
+        saved: dict[str, Any] = {"status": answer.get("status") or status}
+        if answer.get("progress") is not None:
+            saved["progress"] = answer["progress"]
+            if answer["progress"] != entry["progress"]:
+                result.stored[series] = {"progress": answer["progress"]}
+        self.repo.update_al_entry(series.media_id, **saved)
+        self.repo.log_edit(series.media_id, entry["entry_id"], "status", entry["status"], status, "done")
+        result.saved.append(series)
         return result
