@@ -14,7 +14,7 @@ from typing import Any
 from mdal.db.repo import Repo
 from mdal.matching.matches import is_matched
 from mdal.sync.estimate import estimate
-from mdal.sync.rules import AlEntry, AlMediaInfo, MdInfo, evaluate, score_from_md
+from mdal.sync.rules import AlEntry, AlMediaInfo, evaluate_series, score_from_md
 
 TARGETS = ("anilist", "mal")
 SITE_NAMES = {"anilist": "AniList", "mal": "MyAnimeList"}
@@ -206,13 +206,7 @@ def _evaluated(
 ) -> dict[str, Any]:
     """The rules applied to one series (§8): the item columns shared by both targets."""
     md_id = row["md_id"]
-    reads = repo.read_chapters(md_id)
-    chapters = [r["chapter"] for r in reads if r["missing"] in (0, None) and r["chapter"] is not None]
-    d = evaluate(
-        chapters, len(reads) - len(chapters), entry, media,
-        MdInfo(row["pub_status"], row["last_chapter"], bool(row["chapter_numbers_reset"]), row["reading_status"]),
-        jump_limit, site,
-    )
+    d = evaluate_series(row, repo.read_chapters(md_id), entry, media, jump_limit, site)
     action, reason = d.action, d.reason
     gone = dismissed.get(md_id)
     if action == "flag" and gone is not None and (gone["md_progress"], gone["flag_kind"]) == (d.md_progress, d.flag_kind):

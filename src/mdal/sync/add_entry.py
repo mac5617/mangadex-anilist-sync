@@ -11,7 +11,7 @@ from mdal import titles
 from mdal.db.repo import Repo
 from mdal.lists.anilist import ADD_STATUSES  # noqa: F401  (the statuses these rows offer)
 from mdal.matching.matches import is_matched, not_on_list
-from mdal.sync.rules import AlMediaInfo, MdInfo, completion_default, evaluate
+from mdal.sync.rules import AlMediaInfo, completion_default, evaluate_series, library_info
 
 
 @dataclass(frozen=True)
@@ -56,11 +56,8 @@ def proposal(repo: Repo, md_id: str) -> NotListedRow | None:
 
 def _row(repo: Repo, m: Any, md: Any, al: Any) -> NotListedRow:
     """One matched series not on the list: progress proposed from your reads, capped at AniList's total."""
-    reads = repo.read_chapters(m["md_id"])
-    chapters = [r["chapter"] for r in reads if r["missing"] in (0, None) and r["chapter"] is not None]
     al_info = AlMediaInfo(al["chapters"] if al else None, al["status"] if al else None)
-    md_info = MdInfo(md["pub_status"], md["last_chapter"], bool(md["chapter_numbers_reset"]), md["reading_status"])
-    d = evaluate(chapters, len(reads) - len(chapters), None, al_info, md_info, repo.get_setting("jump_limit"))
+    d = evaluate_series(md, repo.read_chapters(m["md_id"]), None, al_info, repo.get_setting("jump_limit"))
     proposed = d.md_progress
     total = al_info.chapters
     over = proposed is not None and total is not None and proposed > total
@@ -79,6 +76,6 @@ def _row(repo: Repo, m: Any, md: Any, al: Any) -> NotListedRow:
         proposed=proposed,
         progress=progress,
         over_total=over,
-        default_status="COMPLETED" if completion_default(al_info, md_info, progress) else "CURRENT",
+        default_status="COMPLETED" if completion_default(al_info, library_info(md), progress) else "CURRENT",
         unresolved=d.unresolved,
     )

@@ -6,6 +6,8 @@ from mdal.sync.rules import (
     MdInfo,
     completion_default,
     evaluate,
+    evaluate_series,
+    library_info,
     parse_chapter,
     status_change_label,
 )
@@ -235,3 +237,29 @@ def test_status_change_label():
 def test_parse_chapter(raw, expected):
     d = parse_chapter(raw)
     assert (str(d) if d is not None else None) == expected
+
+
+LIBRARY_ROW = {"pub_status": "completed", "last_chapter": "12", "chapter_numbers_reset": 0, "reading_status": "reading"}
+
+
+def read(chapter, missing=0):
+    return {"chapter": chapter, "missing": missing}
+
+
+@pytest.mark.parametrize("reads, md_progress, unresolved", [
+    ([read("9"), read("10.5")], 10, 0),
+    ([read("9"), read(None)], 9, 1),                  # no number
+    ([read("9"), read("50", missing=1)], 9, 1),       # MangaDex no longer returns it
+    ([read("9"), read("50", missing=None)], 50, 0),   # never looked up as missing
+    ([read("9"), read("abc")], 9, 1),                 # not a number
+])
+def test_evaluate_series_filters_reads(reads, md_progress, unresolved):
+    d = evaluate_series(LIBRARY_ROW, reads, AlEntry(1, "CURRENT", 5), RELEASING, 200)
+    assert (d.md_progress, d.unresolved) == (md_progress, unresolved)
+
+
+def test_evaluate_series_uses_the_library_row():
+    assert library_info(LIBRARY_ROW) == MdInfo("completed", "12", False, "reading")
+    reset = {**LIBRARY_ROW, "chapter_numbers_reset": 1}
+    d = evaluate_series(reset, [read("9")], AlEntry(1, "CURRENT", 5), RELEASING, 200, "MyAnimeList")
+    assert (d.action, d.flag_kind) == ("flag", "implausible")

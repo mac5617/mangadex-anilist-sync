@@ -9,9 +9,10 @@ ending, so the last chapter read is not always the last chapter).
 from __future__ import annotations
 
 import math
+from collections.abc import Iterable
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
-from typing import Literal
+from typing import Any, Literal
 
 Action = Literal["write", "add", "skip", "flag"]
 
@@ -195,6 +196,22 @@ def evaluate(
 
     # 9. Write
     return item("write", f"read to {md_progress} on MangaDex; {site} has {al}")
+
+
+def library_info(row: Any) -> MdInfo:
+    """What the rules need from a MangaDex library row."""
+    return MdInfo(row["pub_status"], row["last_chapter"], bool(row["chapter_numbers_reset"]), row["reading_status"])
+
+
+def evaluate_series(
+    library_row: Any, reads: Iterable[Any], entry: AlEntry | None, media: AlMediaInfo, jump_limit: int,
+    site: str = "AniList",
+) -> DiffItem:
+    """The rules for one series, from its library row and its read chapters (`chapter`, `missing`). A read whose
+    chapter is missing or has no number counts as unresolved."""
+    reads = list(reads)
+    chapters = [r["chapter"] for r in reads if r["missing"] in (0, None) and r["chapter"] is not None]
+    return evaluate(chapters, len(reads) - len(chapters), entry, media, library_info(library_row), jump_limit, site)
 
 
 def score_from_md(rating: int | None, site_score: float | None, other_score: float | None) -> int | None:
