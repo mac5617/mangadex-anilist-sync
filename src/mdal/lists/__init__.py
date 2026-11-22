@@ -19,13 +19,13 @@ from typing import Any, Protocol
 from mdal.db.repo import Repo
 from mdal.clients.anilist import AniListError
 from mdal.lists.anilist import ADD_STATUSES, EDIT_STATUSES, NOTES_MAX
+from mdal.matching.matches import is_matched
 from mdal.sync.changes import mal_target, refresh_item
 from mdal.sync.rules import STATUS_LABELS
 
 BUSY = "Shiori is syncing; try again when it finishes."
 BAD_SCORE = "A score is a number from 0.1 to 10."
 BAD_STATUS = "That status can't be set here."
-MATCHED = ("auto", "confirmed")
 
 
 @dataclass(frozen=True)
@@ -119,14 +119,14 @@ class YourList:
         mappings = self.repo.mappings()
         matched: dict[int, list[str]] = {}
         for md_id, m in mappings.items():
-            if m["state"] in MATCHED and m["al_media_id"] is not None:
+            if is_matched(m):
                 matched.setdefault(m["al_media_id"], []).append(md_id)
         media_ids: dict[str, int | None] = {}
         for key in keys:
             kind, _, ident = key.partition(":")
             if kind == "al" and ident.isdigit():
                 media_ids[key] = int(ident)
-            elif kind == "md" and (m := mappings.get(ident)) and m["state"] in MATCHED:
+            elif kind == "md" and is_matched(m := mappings.get(ident)):
                 media_ids[key] = m["al_media_id"]
             else:
                 media_ids[key] = None

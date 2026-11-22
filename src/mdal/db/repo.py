@@ -331,15 +331,6 @@ class Repo:
         """Series waiting on a decision on Matches → To review: uncertain matches and ones with no match found."""
         return self.conn.execute("SELECT COUNT(*) FROM mapping WHERE state IN ('review','unmatched')").fetchone()[0]
 
-    def not_on_list(self) -> list[sqlite3.Row]:
-        """Library series matched to AniList media that is not on the user's list (story 17)."""
-        return self.conn.execute(
-            "SELECT p.md_id, p.al_media_id, p.state FROM mapping p "
-            "JOIN md_manga m ON m.md_id = p.md_id "
-            "WHERE p.state IN ('auto','confirmed') AND p.al_media_id IS NOT NULL "
-            "AND p.al_media_id NOT IN (SELECT media_id FROM al_entry) ORDER BY m.title COLLATE NOCASE"
-        ).fetchall()
-
     # ---- recommendations -------------------------------------------------
     def replace_rec_candidates(self, rows: list[dict[str, Any]]) -> None:
         with self.conn:

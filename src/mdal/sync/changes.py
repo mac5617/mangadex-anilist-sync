@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from mdal.db.repo import Repo
+from mdal.matching.matches import is_matched
 from mdal.sync.estimate import estimate
 from mdal.sync.rules import AlEntry, AlMediaInfo, MdInfo, evaluate, score_from_md
 
@@ -249,7 +250,7 @@ def mal_target(row: Any, mapping: Any, media: dict[int, Any]) -> tuple[int | Non
     state = mapping["state"] if mapping else None
     if state == "review":
         return None, None, "awaiting match review"
-    matched = state in ("auto", "confirmed") and mapping["al_media_id"] is not None
+    matched = is_matched(mapping)
     al_id = mapping["al_media_id"] if matched else None
     al_mal = media[al_id]["id_mal"] if al_id is not None and al_id in media else None
     md_mal = md_mal_link(row)
@@ -280,7 +281,7 @@ def build_items(repo: Repo, run_id: int, md_ids: set[str] | None = None, target:
         m = mappings.get(md_id)
         base: dict[str, Any] = {"run_id": run_id, "md_id": md_id}
         state = m["state"] if m else None
-        if state not in ("auto", "confirmed") or m["al_media_id"] is None:
+        if not is_matched(m):
             items.append({**base, "action": "skip", "reason": MAPPING_SKIPS.get(state, "no match")})
             continue
         al_id = m["al_media_id"]

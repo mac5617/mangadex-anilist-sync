@@ -11,6 +11,7 @@ from mdal import titles
 from mdal.clients.anilist import AniListError
 from mdal.db.repo import now_iso
 from mdal.fetch.anilist_list import DESCRIPTION_FIELD, MEDIA_FIELDS, media_row
+from mdal.matching.matches import matched
 from mdal.recommend.fresh import MD_COVER
 from mdal.recommend.series import series_url
 from mdal.search import Hit, anilist_hit, search
@@ -44,7 +45,7 @@ def candidates(request: Request) -> list[Hit]:
         hits.append(Hit(f"al:{m['media_id']}", titles.pick(m["romaji"], m["english"], m["native"], f"#{m['media_id']}"),
                         m["cover_url"], meta, group,
                         names=names))
-    mapped = {r[0] for r in repo.conn.execute("SELECT md_id FROM mapping WHERE state IN ('auto','confirmed')")}
+    mapped = set(matched(repo))
     for table, group in (("md_manga", "MangaDex library"), ("md_new", "New on MangaDex")):
         for r in repo.conn.execute(f"SELECT md_id, title, alt_titles, cover_file, year FROM {table}"):
             if table == "md_manga" and r["md_id"] in mapped:

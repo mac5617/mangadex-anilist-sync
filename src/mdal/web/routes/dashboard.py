@@ -6,6 +6,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
 from mdal.listtools import binge, stalled
+from mdal.matching.matches import not_on_list
 from mdal.recommend.series import big_cover, series_url
 from mdal.stats import entry_rows, is_mismatch
 from mdal.web.app import get_services, render
@@ -39,7 +40,7 @@ def dashboard(request: Request) -> HTMLResponse:
              for e in binge(entries, repo.get_setting("stalled_days"), repo.cached_all("mu"))[:BINGE]]
 
     review = repo.review_count()
-    unlisted = len(repo.not_on_list())
+    unlisted = len(not_on_list(repo))
     mismatches = sum(1 for e in entries if is_mismatch(e))
     stalled_count = len(stalled(entries, repo.get_setting("stalled_days")))
     mal_waiting = len(svc.ranker.pending_mal())

@@ -10,6 +10,7 @@ from typing import Any
 from mdal import titles
 from mdal.db.repo import Repo
 from mdal.lists.anilist import ADD_STATUSES  # noqa: F401  (the statuses these rows offer)
+from mdal.matching.matches import is_matched, not_on_list
 from mdal.sync.rules import AlMediaInfo, MdInfo, completion_default, evaluate
 
 
@@ -33,7 +34,7 @@ class NotListedRow:
 
 def not_listed_rows(repo: Repo) -> list[NotListedRow]:
     """Matched series whose media is not on the list, with a proposed progress from the latest read data."""
-    mapped = repo.not_on_list()
+    mapped = not_on_list(repo)
     media = repo.media([m["al_media_id"] for m in mapped])
     md_rows = {r["md_id"]: r for r in repo.md_manga()}
     return [_row(repo, m, md_rows[m["md_id"]], media.get(m["al_media_id"])) for m in mapped]
@@ -42,7 +43,7 @@ def not_listed_rows(repo: Repo) -> list[NotListedRow]:
 def proposal(repo: Repo, md_id: str) -> NotListedRow | None:
     """The add proposal for one series (series page), or None when it can't be added from here."""
     mapping = repo.get_mapping(md_id)
-    if mapping is None or mapping["state"] not in ("auto", "confirmed") or mapping["al_media_id"] is None:
+    if not is_matched(mapping):
         return None
     if mapping["al_media_id"] in repo.al_entries():
         return None

@@ -135,6 +135,13 @@ def test_the_orchestrator_knows_no_writer():
     assert not re.search(r"mdal\.sync\.(mal_)?writer|mdal\.fetch\.(mal_list|mangadex_library)", text)
 
 
+def test_what_counts_as_matched_is_decided_once():
+    spelled_out = re.compile(r"""auto['"],\s*['"]confirmed|confirmed['"],\s*['"]auto""")
+    offenders = [str(p.relative_to(ROOT)) for p in python_files()
+                 if p != SRC / "matching" / "matches.py" and spelled_out.search(p.read_text(encoding="utf-8"))]
+    assert offenders == []
+
+
 def test_pages_edit_your_list_only_through_your_list():
     """Routes call YourList (mdal.lists); the site adapters behind it are its own business."""
     adapters = re.compile(r"^\s*(from|import)\s+mdal\.lists\.(anilist|myanimelist)\b", re.MULTILINE)

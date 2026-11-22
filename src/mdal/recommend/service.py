@@ -19,6 +19,7 @@ from mdal.fetch.anilist_list import fetch_list, fetch_staff_for
 from mdal.fetch.anilist_recs import fetch_candidates
 from mdal.fetch.mal_recs import favourites_on_mal
 from mdal.clients.myanimelist import MalError
+from mdal.matching.matches import matched
 from mdal.recommend.llm import CANDIDATES, SCHEMA, SYSTEM, build_prompt, clean_answer
 from mdal.recommend.feedback import pseudo_entry
 from mdal.recommend.profile import Profile, build_profile, entry_weight
@@ -82,8 +83,7 @@ class Recommender:
     def recs(self, include_adult: bool = False) -> tuple[Profile, list[Rec]]:
         profile, weights = self.profile()
         listed = set(self.repo.al_entries())
-        in_library = {r[0] for r in self.repo.conn.execute(
-            "SELECT al_media_id FROM mapping WHERE al_media_id IS NOT NULL AND state IN ('auto','confirmed')")}
+        in_library = set(matched(self.repo).values())
         hidden = self.repo.hidden_recs() | self.rated_al_ids()
         rows = [dict(r) for r in self.repo.rec_candidates()
                 if r["media_id"] not in listed | in_library | hidden

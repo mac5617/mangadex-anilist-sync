@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from mdal import __version__
+from mdal.matching.matches import not_on_list
 from mdal.recommend.fresh import MD_COVER
 from mdal.services import Services
 
@@ -100,7 +101,7 @@ def render(request: Request, name: str, context: dict[str, Any] | None = None, s
     repo = svc.repo
     # where list edits (adds, scores, statuses, notes) go: named in page copy so it says what really happens
     edits_to = "AniList and MyAnimeList" if svc.mirror_to_mal() else "AniList"
-    ctx = {"nav": {"review": repo.review_count(), "not_on_list": len(repo.not_on_list())}, "edits_to": edits_to,
+    ctx = {"nav": {"review": repo.review_count(), "not_on_list": len(not_on_list(repo))}, "edits_to": edits_to,
            **(context or {})}
     return templates.TemplateResponse(request, name, ctx, status_code=status_code)
 

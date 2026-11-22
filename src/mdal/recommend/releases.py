@@ -33,6 +33,7 @@ from mdal.clients.myanimelist import MalError
 from mdal.fetch.mangadex_new import fetch_latest, fetch_new_releases
 from mdal.fetch.mangaupdates import lookup_mu
 from mdal.clients.mangaupdates import MangaUpdatesError
+from mdal.matching.matches import matched
 from mdal.matching.normalize import normalize
 from mdal.recommend import chat, fresh
 from mdal.recommend.fresh import NewRec, Shelf
@@ -107,8 +108,7 @@ class NewReleases:
         """(MangaDex ids, AniList ids, MAL ids, normalised titles) of everything on your lists or followed."""
         conn = self.repo.conn
         md = {r[0] for r in conn.execute("SELECT md_id FROM md_manga")} | self.repo.md_follows()
-        al = set(self.repo.al_entries()) | {r[0] for r in conn.execute(
-            "SELECT al_media_id FROM mapping WHERE al_media_id IS NOT NULL AND state IN ('auto','confirmed')")}
+        al = set(self.repo.al_entries()) | set(matched(self.repo).values())
         mal = set(self.repo.mal_entries())
         titles: set[str] = set()
         for m in self.repo.media(al).values():

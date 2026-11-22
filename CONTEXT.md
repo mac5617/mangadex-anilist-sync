@@ -38,6 +38,10 @@ _Avoid_: fan-out, copy, sync (for list edits)
 Which MyAnimeList entry a series is: AniList's link, else MangaDex's; when the two disagree there is none.
 _Avoid_: mal id (in prose), mal target
 
+**Match**:
+The AniList series that a MangaDex series is linked to, found by Shiori or confirmed by you.
+_Avoid_: mapping
+
 ### Sync
 
 **Sync**:

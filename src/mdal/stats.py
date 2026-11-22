@@ -15,6 +15,7 @@ from typing import Any
 
 from mdal import titles
 from mdal.db.repo import Repo
+from mdal.matching.matches import library_series, matched, not_on_list
 from mdal.sync.rules import STATUS_LABELS
 
 STATUS_ORDER = ("CURRENT", "COMPLETED", "PAUSED", "DROPPED", "PLANNING", "REPEATING")
@@ -90,10 +91,7 @@ def entry_rows(repo: Repo) -> list[dict[str, Any]]:
         "FROM al_entry e LEFT JOIN al_media m ON m.media_id = e.media_id LEFT JOIN mal_entry x ON x.mal_id = m.id_mal"
     ).fetchall()
     md: dict[int, Any] = {}
-    for r in repo.conn.execute(
-        "SELECT p.al_media_id, d.md_id, d.reading_status, d.cover_file, d.title FROM mapping p "
-        "JOIN md_manga d ON d.md_id = p.md_id WHERE p.state IN ('auto','confirmed') ORDER BY d.md_id"
-    ):
+    for r in library_series(repo):
         md.setdefault(r["al_media_id"], r)
     out = []
     for r in rows:
@@ -328,12 +326,12 @@ def list_stats(repo: Repo, filters: dict[str, str] | None = None, genre_sort: st
     md = repo.conn.execute(
         "SELECT (SELECT COUNT(*) FROM md_manga) AS library, (SELECT COUNT(*) FROM md_read) AS read_markers, "
         "(SELECT COUNT(*) FROM md_chapter WHERE missing > 0) AS unresolved, "
-        "(SELECT COUNT(*) FROM mapping WHERE state IN ('auto','confirmed')) AS matched, "
         "(SELECT COUNT(*) FROM mapping WHERE state='review') AS review, "
         "(SELECT COUNT(*) FROM mapping WHERE state='unmatched') AS unmatched"
     ).fetchone()
     s.md = dict(md)
-    s.md["not_on_list"] = len(repo.not_on_list())
+    s.md["matched"] = len(matched(repo))
+    s.md["not_on_list"] = len(not_on_list(repo))
     return s
 
 

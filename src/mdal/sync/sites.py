@@ -11,6 +11,7 @@ from mdal.db.repo import Repo, now_iso
 from mdal.fetch.anilist_list import fetch_list, fetch_staff
 from mdal.fetch.mal_list import fetch_mal_list
 from mdal.fetch.mangadex_library import fetch_library
+from mdal.matching.matches import is_matched
 from mdal.matching.pipeline import AniListFetch, resolve_all
 from mdal.sync.changes import SITE_NAMES, build_items
 from mdal.sync.mal_writer import MalWriter
@@ -120,11 +121,12 @@ class AniListSync(_Site):
         repo.replace_items(run_id, items)
 
         n_write = sum(1 for i in items if i["action"] == "write")
-        states = [m["state"] for m in repo.mappings().values()]
+        mappings = list(repo.mappings().values())
+        states = [m["state"] for m in mappings]
         newly = match.auto + match.review + match.unmatched
         detail = (
             f"{md.series} series, {al.entries} AniList entries; "
-            f"{sum(s in ('auto', 'confirmed') for s in states)} matched ({newly} newly matched), "
+            f"{sum(is_matched(m) for m in mappings)} matched ({newly} newly matched), "
             f"{states.count('review')} to review, {states.count('unmatched')} unmatched; "
             f"{n_write} to write"
         )

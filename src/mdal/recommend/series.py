@@ -21,6 +21,7 @@ from mdal.fetch.anilist_list import plain_text
 from mdal.fetch.anilist_recs import fetch_neighbours
 from mdal.fetch.mal_recs import anilist_by_mal, mal_recommendations
 from mdal.fetch.mangaupdates import fresh_enough, lookup_mu
+from mdal.matching.matches import is_matched, library_series
 from mdal.matching.normalize import normalize
 from mdal.recommend import ranking
 from mdal.recommend.feedback import VERDICTS
@@ -74,7 +75,7 @@ class SeriesPages:
             al_id = new["al_id"] if new else None
             if al_id is None and lib is not None:
                 m = repo.get_mapping(md_id)
-                al_id = m["al_media_id"] if m and m["state"] in ("auto", "confirmed") else None
+                al_id = m["al_media_id"] if is_matched(m) else None
             if al_id is None:
                 cached = self._cache(key, "anilist")
                 al_id = (cached or {}).get("anchor")
@@ -83,8 +84,7 @@ class SeriesPages:
         media_id = int(key[3:])
         media = repo.media([media_id]).get(media_id)
         new = repo.conn.execute("SELECT * FROM md_new WHERE al_id=?", (media_id,)).fetchone()
-        lib = repo.conn.execute("SELECT d.* FROM mapping p JOIN md_manga d USING (md_id) WHERE p.al_media_id=? "
-                                "AND p.state IN ('auto','confirmed') ORDER BY d.md_id", (media_id,)).fetchone()
+        lib = next(iter(library_series(repo, media_id)), None)
         return media, new, lib
 
     def exists(self, key: str) -> bool:
