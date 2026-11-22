@@ -30,14 +30,15 @@ def world(mock):
         al_media(2, "Berserk", id_mal=22, chapters=None, staff=["Author A"]),
         al_media(3, "Finished Thing", id_mal=33, chapters=10, status="FINISHED", staff=["Author A"]),
         al_media(4, "Not Listed", id_mal=44, staff=["Author A"]),
+        al_media(5, "Reset Volumes", id_mal=55, chapters=None, status="RELEASING", staff=["Author A"]),
     )
-    al.add_list("Reading", [(101, 1, "CURRENT", 5), (102, 2, "CURRENT", 30), (103, 3, "CURRENT", 8)])
+    al.add_list("Reading", [(101, 1, "CURRENT", 5), (102, 2, "CURRENT", 30), (103, 3, "CURRENT", 8), (105, 5, "CURRENT", 5)])
     md.add(FakeSeries("a", "Sousou no Frieren", links={"al": "1"}, reads=["a1", "a2"]), {"a1": "9", "a2": "10.5"})
     md.add(FakeSeries("b", "Berserk", links={"al": "2"}, reads=["b1"]), {"b1": "12"})
     md.add(FakeSeries("c", "Finished Thing", links={"al": "3"}, reads=["c1", "c2"]), {"c1": "10", "c2": "9"})
     md.add(FakeSeries("d", "Not Listed", links={"al": "4"}, reads=["d1"]), {"d1": "3"})
     md.add(FakeSeries("e", "Zzz Nothing Matches", reads=["e1"]), {"e1": "1"})
-    md.add(FakeSeries("f", "Reset Volumes", links={"al": "1"}, numbers_reset=True, reads=["f1"]), {"f1": "40"})
+    md.add(FakeSeries("f", "Reset Volumes", links={"al": "5"}, numbers_reset=True, reads=["f1"]), {"f1": "40"})
     return md.install(mock), al.install(mock)
 
 

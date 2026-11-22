@@ -81,6 +81,27 @@ def sent_aliases(fake):
     return out
 
 
+async def test_progress_cannot_go_down_on_a_shared_entry(fast, fake):
+    from mdal.sync.changes import build_items
+    from tests.factories import al_media_row, match, md_manga_row
+
+    repo = fast.repo
+    fake.add_media(al_media(1, "Shared"))
+    fake.add_list("Reading", [(100, 1, "CURRENT", 10)])
+    repo.upsert_media([al_media_row(1, "Shared")])
+    repo.replace_md_snapshot([md_manga_row("a", "Main upload"), md_manga_row("b", "Other upload")],
+                             {"a": ["a50"], "b": ["b30"]})
+    repo.upsert_chapters([{"chapter_id": c, "md_id": c[0], "chapter": c[1:], "volume": None, "missing": 0,
+                           "fetched_at": "x"} for c in ("a50", "b30")])
+    match(repo, "a", 1)
+    match(repo, "b", 1)
+    repo.replace_al_entries([{"entry_id": 100, "media_id": 1, "status": "CURRENT", "progress": 10, "fetched_at": "x"}])
+    run_id = repo.create_run("diffed")
+    repo.replace_items(run_id, build_items(repo, run_id))
+    await approve_all(fast, run_id)
+    assert [a["progress"] for a in sent_aliases(fake)] == [50]
+
+
 # ---- what is sent -------------------------------------------------------------
 
 

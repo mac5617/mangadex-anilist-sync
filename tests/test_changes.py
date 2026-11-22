@@ -14,6 +14,7 @@ from mdal.sync.changes import (
     build_items,
     dismiss,
     plan_estimate,
+    refresh_item,
     undismiss,
     write_plan,
 )
@@ -148,3 +149,73 @@ def test_approval_and_estimate_read_one_write_plan(repo, selection, writes, refu
 def test_the_page_opens_on_the_plan_of_what_it_ticked(repo):
     run_id = seed_diffed_run(repo)
     assert {w.md_id for w in write_plan(repo, run_id).writes} == {"w", "c", "s"}
+
+
+def shared_world(repo: Repo, read=(50, 30), site_progress: int = 10) -> None:
+    """Two MangaDex series, a and b, matched to one AniList entry."""
+    repo.replace_md_snapshot([md_manga_row("a", "Main upload", links={"mal": "77"}),
+                              md_manga_row("b", "Other upload", links={"mal": "77"})],
+                             {"a": [f"a{read[0]}"], "b": [f"b{read[1]}"]})
+    repo.upsert_chapters([{"chapter_id": f"{m}{n}", "md_id": m, "chapter": str(n), "volume": None, "missing": 0,
+                           "fetched_at": "x"} for m, n in zip("ab", read)])
+    repo.upsert_media([al_media_row(1, "Shared", id_mal=77)])
+    match(repo, "a", 1)
+    match(repo, "b", 1)
+    repo.replace_al_entries([{"entry_id": 101, "media_id": 1, "status": "CURRENT", "progress": site_progress,
+                              "fetched_at": "x"}])
+    repo.replace_mal_entries([{"mal_id": 77, "status": "CURRENT", "progress": site_progress, "fetched_at": "x"}])
+
+
+@pytest.mark.parametrize("target", ["anilist", "mal"])
+@pytest.mark.parametrize("read, kept, held", [((50, 30), "a", "b"), ((30, 50), "b", "a"), ((40, 40), "a", "b")])
+def test_a_shared_entry_gets_the_highest_change(repo, target, read, kept, held):
+    shared_world(repo, read)
+    items = {i["md_id"]: i for i in build_items(repo, 1, target=target)}
+    assert items[kept]["action"] == "write"
+    assert items[held]["action"] == "skip" and items[held]["reason"].startswith("same entry as ")
+    assert items[held]["flag_kind"] is None
+
+
+def test_a_flag_on_the_highest_holds_the_shared_entry(repo):
+    shared_world(repo, (400, 30))
+    items = {i["md_id"]: i for i in build_items(repo, 1)}
+    assert (items["a"]["action"], items["a"]["flag_kind"]) == ("flag", "implausible")
+    assert items["b"]["action"] == "skip"
+
+
+def test_dismissing_the_highest_sends_nothing_lower_until_shown_again(repo):
+    shared_world(repo, (400, 30))
+    run_id = repo.create_run("diffed")
+    repo.replace_items(run_id, build_items(repo, run_id))
+    run = repo.get_run(run_id)
+    dismiss(repo, run, repo.item(run_id, "a"))
+    refresh_item(repo, "a")
+    assert {i["md_id"]: i["action"] for i in repo.items(run_id)} == {"a": "skip", "b": "skip"}
+    undismiss(repo, run, repo.item(run_id, "a"))
+    assert repo.item(run_id, "a")["action"] == "flag" and repo.item(run_id, "b")["action"] == "skip"
+
+
+def test_a_new_match_refreshes_every_change_on_the_entry(repo):
+    shared_world(repo, (30, 50))
+    match(repo, "b", None, "unmatched")
+    run_id = repo.create_run("diffed")
+    repo.replace_items(run_id, build_items(repo, run_id))
+    assert repo.item(run_id, "a")["action"] == "write"
+    match(repo, "b", 1)
+    refresh_item(repo, "b")
+    assert (repo.item(run_id, "a")["action"], repo.item(run_id, "b")["action"]) == ("skip", "write")
+    match(repo, "b", None, "unmatched")
+    refresh_item(repo, "b")
+    assert repo.item(run_id, "a")["action"] == "write"                  # the other series goes out again
+
+
+def test_the_write_plan_never_sends_two_changes_to_one_entry(repo):
+    shared_world(repo)
+    run_id = repo.create_run("diffed")
+    both = [{"run_id": run_id, "md_id": m, "al_media_id": 1, "site_entry_id": 101, "site_progress": 10,
+             "md_progress": p, "action": "write", "reason": "r"} for m, p in (("a", 30), ("b", 50))]
+    repo.replace_items(run_id, both)                                     # a stale row from before the rule
+    plan = write_plan(repo, run_id, Selection.of(["a", "b"]))
+    assert [w.md_id for w in plan.writes] == ["b"] and "same list entry" in plan.refusal
+    with pytest.raises(ApprovalError, match="same list entry"):
+        approved_plan(repo, run_id, Selection.of(["a", "b"]))

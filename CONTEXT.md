@@ -26,6 +26,10 @@ _Avoid_: list item, row
 Your rating of a series, out of 10 with one decimal. Each site stores it on its own scale; that is the site's concern, not yours.
 _Avoid_: points, rating (a rating is MangaDex's 1–10 vote)
 
+**Score offer**:
+Your MangaDex rating, proposed for an entry the site hasn't scored.
+_Avoid_: score suggestion, imported score
+
 **List edit**:
 A change you make to your list outside a Sync: an add, a status, a score or notes.
 _Avoid_: write (that is a Sync write), update
@@ -55,6 +59,10 @@ _Avoid_: locked, running (for the two-site gap)
 **Change**:
 One series' proposed update for one site in a Sync.
 _Avoid_: diff row, sync item, run item
+
+**Shared entry**:
+One site entry that two or more MangaDex series are matched to. It gets one Change.
+_Avoid_: duplicate
 
 **Flag**:
 A Change held back for you to look at, because it looks wrong or can't be written.

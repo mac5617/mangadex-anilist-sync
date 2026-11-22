@@ -123,8 +123,13 @@ def _refusal(item: Any, md_id: str, selection: Selection) -> str | None:
     return None
 
 
-def plan_items(items: Iterable[Any], selection: Selection) -> WritePlan:
-    """The Write plan for a Selection over a run's items."""
+def _entry_of(item: Any, target: str) -> int | None:
+    """Which site entry a Change is for: its MyAnimeList id, or its AniList media."""
+    return item["mal_id"] if target == "mal" else item["al_media_id"]
+
+
+def plan_items(items: Iterable[Any], selection: Selection, target: str = "anilist") -> WritePlan:
+    """The Write plan for a Selection over a run's items. It never holds two writes to one site entry."""
     by_id = {i["md_id"]: i for i in items}
     writes: list[PlannedWrite] = []
     refusal: str | None = None
@@ -139,7 +144,18 @@ def plan_items(items: Iterable[Any], selection: Selection) -> WritePlan:
         if _sends_nothing(item, completes, scored):
             continue
         writes.append(PlannedWrite(md_id, completes, scored))
-    return WritePlan(tuple(writes), refusal)
+    highest: dict[int, PlannedWrite] = {}
+    for w in writes:
+        entry = _entry_of(by_id[w.md_id], target)
+        if entry is None:
+            continue
+        kept = highest.get(entry)
+        if kept is not None:
+            refusal = refusal or "Two selected rows write to the same list entry. Tick only one of them."
+        if kept is None or (by_id[w.md_id]["md_progress"] or 0) > (by_id[kept.md_id]["md_progress"] or 0):
+            highest[entry] = w
+    kept_writes = {w.md_id for w in highest.values()}
+    return WritePlan(tuple(w for w in writes if w.md_id in kept_writes or _entry_of(by_id[w.md_id], target) is None), refusal)
 
 
 def preselection(items: Iterable[Any]) -> Selection:
@@ -153,7 +169,7 @@ def preselection(items: Iterable[Any]) -> Selection:
 def write_plan(repo: Repo, run_id: int, selection: Selection | None = None) -> WritePlan:
     """The Write plan for a run: for `selection`, or for what the page starts with ticked."""
     items = repo.items(run_id)
-    return plan_items(items, preselection(items) if selection is None else selection)
+    return plan_items(items, preselection(items) if selection is None else selection, repo.get_run(run_id)["target"])
 
 
 def approved_plan(repo: Repo, run_id: int, selection: Selection, allow_empty: bool = False) -> WritePlan:
@@ -272,7 +288,7 @@ def build_items(repo: Repo, run_id: int, md_ids: set[str] | None = None, target:
     mapped_ids = [m["al_media_id"] for m in mappings.values() if m["al_media_id"] is not None]
     media = repo.media(mapped_ids)
     if target == "mal":
-        return _build_mal_items(repo, run_id, rows, mappings, media, dismissed, jump_limit)
+        return _one_per_entry(_build_mal_items(repo, run_id, rows, mappings, media, dismissed, jump_limit), rows, target)
     entries = repo.al_entries()
     mal_scores = {mal_id: e["score"] for mal_id, e in repo.mal_entries().items()}
     items: list[dict[str, Any]] = []
@@ -293,7 +309,31 @@ def build_items(repo: Repo, run_id: int, md_ids: set[str] | None = None, target:
         mal_score = mal_scores.get(media_row["id_mal"]) if media_row and media_row["id_mal"] else None
         score = score_from_md(row["rating"], entry_row["score"] if entry_row else None, (mal_score or 0) * 10)
         items.append(_with_score(item, score, "AniList"))
-    return items
+    return _one_per_entry(items, rows, target)
+
+
+def _one_per_entry(items: list[dict[str, Any]], rows: list[Any], target: str) -> list[dict[str, Any]]:
+    """A Shared entry gets one Change: the highest progress, with its own rules and Flags (a dismissed one still
+    counts, so nothing lower goes out in its place). The others are skipped, so progress can't go down."""
+    key = "mal_id" if target == "mal" else "al_media_id"
+    shared: dict[int, list[dict[str, Any]]] = {}
+    for item in items:
+        if item.get(key) is not None and "md_progress" in item:
+            shared.setdefault(item[key], []).append(item)
+    titles = {r["md_id"]: r["title"] for r in rows}
+    held: dict[str, dict[str, Any]] = {}
+    for group in shared.values():
+        if len(group) < 2:
+            continue
+        kept = min(group, key=lambda i: (-(i["md_progress"] if i["md_progress"] is not None else -1), i["md_id"]))
+        for item in group:
+            if item is not kept:
+                held[item["md_id"]] = {
+                    **item, "action": "skip", "reason": f"same entry as {titles.get(kept['md_id']) or kept['md_id']}",
+                    "flag_kind": None, "hint": None, "set_status": None, "status_source": None, "status_approved": 0,
+                    "set_score": None, "score_approved": 0,
+                }
+    return [held.get(i["md_id"], i) for i in items]
 
 
 def _build_mal_items(
@@ -351,13 +391,19 @@ def refresh_item(repo: Repo, md_id: str) -> bool:
 
 
 def _rebuild(repo: Repo, run_id: int, md_id: str, target: str) -> bool:
-    """Recompute one Change from stored data. False when the series has left the library (the row stays)."""
-    items = build_items(repo, run_id, {md_id}, target)
+    """Recompute one Change from stored data, with every Change on the entry it was or now is for: which of them
+    goes out may have changed. False when the series has left the library (its row stays)."""
+    key = "mal_id" if target == "mal" else "al_media_id"
+    stored = repo.items(run_id)
+    was = next((i[key] for i in stored if i["md_id"] == md_id), None)
+    now = next((i.get(key) for i in build_items(repo, run_id, {md_id}, target)), None)
+    entries = {e for e in (was, now) if e is not None}
+    items = build_items(repo, run_id, {md_id} | {i["md_id"] for i in stored if i[key] in entries}, target)
     for item in items:
         with repo.conn:
-            repo.conn.execute("DELETE FROM sync_item WHERE run_id=? AND md_id=?", (run_id, md_id))
+            repo.conn.execute("DELETE FROM sync_item WHERE run_id=? AND md_id=?", (run_id, item["md_id"]))
         repo.upsert_item(item)
-    return bool(items)
+    return any(i["md_id"] == md_id for i in items)
 
 
 def dismiss(repo: Repo, run: Any, item: Any) -> None:
