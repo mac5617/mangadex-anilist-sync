@@ -8,7 +8,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
-from mdal.sync.orchestrator import SITE_NAMES
+from mdal.sync.changes import SITE_NAMES
 from mdal.web.app import get_services, render
 from mdal.web.routes.sync import diff_rows
 

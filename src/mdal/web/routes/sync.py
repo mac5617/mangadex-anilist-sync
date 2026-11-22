@@ -42,6 +42,7 @@ from mdal.sync.orchestrator import (
 )
 from mdal.sync.rules import completion_label
 from mdal.sync.runs import ACTIVE_STATES, SyncStateError
+from mdal.sync.sites import md_snapshot_fresh
 from mdal.web.app import clock, get_services, md_cover_url, render, templates
 
 router = APIRouter()
@@ -73,7 +74,7 @@ def status_context(svc: Services, message: str | None = None) -> dict[str, Any]:
         "resumable": svc.orchestrator.resumable_run(),
         "open_diffs": [(SITE_NAMES[t], d["run_id"]) for t in TARGETS if (d := open_diff(svc.repo, t))],
         "mal_connected": svc.mal.connected,
-        "md_fresh": svc.orchestrator.md_snapshot_fresh(),
+        "md_fresh": md_snapshot_fresh(svc.repo),
         "sync_sites": [SITE_NAMES[t] for t in svc.orchestrator.sync_targets()],
         "queued": [SITE_NAMES[t] for t in svc.orchestrator.queued],
     }

@@ -382,6 +382,26 @@ def seed_diffed_run(repo, *, evil_title: str = "<script>alert(1)</script> Evil")
     return run_id
 
 
+class FakeSite:
+    """Stands in for a SyncSite: its Phases are whatever the test passes."""
+
+    def __init__(self, target: str, read=None, write=None) -> None:
+        self.target, self._read, self._write = target, read, write
+
+    def reads_mangadex(self) -> bool:
+        return False
+
+    async def read(self, run_id: int) -> None:
+        await self._read(run_id)
+
+    async def write(self, run_id: int) -> None:
+        await self._write(run_id)
+
+
+def fake_sites(read=None, write=None) -> dict:
+    return {t: FakeSite(t, read, write) for t in ("anilist", "mal")}
+
+
 # ---- MyAnimeList -------------------------------------------------------------
 
 @dataclass

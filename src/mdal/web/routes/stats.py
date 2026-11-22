@@ -28,7 +28,7 @@ from mdal.stats import (
     sync_stats,
 )
 from mdal.stats_graph import focus_graph, theme_graph
-from mdal.sync.orchestrator import SITE_NAMES
+from mdal.sync.changes import SITE_NAMES
 from mdal.sync.rules import STATUS_LABELS
 from mdal.web.app import get_services, graph_json, md_cover_url, render
 

@@ -22,7 +22,7 @@ from mdal.config import Settings
 from mdal.sync.changes import mal_target
 from mdal.sync.orchestrator import SyncStateError
 from mdal.web.app import create_app
-from tests.factories import FakeAniList, FakeMal, FakeMangaDex, FakeSeries, al_media, connect_mal
+from tests.factories import FakeAniList, FakeMal, FakeMangaDex, FakeSeries, al_media, connect_mal, fake_sites
 
 
 @pytest.fixture
@@ -391,8 +391,7 @@ async def test_sync_covers_both_sites_one_after_the_other(services, monkeypatch)
         order.append(services.repo.get_run(run_id)["target"])
         services.repo.update_run(run_id, state="diffed")
 
-    monkeypatch.setattr(orch, "_dry_run", fake_dry_run)
-    monkeypatch.setattr(orch, "md_snapshot_fresh", lambda: True)
+    monkeypatch.setattr(orch, "sites", fake_sites(read=fake_dry_run))
     await orch.start_sync()
     for _ in range(50):
         await asyncio.sleep(0)
@@ -411,7 +410,7 @@ async def test_sync_covers_both_sites_one_after_the_other(services, monkeypatch)
         order.append("failed " + services.repo.get_run(run_id)["target"])
         raise RuntimeError("boom")
 
-    monkeypatch.setattr(orch, "_dry_run", failing)
+    monkeypatch.setattr(orch, "sites", fake_sites(read=failing))
     await orch.start_sync(["anilist", "mal"])
     await orch.wait()
     for _ in range(20):

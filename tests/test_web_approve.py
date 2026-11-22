@@ -3,7 +3,7 @@ import respx
 from fastapi.testclient import TestClient
 
 from mdal.web.app import create_app
-from tests.factories import FakeAniList, al_media, seed_diffed_run
+from tests.factories import FakeAniList, al_media, fake_sites, seed_diffed_run
 
 
 @pytest.fixture
@@ -109,7 +109,7 @@ def test_both_sites_on_one_page_and_one_approval(client, services, run_id):
         written.append(rid)
         services.repo.update_run(rid, state="done", finished_at="t")
 
-    services.orchestrator._write_phase = fake_write
+    services.orchestrator.sites = fake_sites(write=fake_write)
     page = client.get(f"/sync/{m}").text
     assert "Changes to approve" in page and "Write selected to AniList and MyAnimeList" in page
     assert f'value="{run_id}:w"' in page and f'value="{m}:w"' in page        # the same series, once per site
@@ -134,7 +134,7 @@ def test_a_site_with_nothing_ticked_is_closed(client, services, run_id):
         written.append(rid)
         services.repo.update_run(rid, state="done", finished_at="t")
 
-    services.orchestrator._write_phase = fake_write
+    services.orchestrator.sites = fake_sites(write=fake_write)
     assert client.post(f"/sync/{run_id}/approve", data={"runs": [run_id, m], "sel": [f"{m}:w"]}).status_code == 303
     for _ in range(50):
         if written:
@@ -156,7 +156,7 @@ def test_changes_that_arrive_after_the_page_loaded_are_left_waiting(client, serv
         written.append(rid)
         services.repo.update_run(rid, state="done", finished_at="t")
 
-    services.orchestrator._write_phase = fake_write
+    services.orchestrator.sites = fake_sites(write=fake_write)
     page = client.get(f"/sync/{run_id}").text
     assert f'name="runs" value="{run_id}"' in page
     m = mal_run(services)                                           # arrives while the page is open

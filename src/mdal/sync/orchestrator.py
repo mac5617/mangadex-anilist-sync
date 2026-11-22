@@ -7,8 +7,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import time
-from datetime import datetime
 from collections.abc import Awaitable, Callable, Iterable
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -24,22 +22,16 @@ from mdal.clients.mangadex import (
 )
 from mdal.clients.myanimelist import MalAuthError, MalRateLimited, MalUnavailable
 from mdal.db.repo import Repo, now_iso
-from mdal.fetch.anilist_list import fetch_list, fetch_staff, viewer
-from mdal.fetch.mal_list import fetch_mal_list
-from mdal.fetch.mangadex_library import fetch_library
-from mdal.matching.pipeline import AniListFetch, resolve_all
+from mdal.fetch.anilist_list import viewer
 from mdal.sync.changes import (
-    SITE_NAMES,
     TARGETS,
     ApprovalError,
     Selection,
     WritePlan,
     approved_plan,
-    build_items,
 )
-from mdal.sync.mal_writer import MalWriter
 from mdal.sync.runs import Runs, SyncStateError
-from mdal.sync.writer import Writer
+from mdal.sync.sites import sync_sites
 
 if TYPE_CHECKING:
     from mdal.services import Services
@@ -48,9 +40,6 @@ log = logging.getLogger(__name__)
 
 HALTING = (MangaDexBlocked, MangaDexRateLimited, MangaDexUnreachable, MangaDexCoolingDown,
            AniListUnavailable, AniListRateLimited, MalRateLimited, MalUnavailable)
-MD_REUSE_SECONDS = 600  # a MyAnimeList sync reuses a MangaDex read this recent instead of reading again
-
-STAFF_REQUESTS_PER_SYNC = 20  # 25 series each; about 1 minute of AniList pacing
 
 
 class SyncAlreadyRunning(Exception):
@@ -105,6 +94,7 @@ class SyncOrchestrator:
     def __init__(self, services: Services) -> None:
         self.services = services
         self.runs = Runs(services.repo)
+        self.sites = sync_sites(services, self.runs, self.user_id)
         self.lock = asyncio.Lock()
         self.task: asyncio.Task[None] | None = None
         self.queued: list[str] = []      # sites still to sync after the current one (Sync covers both)
@@ -134,7 +124,7 @@ class SyncOrchestrator:
             raise SyncAlreadyRunning("a sync is already running")
         if target == "mal" and not self.services.mal.connected:
             raise SyncStateError("Connect MyAnimeList in Settings first.")
-        if not (target == "mal" and self.md_snapshot_fresh()):
+        if self.sites[target].reads_mangadex():
             try:
                 self.services.mangadex.check_cooldown()
             except MangaDexCoolingDown as exc:
@@ -145,7 +135,7 @@ class SyncOrchestrator:
         except BaseException:
             self.lock.release()
             raise
-        self.task = self._watch(asyncio.create_task(self._guarded(run_id, self._dry_run)))
+        self.task = self._watch(asyncio.create_task(self._guarded(run_id, self._read)))
         return run_id
 
     def sync_targets(self) -> list[str]:
@@ -231,7 +221,7 @@ class SyncOrchestrator:
         """Write approved sites in turn under one lock; one site failing doesn't stop the next."""
         try:
             for run_id in run_ids:
-                await self._run_body(run_id, self._write_phase)
+                await self._run_body(run_id, self._write)
         finally:
             self.lock.release()
 
@@ -242,7 +232,7 @@ class SyncOrchestrator:
             raise SyncStateError("this sync cannot be resumed")
         await self.lock.acquire()
         self.runs.mark_resuming(run_id)
-        self.task = self._watch(asyncio.create_task(self._guarded(run_id, self._write_phase)))
+        self.task = self._watch(asyncio.create_task(self._guarded(run_id, self._write)))
 
     def resumable_run(self) -> int | None:
         """The Run a Resume would continue. None while something is running."""
@@ -286,16 +276,10 @@ class SyncOrchestrator:
             self.lock.release()
             # Sync covering both sites: once this site's changes are ready, read the next one's.
             if self.queued:
-                if body == self._dry_run and self.repo.get_run(run_id)["state"] == "diffed":
+                if body == self._read and self.repo.get_run(run_id)["state"] == "diffed":
                     asyncio.create_task(self._start_queued(asyncio.current_task()))
                 else:
                     self.queued = []
-
-    def _phase(self, run_id: int, state: str | None = None, detail: str | None = None) -> None:
-        fields: dict[str, Any] = {"phase_detail": detail}
-        if state:
-            fields["state"] = state
-        self.repo.update_run(run_id, **fields)
 
     async def user_id(self) -> int:
         user_id = self.repo.get_setting("anilist_user_id")
@@ -306,103 +290,8 @@ class SyncOrchestrator:
             user_id = v["id"]
         return int(user_id)
 
-    async def _write_phase(self, run_id: int) -> None:
-        repo = self.repo
-        target = repo.get_run(run_id)["target"]
+    async def _read(self, run_id: int) -> None:
+        await self.sites[self.repo.get_run(run_id)["target"]].read(run_id)
 
-        def say(msg: str) -> None:
-            self._phase(run_id, detail=msg)
-
-        writer = (MalWriter(repo, self.services.mal, say) if target == "mal"
-                  else Writer(repo, self.services.anilist, self.user_id, say))
-        site = SITE_NAMES[target]
-        self._phase(run_id, "writing", f"re-reading {site}")
-        await writer.write(run_id)
-        self._phase(run_id, "verifying", f"verifying on {site}")
-        notes = await writer.verify(run_id)
-        counts = {s: len(repo.items_in_state(run_id, s)) for s in ("done", "failed", "dropped", "pending")}
-        if counts["done"] and not repo.get_setting("first_write_done"):
-            repo.set_setting("first_write_done", True)
-        detail = f"{counts['done']} written, {counts['failed']} failed, {counts['dropped']} dropped"
-        if notes:
-            detail += f"; {len(notes)} need a look: " + " | ".join(notes[:5])
-        repo.update_run(run_id, state="done", phase_detail=detail, finished_at=now_iso())
-        if target == "mal" and counts["done"]:
-            self.services.ranker.start_save()   # series just added to MyAnimeList get the scores you set in Shiori
-
-    def md_snapshot_fresh(self) -> bool:
-        """Whether the last MangaDex read is recent enough for a MyAnimeList sync to reuse."""
-        row = self.repo.conn.execute("SELECT MIN(fetched_at) FROM md_manga").fetchone()
-        if not row or not row[0]:
-            return False
-        try:
-            age = time.time() - datetime.fromisoformat(row[0]).timestamp()
-        except ValueError:
-            return False
-        return 0 <= age < MD_REUSE_SECONDS
-
-    async def _dry_run(self, run_id: int) -> None:
-        if self.repo.get_run(run_id)["target"] == "mal":
-            await self._mal_dry_run(run_id)
-        else:
-            await self._anilist_dry_run(run_id)
-
-    async def _mal_dry_run(self, run_id: int) -> None:
-        s, repo = self.services, self.repo
-        if self.md_snapshot_fresh():
-            series = len(repo.md_manga())
-            self._phase(run_id, "fetching", "using the MangaDex library read a few minutes ago")
-        else:
-            self._phase(run_id, "fetching", "reading MangaDex library")
-            series = (await fetch_library(s.mangadex, repo, lambda msg: self._phase(run_id, detail=msg))).series
-        self._phase(run_id, detail="reading your MyAnimeList list")
-        listed = await fetch_mal_list(s.mal, repo)
-
-        # New series are matched on AniList when it is connected (its idMal is the best MAL link);
-        # without AniList, MangaDex's own MAL links are used on their own.
-        newly = 0
-        if s.anilist_token():
-            self._phase(run_id, "resolving", f"matching {series} series")
-            match = await resolve_all(repo, AniListFetch(s.anilist, repo))
-            newly = match.auto + match.review + match.unmatched
-
-        self._phase(run_id, "diffing", "comparing progress")
-        items = build_items(repo, run_id, target="mal")
-        repo.replace_items(run_id, items)
-
-        linked = sum(1 for i in items if i["mal_id"] is not None)
-        detail = (
-            f"{series} series, {listed} MyAnimeList entries; {linked} linked to MyAnimeList"
-            + (f" ({newly} newly matched on AniList)" if newly else "")
-            + f"; {sum(i['action'] == 'write' for i in items)} to update, {sum(i['action'] == 'add' for i in items)} to add"
-        )
-        repo.update_run(run_id, state="diffed", phase_detail=detail)
-
-    async def _anilist_dry_run(self, run_id: int) -> None:
-        s, repo = self.services, self.repo
-
-        self._phase(run_id, "fetching", "reading MangaDex library")
-        md = await fetch_library(s.mangadex, repo, lambda msg: self._phase(run_id, detail=msg))
-        self._phase(run_id, detail="reading your AniList list")
-        al = await fetch_list(s.anilist, repo, await self.user_id())
-
-        # Staff for the stats page: a few lookups per sync until every list entry has it (cached for good).
-        await fetch_staff(s.anilist, repo, STAFF_REQUESTS_PER_SYNC, lambda msg: self._phase(run_id, detail=msg))
-
-        self._phase(run_id, "resolving", f"matching {md.series} series")
-        match = await resolve_all(repo, AniListFetch(s.anilist, repo))
-
-        self._phase(run_id, "diffing", "comparing progress")
-        items = build_items(repo, run_id)
-        repo.replace_items(run_id, items)
-
-        n_write = sum(1 for i in items if i["action"] == "write")
-        states = [m["state"] for m in repo.mappings().values()]
-        newly = match.auto + match.review + match.unmatched
-        detail = (
-            f"{md.series} series, {al.entries} AniList entries; "
-            f"{sum(s in ('auto', 'confirmed') for s in states)} matched ({newly} newly matched), "
-            f"{states.count('review')} to review, {states.count('unmatched')} unmatched; "
-            f"{n_write} to write"
-        )
-        repo.update_run(run_id, state="diffed", phase_detail=detail)
+    async def _write(self, run_id: int) -> None:
+        await self.sites[self.repo.get_run(run_id)["target"]].write(run_id)
