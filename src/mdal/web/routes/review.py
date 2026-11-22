@@ -51,11 +51,7 @@ def _card(repo: Repo, row: Any) -> dict[str, Any]:
 
 
 def _card_for(repo: Repo, md_id: str) -> dict[str, Any] | None:
-    row = repo.conn.execute(
-        "SELECT p.*, m.title, m.alt_titles, m.year, m.original_language, m.authors, m.cover_file "
-        "FROM mapping p JOIN md_manga m ON m.md_id = p.md_id WHERE p.md_id=?",
-        (md_id,),
-    ).fetchone()
+    row = repo.review_row(md_id)
     return _card(repo, row) if row else None
 
 

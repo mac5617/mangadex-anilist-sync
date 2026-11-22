@@ -327,9 +327,34 @@ class Repo:
             (run_id,),
         ).fetchall()
 
+    def review_row(self, md_id: str) -> sqlite3.Row | None:
+        """A series' mapping with the MangaDex details its review card shows."""
+        return self.conn.execute(
+            "SELECT p.*, m.title, m.alt_titles, m.year, m.original_language, m.authors, m.cover_file "
+            "FROM mapping p JOIN md_manga m ON m.md_id = p.md_id WHERE p.md_id=?",
+            (md_id,),
+        ).fetchone()
+
     def review_count(self) -> int:
         """Series waiting on a decision on Matches → To review: uncertain matches and ones with no match found."""
         return self.conn.execute("SELECT COUNT(*) FROM mapping WHERE state IN ('review','unmatched')").fetchone()[0]
+
+    def listed_media(self) -> list[sqlite3.Row]:
+        """Titles and covers of the series on your AniList list."""
+        return self.conn.execute(
+            "SELECT m.media_id, m.romaji, m.english, m.native, m.cover_url FROM al_entry e JOIN al_media m USING (media_id)"
+        ).fetchall()
+
+    def searchable_media(self) -> list[sqlite3.Row]:
+        return self.conn.execute(
+            "SELECT media_id, romaji, english, native, synonyms, cover_url, start_year, format FROM al_media"
+        ).fetchall()
+
+    def library_titles(self) -> list[sqlite3.Row]:
+        return self.conn.execute("SELECT md_id, title, alt_titles, cover_file, year FROM md_manga").fetchall()
+
+    def new_release_titles(self) -> list[sqlite3.Row]:
+        return self.conn.execute("SELECT md_id, title, alt_titles, cover_file, year FROM md_new").fetchall()
 
     # ---- recommendations -------------------------------------------------
     def replace_rec_candidates(self, rows: list[dict[str, Any]]) -> None:
@@ -337,6 +362,9 @@ class Repo:
             self.conn.execute("DELETE FROM rec_candidate")
             for row in rows:
                 _upsert(self.conn, "rec_candidate", row, ["media_id"])
+
+    def rec_candidate_ids(self) -> set[int]:
+        return {r[0] for r in self.conn.execute("SELECT media_id FROM rec_candidate")}
 
     def rec_candidates(self) -> list[sqlite3.Row]:
         """Candidates joined with their AniList media."""
@@ -377,6 +405,9 @@ class Repo:
                 else:
                     _upsert(self.conn, "md_new", row, ["md_id"])
         return [row["md_id"] for row in rows if row["md_id"] not in known]
+
+    def has_new_releases(self) -> bool:
+        return self.conn.execute("SELECT 1 FROM md_new LIMIT 1").fetchone() is not None
 
     def new_releases(self) -> list[sqlite3.Row]:
         return self.conn.execute("SELECT * FROM md_new").fetchall()
@@ -590,6 +621,9 @@ class Repo:
                         f"UPDATE sync_item SET {', '.join(f'{k}=?' for k in fields)} WHERE run_id=? AND md_id=?",
                         [*fields.values(), run_id, md_id],
                     )
+
+    def item(self, run_id: int, md_id: str) -> sqlite3.Row | None:
+        return self.conn.execute("SELECT * FROM sync_item WHERE run_id=? AND md_id=?", (run_id, md_id)).fetchone()
 
     def items(self, run_id: int) -> list[sqlite3.Row]:
         return self.conn.execute("SELECT * FROM sync_item WHERE run_id=? ORDER BY md_id", (run_id,)).fetchall()

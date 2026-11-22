@@ -142,6 +142,12 @@ def test_what_counts_as_matched_is_decided_once():
     assert offenders == []
 
 
+def test_pages_hold_no_sql():
+    offenders = [str(p.relative_to(ROOT)) for p in (SRC / "web").rglob("*.py")
+                 if re.search(r"\.conn\b", p.read_text(encoding="utf-8"))]
+    assert offenders == []
+
+
 def test_pages_edit_your_list_only_through_your_list():
     """Routes call YourList (mdal.lists); the site adapters behind it are its own business."""
     adapters = re.compile(r"^\s*(from|import)\s+mdal\.lists\.(anilist|myanimelist)\b", re.MULTILINE)

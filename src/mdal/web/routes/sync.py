@@ -301,7 +301,7 @@ def _open_item(repo: Repo, run_id: int, md_id: str) -> Any:
     run = _run_or_404(repo, run_id)
     if run["state"] != "diffed":
         raise HTTPException(409, "only a sync waiting for approval can be changed")
-    item = repo.conn.execute("SELECT * FROM sync_item WHERE run_id=? AND md_id=?", (run_id, md_id)).fetchone()
+    item = repo.item(run_id, md_id)
     if item is None:
         raise HTTPException(404, "no such row")
     return item

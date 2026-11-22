@@ -103,7 +103,7 @@ def status_context(request: Request) -> dict[str, Any]:
     return {"rs": status, "running": status.get("state") == "running" and rec.busy, "llm": llm,
             "llm_auto": svc.repo.get_setting("llm_auto"),
             "model": svc.repo.get_setting("ollama_model"),
-            "has_candidates": bool(svc.repo.conn.execute("SELECT 1 FROM rec_candidate LIMIT 1").fetchone()),
+            "has_candidates": bool(svc.repo.rec_candidate_ids()),
             "anilist": bool(svc.anilist_token())}
 
 
@@ -136,8 +136,7 @@ def rec_map(request: Request) -> HTMLResponse:
     profile, recs = svc.recommender.recs(_adult(request))
     top = ranked(recs, "overall", MAP_SIZE)
     series = {r["media_id"]: (titles.of(r), r["cover_url"])
-              for r in svc.repo.conn.execute(
-                  "SELECT m.media_id, m.romaji, m.english, m.native, m.cover_url FROM al_entry e JOIN al_media m USING (media_id)")}
+              for r in svc.repo.listed_media()}
     graph = build_graph(profile, top, series)
     return _page(request, "discover_map.html", {"graph": graph, "graph_json": graph_json(graph)})
 
@@ -325,7 +324,7 @@ def new_status_context(request: Request) -> dict[str, Any]:
             "new_llm": svc.repo.get_setting("new_llm") or {}, "model": svc.repo.get_setting("ollama_model"),
             "llm_auto": svc.repo.get_setting("llm_auto"),
             "embed_model": svc.repo.get_setting("embed_model"),
-            "has_new": bool(svc.repo.conn.execute("SELECT 1 FROM md_new LIMIT 1").fetchone()),
+            "has_new": svc.repo.has_new_releases(),
             "mangadex": bool(svc.settings.mangadex_username)}
 
 

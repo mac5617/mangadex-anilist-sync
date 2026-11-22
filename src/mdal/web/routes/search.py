@@ -33,9 +33,9 @@ def md_cover(md_id: str, file: str | None) -> str | None:
 def candidates(request: Request) -> list[Hit]:
     repo = get_services(request).repo
     entries = repo.al_entries()
-    recommended = {r[0] for r in repo.conn.execute("SELECT media_id FROM rec_candidate")}
+    recommended = repo.rec_candidate_ids()
     hits: list[Hit] = []
-    for m in repo.conn.execute("SELECT media_id, romaji, english, native, synonyms, cover_url, start_year, format FROM al_media"):
+    for m in repo.searchable_media():
         names = [n for n in (m["romaji"], m["english"], m["native"], *json.loads(m["synonyms"] or "[]")) if n]
         e = entries.get(m["media_id"])
         group = "On your list" if e else "Recommended" if m["media_id"] in recommended else "Seen elsewhere"
@@ -46,10 +46,9 @@ def candidates(request: Request) -> list[Hit]:
                         m["cover_url"], meta, group,
                         names=names))
     mapped = set(matched(repo))
-    for table, group in (("md_manga", "MangaDex library"), ("md_new", "New on MangaDex")):
-        for r in repo.conn.execute(f"SELECT md_id, title, alt_titles, cover_file, year FROM {table}"):
-            if table == "md_manga" and r["md_id"] in mapped:
-                continue          # it's on your list: found by its AniList titles
+    library = [r for r in repo.library_titles() if r["md_id"] not in mapped]   # the rest are found by AniList titles
+    for rows, group in ((library, "MangaDex library"), (repo.new_release_titles(), "New on MangaDex")):
+        for r in rows:
             hits.append(Hit(f"md:{r['md_id']}", r["title"], md_cover(r["md_id"], r["cover_file"]), str(r["year"] or ""),
                             group, names=[r["title"], *json.loads(r["alt_titles"] or "[]")]))
     return hits
