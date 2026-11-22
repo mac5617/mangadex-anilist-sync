@@ -122,6 +122,19 @@ def test_dismissals_only_through_changes():
     assert offenders == []
 
 
+def test_runs_start_only_in_runs_or_as_a_finished_list_add():
+    allowed = {SRC / "sync" / "runs.py", SRC / "lists" / "anilist.py", SRC / "db" / "repo.py"}
+    offenders = [str(p.relative_to(ROOT)) for p in python_files()
+                 if p not in allowed and ".create_run(" in p.read_text(encoding="utf-8")]
+    assert offenders == []
+
+
+def test_the_orchestrator_knows_no_writer():
+    """How a site reads and writes sits behind SyncSite (sync/sites.py)."""
+    text = (SRC / "sync" / "orchestrator.py").read_text(encoding="utf-8")
+    assert not re.search(r"mdal\.sync\.(mal_)?writer|mdal\.fetch\.(mal_list|mangadex_library)", text)
+
+
 def test_pages_edit_your_list_only_through_your_list():
     """Routes call YourList (mdal.lists); the site adapters behind it are its own business."""
     adapters = re.compile(r"^\s*(from|import)\s+mdal\.lists\.(anilist|myanimelist)\b", re.MULTILINE)

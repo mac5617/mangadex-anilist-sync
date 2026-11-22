@@ -39,7 +39,9 @@ src/mdal/
   sync/rules.py                  # pure progress rules -> DiffItem
   sync/estimate.py               # request count + duration
   sync/changes.py                # Changes: building, Dismissals, Selection -> Write plan and its estimate
-  sync/orchestrator.py           # state machine, run persistence
+  sync/runs.py                   # Runs: states, what can resume, restore or be discarded, restart recovery
+  sync/sites.py                  # SyncSite: each site's read and write Phases (AniList, MyAnimeList)
+  sync/orchestrator.py           # live coordination: Busy, the site queue, the background task
   sync/writer.py                 # batched aliased mutations, resume, verify
   sync/add_entry.py              # Unlisted rows and add proposals (FR-30)
   lists/__init__.py              # YourList: list edits outside syncs (adds, scores, statuses, notes), AniList then MyAnimeList
@@ -54,6 +56,8 @@ Dependency rules, enforced by a test that scans imports:
 - `web/*` calls `sync/*`, `matching/pipeline` and `db/repo`, never `clients/*` directly. The one exception is `web/routes/auth.py`, which uses `clients/anilist_oauth`.
 - `web/*` makes list edits through `YourList` (`mdal/lists`), never through the site adapters behind it.
 - Dismissals are made only through `sync/changes.py`.
+- Runs are created only by `sync/runs.py`, or as the finished record of a list add in `lists/anilist.py`.
+- `sync/orchestrator.py` doesn't know the writers or the list readers: they sit behind `SyncSite` (`sync/sites.py`).
 - Mutations live only in `sync/writer.py` and `lists/anilist.py`; MyAnimeList writes only in `sync/mal_writer.py` and `lists/myanimelist.py`.
 
 ## 3. Configuration
@@ -222,7 +226,7 @@ Input per series: read chapter strings; the AniList entry (or none); AniList med
 
 Mapping states `review`/`unmatched` produce skip rows with reason "awaiting match review" / "no match" so the diff is complete.
 
-## 9. Sync state machine (`sync/orchestrator.py`)
+## 9. Sync state machine (`sync/runs.py`, `sync/sites.py`, `sync/orchestrator.py`)
 ```
 idle → fetching → resolving → diffed(awaiting_approval) → writing → verifying → done
 any active state ──error──→ failed (resumable if it failed in writing)
@@ -230,6 +234,9 @@ any            ──MangaDexBlocked / AniListUnavailable──→ halted
 diffed ──user discards──→ cancelled
 ```
 - The `sync_run.state` change is committed before each phase starts. On startup, a run left in `fetching`/`resolving` is marked `failed`; these phases are cheap to redo, so starting a new sync is the recovery. A run left in `writing`/`verifying` gets a **Resume** button.
+- **Busy** is one check, covering the gap between sites: nothing starts, is approved, resumed or restored while busy. Start, approve and resume are also refused while a list edit is still saving.
+- A site a Sync covers that couldn't be read leaves a note on the dashboard and changes page until the next Sync.
+- A new Run **supersedes** the same site's open diff and unfinished write; what the old one still had to send comes back in the new Changes if it's still needed.
 - `diffed`: waits for the user. The estimate (§11) is the cost of the current Write plan, computed when the page asks; `est_requests` and `est_seconds` are no longer filled in.
 - Approve: marks the Write plan's items (`sync/changes.py`, the same plan the estimate reads) `approved=1, write_state='pending'`. Validation rejects `exceeds_total` items and enforces FR-9: while `first_write_done` is false, exactly one approved item is allowed.
 - **writing** (`sync/writer.py`):
@@ -241,9 +248,9 @@ diffed ──user discards──→ cancelled
   3. On success, mark each aliased item `done` + `written_at` in **one transaction per batch**, committed immediately.
   4. Per-alias errors (partial data): affected items are marked `failed` with the message; the others are `done`.
   5. `AniListComplexityError` → halve the batch size (min 1), persist it, retry the same items. Nothing was written, because the complexity check rejects the whole document.
-  6. Resume = run writing again. Only `pending` items are sent; `done` items are never re-sent.
+  6. Resume = run writing again, for every site that stopped partway, AniList first. Only `pending` items are sent; `done` items are never re-sent.
 - **verifying:** re-fetch the list (1 request). For each `done` item, compare progress (≠ written → `verify_note`) and status. The expected status is COMPLETED if we sent it, else `al_status_before`; anything else → `verify_note` "status changed by AniList: X→Y". Completion dates are reported if AniList set them itself (informational). On the first-ever write, success sets `first_write_done=true`, and the UI shows the status-change result prominently.
-- "Add to AniList" (FR-30) is not part of a run. The status dropdown defaults to Completed when the §8 completion check holds, else Reading. It is one `SaveMediaListEntry(mediaId, status, progress)` through the same client, recorded in history as a one-item run with `state='done'`. While `first_write_done` is false, it counts as the first write (FR-9).
+- "Add to AniList" (FR-30) is not part of a run. The status dropdown defaults to Completed when the §8 completion check holds, else Reading. It is one `SaveMediaListEntry(mediaId, status, progress)` through the same client, recorded in history once it is over, as a one-item run with `state='done'`, so it is never an in-progress run. While `first_write_done` is false, it counts as the first write (FR-9).
 - The diff page recomputes the estimate locally when checkboxes change (`POST /sync/{id}/estimate`, no API calls).
 
 ## 10. Error handling summary

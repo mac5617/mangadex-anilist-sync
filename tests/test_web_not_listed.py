@@ -42,20 +42,25 @@ def test_add_refusal_inline(client, fake):  # noqa: F811
     assert fake.call_count == 0
 
 
-def test_add_refused_while_sync_running(client, services, fake):  # noqa: F811
-    import asyncio
-
-    async def hold():
-        await services.orchestrator.lock.acquire()
-
-    client.portal.call(hold)
-    try:
-        response = client.post("/not-listed/rel/add", data={"status": "CURRENT", "progress": "7"})
-    finally:
-        client.portal.call(lambda: asyncio.sleep(0))
-        services.orchestrator.lock.release()
+def test_add_refused_while_sync_running(client, services, fake, monkeypatch):  # noqa: F811
+    monkeypatch.setattr(services.your_list, "busy", lambda: True)
+    response = client.post("/not-listed/rel/add", data={"status": "CURRENT", "progress": "7"})
     assert response.status_code == 409 and "Shiori is syncing; try again when it finishes." in response.text
     assert fake.call_count == 0
+
+
+def test_an_add_is_recorded_only_once_it_is_over(client, services, fake, monkeypatch):  # noqa: F811
+    real, active = services.anilist.graphql, []
+
+    async def watched(*args, **kwargs):
+        active.append(services.orchestrator.runs.active())
+        return await real(*args, **kwargs)
+
+    monkeypatch.setattr(services.anilist, "graphql", watched)
+    client.post("/not-listed/rel/add", data={"status": "CURRENT", "progress": "7"})
+    run = services.repo.latest_run()
+    assert active and not any(active)                   # never an in-progress Run, so a restart can't strand one
+    assert run["state"] == "done" and run["approved_at"] and run["req_anilist"] == len(active)
 
 
 def test_nav_points_here(client):

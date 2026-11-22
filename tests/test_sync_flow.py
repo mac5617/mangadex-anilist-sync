@@ -105,4 +105,4 @@ async def test_one_resume_continues_both_sites_anilist_first(services):
     assert orch.resumable_runs() == [anilist, mal]
     await orch.resume(mal)
     await orch.wait()
-    assert written == ["anilist", "mal"] and not orch.lock.locked()
+    assert written == ["anilist", "mal"] and not orch.busy()

@@ -4,7 +4,8 @@ import respx
 
 from mdal.clients.mangadex import API_URL
 from mdal.sync.changes import shown_reason
-from mdal.sync.orchestrator import SyncAlreadyRunning, SyncStateError
+from mdal.sync.orchestrator import SyncAlreadyRunning
+from mdal.sync.runs import SyncStateError
 from tests.factories import FakeAniList, FakeMangaDex, FakeSeries, al_media
 
 
@@ -101,7 +102,7 @@ async def test_unexpected_error_fails_run(fast, world, mock):
     run_id = await run(fast)
     r = fast.repo.get_run(run_id)
     assert r["state"] == "failed" and "HTTP 500" in r["error"]
-    assert not fast.orchestrator.lock.locked()
+    assert not fast.orchestrator.busy()
 
 
 async def test_viewer_is_cached(fast, world):
@@ -133,13 +134,6 @@ async def test_discard(fast, world):
     assert fast.repo.get_run(run_id)["state"] == "cancelled"
     with pytest.raises(SyncStateError):
         fast.orchestrator.runs.discard(run_id)
-
-
-async def test_status(fast, world):
-    run_id = await run(fast)
-    s = fast.orchestrator.status(run_id)
-    assert s.state == "diffed" and s.req_anilist > 0
-    assert fast.orchestrator.status(9999) is None
 
 
 async def test_new_sync_supersedes_older_diffed_run(fast, world):

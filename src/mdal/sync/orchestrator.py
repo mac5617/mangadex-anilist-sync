@@ -1,6 +1,6 @@
-"""Sync state machine (architecture §9): fetching → resolving → diffing → diffed → writing → verifying → done.
+"""A Sync's live coordination (architecture §9): Busy, the queue of sites, and the background task.
 
-A run syncs MangaDex to one target: AniList or MyAnimeList (`sync_run.target`).
+What a Run may do is sync/runs.py; how a site reads and writes is sync/sites.py.
 """
 
 from __future__ import annotations
@@ -9,7 +9,6 @@ import asyncio
 import logging
 from collections.abc import Awaitable, Callable, Iterable
 from contextlib import contextmanager
-from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from mdal.clients.anilist import AniListAuthError, AniListRateLimited, AniListUnavailable
@@ -49,16 +48,6 @@ class SyncAlreadyRunning(Exception):
 
 class SyncCoolingDown(Exception):
     """MangaDex cooldown active: a new sync would only knock again."""
-
-
-@dataclass(frozen=True)
-class RunStatus:
-    run_id: int
-    state: str
-    phase_detail: str | None
-    error: str | None
-    req_anilist: int
-    req_mangadex: int
 
 
 def halt_message(exc: Exception) -> str:
@@ -187,12 +176,6 @@ class SyncOrchestrator:
     async def wait(self) -> None:
         if self.task:
             await asyncio.shield(self.task)
-
-    def status(self, run_id: int) -> RunStatus | None:
-        r = self.repo.get_run(run_id)
-        if r is None:
-            return None
-        return RunStatus(r["run_id"], r["state"], r["phase_detail"], r["error"], r["req_anilist"], r["req_mangadex"])
 
     async def approve(
         self, run_id: int, selected: Iterable[str], completing: Iterable[str], overrides: Iterable[str],
