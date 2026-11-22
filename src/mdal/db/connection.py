@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import sqlite3
 import threading
@@ -11,6 +12,11 @@ from pathlib import Path
 from typing import Any
 
 _MIGRATION_NAME = re.compile(r"^(\d{3})_[\w-]+\.sql$")
+COPY_SUFFIX = ".before-migration"
+
+
+class MigrationCopyError(Exception):
+    """The safety copy couldn't be saved, so the database was left as it was. Shown to you as-is."""
 
 
 class Result:
@@ -105,8 +111,36 @@ def connect(path: Path | str) -> LockedConnection:
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.execute("PRAGMA busy_timeout=5000")
+    try:
+        _copy_before_migrating(conn, path)
+    except MigrationCopyError:
+        conn.close()
+        raise
     migrate(conn)
     return LockedConnection(conn)
+
+
+def _copy_before_migrating(conn: sqlite3.Connection, path: Path | str) -> None:
+    """Before a migration changes an existing database, keep one consistent copy beside it (the latest only).
+    It holds the same sign-in data as the database itself."""
+    current = schema_version(conn)
+    if current == 0 or str(path) == ":memory:" or not any(version > current for version, _ in _migrations()):
+        return
+    target = Path(f"{path}{COPY_SUFFIX}")
+    partial = Path(f"{target}.partial")
+    try:
+        partial.unlink(missing_ok=True)
+        copy = sqlite3.connect(partial)
+        try:
+            conn.backup(copy)
+        finally:
+            copy.close()
+        os.replace(partial, target)
+    except (OSError, sqlite3.Error) as exc:
+        partial.unlink(missing_ok=True)
+        raise MigrationCopyError(
+            f"Shiori couldn't save a copy of your database before updating it, so nothing was changed: {exc}"
+        ) from exc
 
 
 def _migrations() -> list[tuple[int, str]]:

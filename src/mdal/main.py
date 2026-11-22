@@ -6,6 +6,7 @@ import sys
 
 import uvicorn
 
+from mdal.db.connection import MigrationCopyError
 from mdal.logsetup import configure_logging
 from mdal.services import Services
 from mdal.web.app import create_app
@@ -33,7 +34,10 @@ def lower_priority() -> None:
 
 
 def run() -> None:
-    services = Services.from_env()
+    try:
+        services = Services.from_env()
+    except MigrationCopyError as exc:
+        sys.exit(str(exc))
     # Looked up on every record, so a token stored later (OAuth) is also masked.
     configure_logging(services.secret_values)
     lower_priority()
