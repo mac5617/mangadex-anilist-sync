@@ -6,6 +6,8 @@ Rules:
 - a score is a whole number 1-10, and one whose whole number didn't change isn't sent;
 - a status is one of MAL_STATUS's words (never rereading), and one the entry already has isn't sent;
 - notes go to the entry's comments;
+- an add is the reverse: one read first, and it goes ahead only when the series is not on your list,
+  so an existing entry is never overwritten;
 - every change is logged in list_edit with site 'mal', and the local copy follows what was saved;
 - a MyAnimeList error stops the rest of the edit: what wasn't tried fails with the same reason.
 """
@@ -15,7 +17,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from mdal.clients.myanimelist import MalClient, MalError
-from mdal.db.repo import Repo
+from mdal.db.repo import Repo, now_iso
 from mdal.recommend.ranking import to_anilist
 
 if TYPE_CHECKING:
@@ -123,6 +125,40 @@ class MalSite:
             result.failed[series] = problem
         else:
             result.saved.append(series)
+        return result
+
+    async def add(self, series: Series, status: str, progress: int) -> SiteResult:
+        """Add the series with this status and chapters read. On your list (as last read) is `unchanged`."""
+        from mdal.lists import SiteResult
+
+        if status not in MAL_STATUS:
+            raise ValueError(f"refusing to add with status {status!r}")
+        result = SiteResult(self.name)
+        if series.mal_id is None:
+            result.skipped[series] = series.mal_problem or "no MyAnimeList link"
+            return result
+        if self.entry(series) is not None:
+            result.unchanged.append(series)
+            return result
+        mal_id, word = series.mal_id, MAL_STATUS[status]
+        try:
+            entry = await self.client.my_list_status(mal_id)
+            if entry is not None:
+                result.failed[series] = (f"already on your MyAnimeList list ({entry.get('status')}, "
+                                         f"{entry.get('num_chapters_read', 0)} ch), so nothing was changed there")
+                return result
+            saved = await self.client.add_to_list(mal_id, chapters=progress, status=word)
+        except MalError as exc:
+            self.repo.log_edit(series.media_id, mal_id, "status", None, word, "failed", str(exc), site="mal")
+            result.failed[series] = f"MyAnimeList refused the add: {exc}"
+            return result
+        stored = next((code for code, w in MAL_STATUS.items() if w == saved.get("status")), status)
+        chapters = saved.get("num_chapters_read", progress)
+        self.repo.add_mal_entry({"mal_id": mal_id, "status": stored, "progress": chapters,
+                                 "score": saved.get("score") or None, "fetched_at": now_iso()})
+        self.repo.log_edit(series.media_id, mal_id, "status", None, word, "done", site="mal")
+        result.saved.append(series)
+        result.stored[series] = {"progress": chapters}
         return result
 
     async def _checked_edit(self, series: Series, field: str, new: Any, **send: Any) -> str | None:

@@ -380,6 +380,51 @@ async def test_myanimelist_notes_go_to_comments_after_reading_the_entry(world, m
     assert [c[0] for c in fake.calls] == ["GET", "PATCH", "GET"]       # nothing sent that would create it
 
 
+async def test_myanimelist_add_only_adds_what_is_not_listed(world, mal):
+    site, fake = mal({501})
+    lists, _ = make(world, MemorySite("AniList", {}), site)
+    s = lists.series(["md:c", "al:1", "al:2"])
+    world.replace_mal_entries([])                                  # as last read: nothing on the list
+    added = await site.add(s["md:c"], "COMPLETED", 28)
+    assert added.saved == [s["md:c"]] and added.stored[s["md:c"]] == {"progress": 28}
+    assert fake.calls == [("GET", 503), ("PATCH", 503, {"status": "completed", "num_chapters_read": "28"})]
+    entry = world.mal_entries()[503]
+    assert (entry["status"], entry["progress"]) == ("COMPLETED", 28)
+    listed = await site.add(s["al:1"], "PLANNING", 0)              # on the list after all: never overwritten
+    assert "already on your MyAnimeList list" in listed.failed[s["al:1"]]
+    assert "different" in (await site.add(s["al:2"], "CURRENT", 1)).skipped[s["al:2"]]
+    assert [c[0] for c in fake.calls] == ["GET", "PATCH", "GET"]
+    with pytest.raises(ValueError):
+        await site.add(s["md:c"], "REPEATING", 3)
+
+
+async def test_an_add_goes_to_both_sites_and_refreshes_open_diffs(world):
+    class Adds(MemorySite):
+        async def add(self, series, status, progress):
+            result = SiteResult(self.name)
+            if series.key in self.statuses:
+                result.unchanged.append(series)
+            else:
+                self.statuses[series.key] = status
+                result.saved.append(series)
+                result.stored[series] = {"status": status, "progress": progress}
+            return result
+
+    al, mal = Adds("AniList", {}), Adds("MyAnimeList", {})
+    lists, refreshed = make(world, al, mal)
+    edit = await lists.add("md:a", "CURRENT", 7)
+    assert edit.note == "Added to AniList as Reading, progress 7. Added to MyAnimeList too, progress 7."
+    assert refreshed == ["a"]
+    del mal.statuses["md:a"]                                       # on AniList already: MyAnimeList only
+    edit = await lists.add("md:a", "CURRENT", 7)
+    assert edit.note == "Added to MyAnimeList as Reading, progress 7."
+    lists, _ = make(world, al, mal, mirroring=False)
+    assert (await lists.add("md:a", "CURRENT", 7)).note == "Already on your AniList list."
+    lists, _ = make(world, al, mal, busy=True)
+    assert (await lists.add("md:b", "CURRENT", 1)).note == BUSY and "md:b" not in al.statuses
+    assert (await make(world, al, mal)[0].add("md:b", "REPEATING", 1)).refused
+
+
 # ---- the contract every site keeps -----------------------------------------------------------------
 @pytest.fixture(params=["memory", "anilist", "myanimelist"])
 def any_site(request, world):

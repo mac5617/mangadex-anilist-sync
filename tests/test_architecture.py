@@ -26,7 +26,7 @@ def test_only_clients_import_httpx():
     assert offenders == []
 
 
-MUTATION_MODULES = {SRC / "sync" / "writer.py", SRC / "sync" / "add_entry.py", SRC / "lists" / "anilist.py"}
+MUTATION_MODULES = {SRC / "sync" / "writer.py", SRC / "lists" / "anilist.py"}
 MUTATION = re.compile(r"SaveMediaListEntry|\bmutation\b")
 
 
@@ -35,7 +35,7 @@ def test_mutation_pattern_finds_any_graphql_mutation():
     assert not MUTATION.search("mutation_document(ops)")
 
 
-def test_mutations_only_in_writer_and_add_entry():
+def test_mutations_only_in_the_writer_and_the_anilist_adapter():
     offenders = [
         str(p.relative_to(ROOT))
         for p in python_files()
@@ -84,11 +84,6 @@ def test_mal_writer_status_literals():
     # "completed" for approved completions; "reading" only for brand-new entries.
     sent = set(re.findall(r'status\s*=\s*"(\w+)"', text))
     assert sent == {"reading", "completed"}
-    # A series-page add sends the status you picked (never rereading), and only after reading the entry.
-    from mdal.sync.mal_writer import MAL_ADD
-    assert set(MAL_ADD.values()) == {"reading", "completed", "on_hold", "dropped", "plan_to_read"}
-    add = text[text.index("async def add_by_hand"):text.index("def is_mal_add")]
-    assert add.index("my_list_status(") < add.index("add_to_list(") and "if entry is not None" in add
 
 
 def test_list_edit_status_literals():
@@ -96,7 +91,10 @@ def test_list_edit_status_literals():
     # Outside syncs, statuses are set by hand (Stalled, series pages): never Rereading.
     assert set(re.findall(r"\b(COMPLETED|CURRENT|PLANNING|PAUSED|DROPPED|REPEATING)\b", text)) == {
         "CURRENT", "COMPLETED", "PAUSED", "DROPPED", "PLANNING"}
-    assert "mediaId:" not in text   # entries are addressed by id only, so nothing can be created
+    # Edits address an entry by id, so they can't create one; only the add names a mediaId.
+    from mdal.lists.anilist import NOTES_DOCUMENT, add_document, score_document, status_document
+    assert "mediaId:" in add_document("CURRENT")
+    assert all("mediaId:" not in d for d in (NOTES_DOCUMENT, score_document(3), status_document("PAUSED")))
 
 
 def test_mal_comments_only_from_mal_writer():

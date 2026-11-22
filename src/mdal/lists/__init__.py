@@ -17,7 +17,7 @@ from typing import Any, Protocol
 
 from mdal.db.repo import Repo
 from mdal.clients.anilist import AniListError
-from mdal.lists.anilist import EDIT_STATUSES, NOTES_MAX
+from mdal.lists.anilist import ADD_STATUSES, EDIT_STATUSES, NOTES_MAX
 from mdal.sync.orchestrator import mal_target, refresh_item
 from mdal.sync.rules import STATUS_LABELS
 
@@ -83,6 +83,8 @@ class Site(Protocol):
     async def set_status(self, series: Series, status: str) -> SiteResult: ...
 
     async def set_notes(self, series: Series, notes: str) -> SiteResult: ...
+
+    async def add(self, series: Series, status: str, progress: int) -> SiteResult: ...
 
 
 class YourList:
@@ -156,6 +158,29 @@ class YourList:
         self._refresh(main.saved)
         edit = Edit("", sites=sites)
         edit.note = _status_note(edit, series, status)
+        return edit
+
+    def mirror_can_add(self, key: str) -> bool:
+        """Whether an add would also go to MyAnimeList: mirroring is on, the series has a MyAnimeList link,
+        and it isn't on your MyAnimeList list yet (as last read)."""
+        series = self.series([key])[key]
+        return bool(self.mirroring() and series.mal_id and self.mirror.entry(series) is None)
+
+    async def add(self, key: str, status: str, progress: int) -> Edit:
+        """Add a series to your list with this status (ADD_STATUSES) and chapters read: to AniList, and to
+        MyAnimeList while mirroring. A series already on AniList goes on to MyAnimeList only."""
+        if self.busy():
+            return Edit(BUSY, refused=True)
+        if status not in ADD_STATUSES:
+            return Edit(f"Unsupported status {status!r}.", refused=True)
+        series = self.series([key])[key]
+        main = await self.main.add(series, status, progress)
+        sites = [main]
+        if self.mirroring() and main.took():
+            sites.append(await self.mirror.add(series, status, progress))
+        edit = Edit("", sites=sites)
+        self._refresh([series] if any(s.saved for s in sites) else [])
+        edit.note = _add_note(edit, series, status, progress)
         return edit
 
     async def read_notes(self, key: str) -> str | None:
@@ -255,3 +280,26 @@ def _status_note(edit: Edit, series: Series, status: str) -> str:
     if mirror and mirror.failed:
         return f"{note}; MyAnimeList: {mirror.failed[series]}."
     return f"{note} and MyAnimeList." if mal_saved else f"{note}."
+
+
+def _add_note(edit: Edit, series: Series, status: str, progress: int) -> str:
+    label = STATUS_LABELS[status]
+    main, mirror = edit.sites[0], edit.site("MyAnimeList")
+    if main.failed:
+        return main.failed[series]
+    mal_progress = (mirror.stored.get(series) or {}).get("progress", progress) if mirror else progress
+    if main.saved:
+        stored = main.stored[series]
+        note = f"Added to AniList as {STATUS_LABELS.get(stored['status'], stored['status'])}, progress {stored['progress']}"
+        if stored["progress"] != progress:
+            note += f" (AniList filled in its total; you entered {progress})"
+        if mirror and mirror.failed:
+            return f"{note}. MyAnimeList: {mirror.failed[series]}."
+        if mirror and mirror.saved:
+            return f"{note}. Added to MyAnimeList too, progress {mal_progress}."
+        return f"{note}."
+    if mirror and mirror.saved:
+        return f"Added to MyAnimeList as {label}, progress {mal_progress}."
+    if mirror and mirror.failed:
+        return f"MyAnimeList: {mirror.failed[series]}."
+    return "Already on your AniList list."

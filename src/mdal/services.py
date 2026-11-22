@@ -94,7 +94,8 @@ class Services:
         self.mangaupdates_queue = PacedQueue(1.0 / repo.get_setting("mangaupdates_rps"))
         self.mangaupdates = MangaUpdatesClient(self.mangaupdates_queue)
         self.orchestrator = SyncOrchestrator(self)
-        self.your_list = YourList(repo, AniListSite(repo, self.anilist, lambda: repo.get_setting("anilist_write_batch")),
+        self.your_list = YourList(repo, AniListSite(repo, self.anilist, lambda: repo.get_setting("anilist_write_batch"),
+                                                          self.orchestrator.user_id),
                                   MalSite(repo, self.mal), busy=self.orchestrator.busy, mirroring=self.mirror_to_mal)
         self.recommender = Recommender(self)
         self.releases = NewReleases(self)

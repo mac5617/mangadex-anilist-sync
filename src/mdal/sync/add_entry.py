@@ -1,7 +1,5 @@
-""""Add to AniList" for matched series that are not on the user's list (story 17, FR-30).
-
-The only code path that creates list entries, and only on an explicit per-item click.
-One SaveMediaListEntry(mediaId, status, progress) per add; recorded as a one-item run.
+"""Matched series that are not on your list (story 17, FR-30): the rows and proposals the Unlisted page and
+series pages offer to add. The add itself is YourList.add (mdal/lists), on an explicit per-item click.
 """
 
 from __future__ import annotations
@@ -9,20 +7,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from collections.abc import Awaitable, Callable
-
 from mdal import titles
-from mdal.clients.anilist import AniListClient, AniListGraphQLError
-from mdal.db.repo import Repo, now_iso
-from mdal.fetch.anilist_list import fetch_list
-from mdal.sync.rules import STATUS_LABELS, AlMediaInfo, MdInfo, completion_default, evaluate
-
-# Offered statuses, in dropdown order. The value is inserted as an enum literal only after this whitelist check.
-ADD_STATUSES = ("CURRENT", "PLANNING", "PAUSED", "COMPLETED", "DROPPED")
-
-
-class AddEntryError(Exception):
-    """Shown to the user as-is."""
+from mdal.db.repo import Repo
+from mdal.lists.anilist import ADD_STATUSES  # noqa: F401  (the statuses these rows offer)
+from mdal.sync.rules import AlMediaInfo, MdInfo, completion_default, evaluate
 
 
 @dataclass(frozen=True)
@@ -93,76 +81,3 @@ def _row(repo: Repo, m: Any, md: Any, al: Any) -> NotListedRow:
         default_status="COMPLETED" if completion_default(al_info, md_info, progress) else "CURRENT",
         unresolved=d.unresolved,
     )
-
-
-def add_document(status: str) -> str:
-    if status not in ADD_STATUSES:
-        raise AddEntryError(f"Unsupported status {status!r}.")
-    return (
-        f"mutation ($m: Int, $p: Int) {{ SaveMediaListEntry(mediaId: $m, status: {status}, progress: $p) "
-        "{ id mediaId progress status } }"
-    )
-
-
-async def add(
-    repo: Repo, client: AniListClient, md_id: str, status: str, progress: int, user_id: Callable[[], Awaitable[int]]
-) -> dict[str, Any]:
-    """Create the entry. Raises AddEntryError for refusals.
-
-    The list is re-read first (1 request): saving by mediaId when the series is already on the list would
-    *update* that entry, and could turn Completed into Reading or lower its progress.
-    """
-    mapping = repo.get_mapping(md_id)
-    if mapping is None or mapping["state"] not in ("auto", "confirmed") or mapping["al_media_id"] is None:
-        raise AddEntryError("This series has no confirmed AniList match.")
-    media_id = mapping["al_media_id"]
-    if media_id in repo.al_entries():
-        raise AddEntryError("Already on your list.")
-    if progress < 0:
-        raise AddEntryError("Progress cannot be negative.")
-    media = repo.media([media_id]).get(media_id)
-    if media is not None and media["chapters"] is not None and progress > media["chapters"]:
-        raise AddEntryError(f"Progress {progress} exceeds AniList's total of {media['chapters']} chapters.")
-    query = add_document(status)
-
-    run_id = repo.create_run("writing")
-    repo.update_run(run_id, approved_at=now_iso(), phase_detail="adding to AniList")
-    previous = client.request_counter
-    client.request_counter = lambda: repo.add_request(run_id, "anilist")
-    try:
-        await fetch_list(client, repo, await user_id())
-        existing = repo.al_entries().get(media_id)
-        if existing is not None:
-            message = f"Already on your list now ({existing['status']}, progress {existing['progress']}); nothing was changed."
-            repo.update_run(run_id, state="cancelled", error=message, finished_at=now_iso())
-            raise AddEntryError(message)
-        data = await client.graphql(query, {"m": media_id, "p": progress})
-    except AniListGraphQLError as exc:
-        repo.update_run(run_id, state="failed", error=f"AniList refused the add: {exc}", finished_at=now_iso())
-        raise AddEntryError(f"AniList refused the add: {exc}") from exc
-    except AddEntryError:
-        raise
-    except Exception as exc:
-        repo.update_run(run_id, state="failed", error=f"{exc.__class__.__name__}: {exc}", finished_at=now_iso())
-        raise
-    finally:
-        client.request_counter = previous
-
-    entry = data["SaveMediaListEntry"]
-    written_at = now_iso()
-    repo.add_al_entry({"entry_id": entry["id"], "media_id": entry["mediaId"], "status": entry["status"],
-                       "progress": entry["progress"] or 0, "fetched_at": written_at})
-    repo.replace_items(run_id, [{
-        "run_id": run_id, "md_id": md_id, "al_media_id": media_id, "al_entry_id": entry["id"],
-        "al_progress": None, "md_progress": progress, "action": "write",
-        "set_status": "COMPLETED" if status == "COMPLETED" else None, "status_approved": int(status == "COMPLETED"),
-        "reason": f"added to AniList as {STATUS_LABELS[status]}", "approved": 1,
-        "write_state": "done", "written_at": written_at,
-        "verify_note": None if entry["status"] == status and entry["progress"] == progress
-        else f"AniList stored {entry['status']} / {entry['progress']}",
-    }])
-    repo.update_run(run_id, state="done", finished_at=written_at,
-                    phase_detail=f"added 1 entry: {STATUS_LABELS[status]}, progress {progress}")
-    if not repo.get_setting("first_write_done"):
-        repo.set_setting("first_write_done", True)
-    return entry

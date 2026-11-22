@@ -112,22 +112,6 @@ def test_scores_saved_before_mirroring_catch_up_on_mal(setup):
     assert services.ranker.status()["detail"] == "1 on MyAnimeList"
 
 
-async def test_add_by_hand_only_adds_what_is_not_listed(setup):
-    from mdal.sync.mal_writer import MalAddError, add_by_hand
-
-    services, mal = setup
-    await add_by_hand(services.mal, services.repo, 4, 504, "COMPLETED", 28)   # series 4 isn't on the MAL list
-    assert mal.edits == [(504, {"status": "completed", "num_chapters_read": "28"})]
-    entry = services.repo.mal_entries()[504]
-    assert (entry["status"], entry["progress"]) == ("COMPLETED", 28)
-    with pytest.raises(MalAddError, match="already on your MyAnimeList list"):
-        await add_by_hand(services.mal, services.repo, 1, 501, "PLANNING", 0)   # listed: never overwritten
-    with pytest.raises(MalAddError):
-        await add_by_hand(services.mal, services.repo, 4, 504, "REPEATING", 3)
-    assert len(mal.edits) == 1
-    assert ("mal", "status", "done") in {(e["site"], e["field"], e["state"]) for e in services.repo.list_edits()}
-
-
 def test_series_header_merges_lists_that_agree(setup):
     services, _ = setup
     services.repo.replace_mal_entries([

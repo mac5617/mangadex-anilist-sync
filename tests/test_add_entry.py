@@ -3,8 +3,8 @@ import re
 import pytest
 import respx
 
-from mdal.sync import add_entry
-from mdal.sync.add_entry import AddEntryError, add, not_listed_rows
+from mdal.lists.anilist import ADD_STATUSES
+from mdal.sync.add_entry import not_listed_rows
 from tests.factories import FakeAniList, al_media, al_media_row, md_manga_row
 
 
@@ -26,7 +26,9 @@ def fake(mock):
 @pytest.fixture
 def repo(services):
     services.anilist_queue.set_interval(0)
+    services.store_anilist_token("al-token-xyz")
     r = services.repo
+    r.set_setting("anilist_user_id", 1)
     r.replace_md_snapshot(
         [md_manga_row("on", "On List"), md_manga_row("fin", "Finished"), md_manga_row("rel", "Releasing MD"),
          md_manga_row("rev", "In Review"), md_manga_row("over", "Over Total")],
@@ -48,8 +50,9 @@ def repo(services):
     return r
 
 
-async def uid():
-    return 1
+async def add(services, md_id, status, progress):
+    """An add from the Unlisted page or a series page (MyAnimeList isn't connected here)."""
+    return await services.your_list.add(f"md:{md_id}", status, progress)
 
 
 def test_rows_are_exactly_matched_and_unlisted(repo):
@@ -61,19 +64,20 @@ def test_rows_are_exactly_matched_and_unlisted(repo):
 
 
 async def test_add_sends_one_mutation_with_three_fields(services, repo, fake):
-    entry = await add(repo, services.anilist, "rel", "CURRENT", 7, uid)
+    edit = await add(services, "rel", "CURRENT", 7)
+    assert edit.ok and edit.note == "Added to AniList as Reading, progress 7."
     assert fake.call_count == 2  # list re-read + the add
     assert len(fake.mutations) == 1
     q, v = fake.mutations[0]["query"], fake.mutations[0]["variables"]
     args = re.search(r"SaveMediaListEntry\(([^)]*)\)", q).group(1)
     assert [a.split(":")[0].strip() for a in args.split(",")] == ["mediaId", "status", "progress"]
     assert v == {"m": 3, "p": 7}
-    assert 3 in repo.al_entries() and repo.al_entries()[3]["entry_id"] == entry["id"]
+    assert 3 in repo.al_entries()
     assert "rel" not in {r.md_id for r in not_listed_rows(repo)}
 
 
 async def test_add_is_recorded_as_one_item_run(services, repo, fake):
-    await add(repo, services.anilist, "fin", "COMPLETED", 50, uid)
+    await add(services, "fin", "COMPLETED", 50)
     run = repo.latest_run()
     assert (run["state"], run["req_anilist"]) == ("done", 2)
     items = repo.items(run["run_id"])
@@ -84,14 +88,14 @@ async def test_add_is_recorded_as_one_item_run(services, repo, fake):
 
 async def test_add_counts_as_first_write(services, repo, fake):
     assert repo.get_setting("first_write_done") is False
-    await add(repo, services.anilist, "rel", "CURRENT", 7, uid)
+    await add(services, "rel", "CURRENT", 7)
     assert repo.get_setting("first_write_done") is True
 
 
 @pytest.mark.parametrize(
     "md_id, status, progress, message",
     [
-        ("on", "CURRENT", 3, "Already on your list"),
+        ("on", "CURRENT", 3, "Already on your AniList list."),
         ("rev", "CURRENT", 3, "no confirmed AniList match"),
         ("fin", "COMPLETED", 51, "exceeds AniList's total"),
         ("rel", "REPEATING", 3, "Unsupported status"),
@@ -100,28 +104,28 @@ async def test_add_counts_as_first_write(services, repo, fake):
     ],
 )
 async def test_refusals_make_no_request(services, repo, fake, md_id, status, progress, message):
-    with pytest.raises(AddEntryError, match=re.escape(message)):
-        await add(repo, services.anilist, md_id, status, progress, uid)
+    edit = await add(services, md_id, status, progress)
+    assert message in edit.note and not (edit.site("AniList") and edit.site("AniList").saved)
     assert fake.call_count == 0
 
 
 async def test_anilist_refusal_fails_run(services, repo, fake):
     del fake.catalogue[3]
-    with pytest.raises(AddEntryError, match="refused"):
-        await add(repo, services.anilist, "rel", "CURRENT", 7, uid)
+    edit = await add(services, "rel", "CURRENT", 7)
+    assert "refused" in edit.note and not edit.ok
     assert repo.latest_run()["state"] == "failed"
     assert repo.get_setting("first_write_done") is False
 
 
 def test_statuses_never_include_repeating():
-    assert add_entry.ADD_STATUSES == ("CURRENT", "PLANNING", "PAUSED", "COMPLETED", "DROPPED")
+    assert ADD_STATUSES == ("CURRENT", "PLANNING", "PAUSED", "COMPLETED", "DROPPED")
 
 
 async def test_series_added_on_anilist_since_last_sync_is_never_overwritten(services, repo, fake):
     # The local snapshot says "not on list", but the user has since added it on AniList as Completed at 9.
     fake.lists[0]["entries"].append({"id": 77, "status": "COMPLETED", "progress": 9, "media": fake._public(fake.catalogue[3])})
-    with pytest.raises(AddEntryError, match=r"Already on your list now \(COMPLETED, progress 9\)"):
-        await add(repo, services.anilist, "rel", "CURRENT", 7, uid)
+    edit = await add(services, "rel", "CURRENT", 7)
+    assert edit.note == "Already on your list now (COMPLETED, progress 9); nothing was changed."
     assert fake.mutations == []
     assert fake.entry(77)["status"] == "COMPLETED" and fake.entry(77)["progress"] == 9
     assert repo.latest_run()["state"] == "cancelled"

@@ -1,7 +1,10 @@
 """Your AniList list, for list edits made in Shiori (the main site).
 
 Like sync/writer.py, this module may contain a mutation. Its rules:
-- it only edits an entry that exists, addressed by its entry `id` (never `mediaId`), so nothing can be added;
+- it edits an entry that exists, addressed by its entry `id` (never `mediaId`), so an edit can't add one;
+- the one add (SaveMediaListEntry by `mediaId`) is for a confirmed match not on your list, with a status in
+  ADD_STATUSES; your list is re-read first, since saving by mediaId on a listed series would update that entry
+  (and could turn Completed into Reading); each add is recorded as a one-item run, so History shows it;
 - a score is sent as `scoreRaw` (1-100), and one that is already AniList's score isn't sent;
 - a status is one of the literals in EDIT_STATUSES (never Rereading), and one AniList already has isn't sent;
 - notes are sent as `notes`, at most NOTES_MAX characters;
@@ -13,12 +16,14 @@ SaveMediaListEntry with absolute values is idempotent, so the client's retry of 
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
 from mdal.clients.anilist import AniListClient, AniListComplexityError, AniListError, AniListGraphQLError
-from mdal.db.repo import Repo
+from mdal.db.repo import Repo, now_iso
+from mdal.fetch.anilist_list import fetch_list
 from mdal.recommend.ranking import to_anilist
+from mdal.sync.rules import STATUS_LABELS
 
 if TYPE_CHECKING:
     from mdal.lists import Series, SiteResult
@@ -28,6 +33,18 @@ NOT_LISTED = "not on your AniList list"
 
 
 EDIT_STATUSES = ("CURRENT", "COMPLETED", "PAUSED", "DROPPED", "PLANNING")
+# Offered for an add, in dropdown order. The value is inserted as an enum literal only after this whitelist check.
+ADD_STATUSES = ("CURRENT", "PLANNING", "PAUSED", "COMPLETED", "DROPPED")
+NO_MATCH = "This series has no confirmed AniList match."
+
+
+def add_document(status: str) -> str:
+    if status not in ADD_STATUSES:
+        raise ValueError(f"refusing to add with status {status!r}")
+    return (
+        f"mutation ($m: Int, $p: Int) {{ SaveMediaListEntry(mediaId: $m, status: {status}, progress: $p) "
+        "{ id mediaId progress status } }"
+    )
 
 
 NOTES_MAX = 5000
@@ -50,8 +67,9 @@ def score_document(n: int) -> str:
 class AniListSite:
     name = "AniList"
 
-    def __init__(self, repo: Repo, client: AniListClient, batch: Callable[[], int] = lambda: 10) -> None:
-        self.repo, self.client, self.batch = repo, client, batch
+    def __init__(self, repo: Repo, client: AniListClient, batch: Callable[[], int] = lambda: 10,
+                 user_id: Callable[[], Awaitable[int]] | None = None) -> None:
+        self.repo, self.client, self.batch, self.user_id = repo, client, batch, user_id
 
     def entry(self, series: Series) -> Any:
         """Your entry for the series, as last read, or None."""
@@ -165,4 +183,79 @@ class AniListSite:
         self.repo.update_al_entry(series.media_id, notes=notes)
         self.repo.log_edit(series.media_id, entry["entry_id"], "notes", entry["notes"], notes, "done")
         result.saved.append(series)
+        return result
+
+    async def add(self, series: Series, status: str, progress: int) -> SiteResult:
+        """Add a matched series that isn't on your list. Already on it (as last read) is `unchanged`, with no
+        request; `stored` holds what AniList saved (it may fill in its total)."""
+        from mdal.lists import SiteResult
+
+        result = SiteResult(self.name)
+        if series.media_id is None or not series.md_ids:
+            result.failed[series] = NO_MATCH
+            return result
+        if self.entry(series) is not None:
+            result.unchanged.append(series)
+            return result
+        media = self.repo.media([series.media_id]).get(series.media_id)
+        if status not in ADD_STATUSES:
+            problem = f"Unsupported status {status!r}."
+        elif progress < 0:
+            problem = "Progress cannot be negative."
+        elif media is not None and media["chapters"] is not None and progress > media["chapters"]:
+            problem = f"Progress {progress} exceeds AniList's total of {media['chapters']} chapters."
+        else:
+            problem = None
+        if problem:
+            result.failed[series] = problem
+            return result
+
+        md_id = series.key[3:] if series.key.startswith("md:") else series.md_ids[0]
+        run_id = self.repo.create_run("writing")
+        self.repo.update_run(run_id, approved_at=now_iso(), phase_detail="adding to AniList")
+        previous = self.client.request_counter
+        self.client.request_counter = lambda: self.repo.add_request(run_id, "anilist")
+        try:
+            await fetch_list(self.client, self.repo, await self.user_id())
+            existing = self.entry(series)
+            if existing is not None:
+                problem = (f"Already on your list now ({existing['status']}, progress {existing['progress']}); "
+                           "nothing was changed.")
+                self.repo.update_run(run_id, state="cancelled", error=problem, finished_at=now_iso())
+                result.failed[series] = problem
+                return result
+            data = await self.client.graphql(add_document(status), {"m": series.media_id, "p": progress})
+        except AniListGraphQLError as exc:
+            problem = f"AniList refused the add: {exc}"
+        except AniListError as exc:
+            problem = f"AniList error: {exc}"
+        except Exception as exc:
+            self.repo.update_run(run_id, state="failed", error=f"{exc.__class__.__name__}: {exc}", finished_at=now_iso())
+            raise
+        finally:
+            self.client.request_counter = previous
+        if problem:
+            self.repo.update_run(run_id, state="failed", error=problem, finished_at=now_iso())
+            result.failed[series] = problem
+            return result
+
+        entry = data["SaveMediaListEntry"]
+        written_at = now_iso()
+        self.repo.add_al_entry({"entry_id": entry["id"], "media_id": entry["mediaId"], "status": entry["status"],
+                                "progress": entry["progress"] or 0, "fetched_at": written_at})
+        self.repo.replace_items(run_id, [{
+            "run_id": run_id, "md_id": md_id, "al_media_id": series.media_id, "al_entry_id": entry["id"],
+            "al_progress": None, "md_progress": progress, "action": "write",
+            "set_status": "COMPLETED" if status == "COMPLETED" else None, "status_approved": int(status == "COMPLETED"),
+            "reason": f"added to AniList as {STATUS_LABELS[status]}", "approved": 1,
+            "write_state": "done", "written_at": written_at,
+            "verify_note": None if entry["status"] == status and entry["progress"] == progress
+            else f"AniList stored {entry['status']} / {entry['progress']}",
+        }])
+        self.repo.update_run(run_id, state="done", finished_at=written_at,
+                             phase_detail=f"added 1 entry: {STATUS_LABELS[status]}, progress {progress}")
+        if not self.repo.get_setting("first_write_done"):
+            self.repo.set_setting("first_write_done", True)
+        result.saved.append(series)
+        result.stored[series] = {"status": entry["status"], "progress": entry["progress"] or 0}
         return result

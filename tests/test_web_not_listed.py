@@ -54,7 +54,7 @@ def test_add_refused_while_sync_running(client, services, fake):  # noqa: F811
     finally:
         client.portal.call(lambda: asyncio.sleep(0))
         services.orchestrator.lock.release()
-    assert response.status_code == 409 and "sync is running" in response.text
+    assert response.status_code == 409 and "Shiori is syncing; try again when it finishes." in response.text
     assert fake.call_count == 0
 
 
@@ -80,7 +80,6 @@ def test_series_page_add_goes_to_myanimelist_too(client, services, fake, mock): 
 
     services.mal_queue.set_interval(0)
     connect_mal(services)
-    services.repo.set_setting("sync_targets", ["anilist", "mal"])
     services.repo.upsert_media([al_media_row(3, "Releasing", id_mal=703)])
     mal = FakeMal(set())
     mock.get(url__regex=rf"{MAL_URL}/manga/\d+(\?|$)").mock(side_effect=mal.get)
@@ -99,7 +98,6 @@ def test_listed_series_can_be_added_to_myanimelist(client, services, fake, mock)
 
     services.mal_queue.set_interval(0)
     connect_mal(services)
-    services.repo.set_setting("sync_targets", ["anilist", "mal"])
     services.repo.upsert_media([al_media_row(1, "Listed", id_mal=701)])       # on AniList (CURRENT, 1), not on MAL
     mal = FakeMal(set())
     mock.get(url__regex=rf"{MAL_URL}/manga/\d+(\?|$)").mock(side_effect=mal.get)
@@ -110,7 +108,7 @@ def test_listed_series_can_be_added_to_myanimelist(client, services, fake, mock)
     done = client.post("/series/al/1/add-mal").text
     assert "Added to MyAnimeList as Reading, progress 1." in done and "Add to MyAnimeList</button>" not in done
     assert mal.edits == [(701, {"status": "reading", "num_chapters_read": "1"})]
-    services.repo.set_setting("sync_targets", ["anilist"])                    # MAL not part of Sync: no button
+    services.repo.set_setting("mal_mirror", False)                            # list edits not mirrored: no button
     assert client.post("/series/al/1/add-mal").status_code == 404
 
 
@@ -121,7 +119,6 @@ def test_unlisted_add_goes_to_myanimelist_too(client, services, fake, mock):  # 
 
     services.mal_queue.set_interval(0)
     connect_mal(services)
-    services.repo.set_setting("sync_targets", ["anilist", "mal"])
     services.repo.upsert_media([al_media_row(3, "Releasing", id_mal=703)])
     mal = FakeMal(set())
     mock.get(url__regex=rf"{MAL_URL}/manga/\d+(\?|$)").mock(side_effect=mal.get)
@@ -129,5 +126,5 @@ def test_unlisted_add_goes_to_myanimelist_too(client, services, fake, mock):  # 
 
     assert "to AniList and MyAnimeList" in client.get("/not-listed").text
     done = client.post("/not-listed/rel/add", data={"status": "CURRENT", "progress": "7"}).text
-    assert "Added to AniList and MyAnimeList as Reading, progress 7." in done
+    assert "Added to AniList as Reading, progress 7. Added to MyAnimeList too, progress 7." in done
     assert mal.edits == [(703, {"status": "reading", "num_chapters_read": "7"})]

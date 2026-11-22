@@ -7,8 +7,6 @@ Same safety rules as the AniList writer (sync/writer.py), sharing its re-check a
   the series is already on the list (MyAnimeList would update that entry instead);
 - the list is re-read right before writing, and anything that would lower progress is dropped;
 - MyAnimeList has no batch write, so each item is one request, committed before the next is sent.
-An add from a series page (`add_by_hand`) is the reverse: one read first, and it goes ahead only when the
-series is not on your list, so an existing entry is never overwritten.
 """
 
 from __future__ import annotations
@@ -22,35 +20,6 @@ from mdal.fetch.mal_list import fetch_mal_list
 from mdal.sync.writer import is_status_only, recheck, sends_completion, sends_score, site_score, verify_note, with_note
 
 SITE = "MyAnimeList"
-
-
-class MalAddError(Exception):
-    """Shown to the user as-is."""
-
-
-# AniList's words -> MyAnimeList's, for an add you pick on a series page.
-MAL_ADD = {"CURRENT": "reading", "COMPLETED": "completed", "PAUSED": "on_hold", "DROPPED": "dropped",
-           "PLANNING": "plan_to_read"}
-
-
-async def add_by_hand(mal: MalClient, repo: Repo, media_id: int, mal_id: int, status: str, chapters: int) -> dict[str, Any]:
-    """Add one series to your MyAnimeList list (2 requests: check, then save). Returns what MyAnimeList stored."""
-    if status not in MAL_ADD:
-        raise MalAddError(f"Unsupported status {status!r}.")
-    entry = await mal.my_list_status(mal_id)
-    if entry is not None:
-        raise MalAddError(f"already on your MyAnimeList list ({entry.get('status')}, "
-                          f"{entry.get('num_chapters_read', 0)} ch), so nothing was changed there")
-    try:
-        saved = await mal.add_to_list(mal_id, chapters=chapters, status=MAL_ADD[status])
-    except MalRequestError as exc:
-        repo.log_edit(media_id, mal_id, "status", None, MAL_ADD[status], "failed", str(exc), site="mal")
-        raise MalAddError(f"MyAnimeList refused the add: {exc}") from exc
-    stored = next((code for code, word in MAL_ADD.items() if word == saved.get("status")), status)
-    repo.add_mal_entry({"mal_id": mal_id, "status": stored, "progress": saved.get("num_chapters_read", chapters),
-                        "score": saved.get("score") or None, "fetched_at": now_iso()})
-    repo.log_edit(media_id, mal_id, "status", None, MAL_ADD[status], "done", site="mal")
-    return saved
 
 
 def is_mal_add(item: Any) -> bool:

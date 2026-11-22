@@ -3,12 +3,8 @@
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 
-from mdal.clients.anilist import AniListError
-from mdal.clients.myanimelist import MalError
-from mdal.sync.mal_writer import MalAddError, add_by_hand
-from mdal.web.routes.series import mal_add_id
 from mdal.sync import add_entry
-from mdal.sync.orchestrator import refresh_item
+from mdal.web.routes.series import _after_add
 from mdal.sync.rules import STATUS_LABELS
 from mdal.web.app import get_services, render, templates
 
@@ -30,30 +26,17 @@ def not_listed(request: Request) -> HTMLResponse:
     return render(request, "notlisted.html", {
         "rows": add_entry.not_listed_rows(svc.repo),
         "statuses": add_entry.ADD_STATUSES, "labels": STATUS_LABELS,
-        "with_mal": "mal" in svc.orchestrator.sync_targets(),
+        "with_mal": svc.your_list.mirroring(),
     })
 
 
 @router.post("/not-listed/{md_id}/add", response_class=HTMLResponse)
 async def add(request: Request, md_id: str, status: str = Form(...), progress: int = Form(...)) -> HTMLResponse:
     svc = get_services(request)
-    if svc.orchestrator.lock.locked():
-        return _row_response(request, md_id, error="A sync is running; add entries after it finishes.", status_code=409)
-    try:
-        entry = await add_entry.add(svc.repo, svc.anilist, md_id, status, progress, svc.orchestrator.user_id)
-    except add_entry.AddEntryError as exc:
-        return _row_response(request, md_id, error=str(exc), status_code=400)
-    except AniListError as exc:
-        return _row_response(request, md_id, error=f"AniList error: {exc}", status_code=502)
-    refresh_item(svc.repo, md_id)
-    label = STATUS_LABELS.get(entry["status"], entry["status"])
-    done = f"Added to AniList as {label}, progress {entry['progress']}."
-    mal_id = mal_add_id(svc, entry["mediaId"])
-    if mal_id is not None:
-        try:
-            await add_by_hand(svc.mal, svc.repo, entry["mediaId"], mal_id, status, progress)
-            done = f"Added to AniList and MyAnimeList as {label}, progress {entry['progress']}."
-            svc.ranker.start_save()
-        except (MalAddError, MalError) as exc:
-            done += f" MyAnimeList: {exc}."
-    return _row_response(request, md_id, done=done)
+    edit = await svc.your_list.add(f"md:{md_id}", status, progress)
+    if edit.refused:
+        return _row_response(request, md_id, error=edit.note, status_code=409)
+    if not edit.sites[0].saved:
+        return _row_response(request, md_id, error=edit.note, status_code=400)
+    _after_add(svc, edit)
+    return _row_response(request, md_id, done=edit.note)

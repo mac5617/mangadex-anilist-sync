@@ -8,16 +8,12 @@ from typing import Any
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 
-from mdal.clients.anilist import AniListError
-from mdal.clients.myanimelist import MalError
 from mdal.recommend.feedback import VERDICTS
 from mdal.recommend.ratings import rate
 from mdal.recommend.series import series_url
 from mdal.sync import add_entry
 from mdal.lists import EDIT_STATUSES
-from mdal.sync.orchestrator import refresh_item
 from mdal.sync.rules import STATUS_LABELS
-from mdal.sync.mal_writer import MalAddError, add_by_hand
 from mdal.web.app import get_services, render, templates
 
 router = APIRouter()
@@ -78,17 +74,9 @@ def panel_context(svc: Any, s: dict[str, Any]) -> dict[str, Any]:
     add = add_entry.proposal(svc.repo, s["md_id"]) if not s["entry"] and s["md_id"] else None
     return {"verdicts": VERDICTS, "anilist": bool(svc.anilist_token()), "score_words": SCORE_WORDS,
             "list_statuses": [(code, STATUS_LABELS[code]) for code in EDIT_STATUSES], "add": add,
-            "add_mal": bool(add and mal_add_id(svc, add.media_id)),
-            "mal_missing": bool(s["entry"] and (m := mal_add_id(svc, s["al_id"])) and m not in svc.repo.mal_entries()),
+            "add_mal": bool(add and svc.your_list.mirror_can_add(f"md:{s['md_id']}")),
+            "mal_missing": bool(s["entry"] and svc.your_list.mirror_can_add(f"al:{s['al_id']}")),
             "add_statuses": [(code, STATUS_LABELS[code]) for code in add_entry.ADD_STATUSES]}
-
-
-def mal_add_id(svc: Any, media_id: int) -> int | None:
-    """The MyAnimeList id an add also goes to: when Sync covers MyAnimeList and the series has a link there."""
-    if "mal" not in svc.orchestrator.sync_targets():
-        return None
-    media = svc.repo.media([media_id]).get(media_id)
-    return media["id_mal"] if media and media["id_mal"] else None
 
 
 def verdict_panel(request: Request, key: str, **extra) -> HTMLResponse:
@@ -120,38 +108,17 @@ async def series_status(request: Request, kind: str, ident: str, status: str = F
 async def series_add(request: Request, kind: str, ident: str, status: str = Form(...),
                      progress: int = Form(...)) -> HTMLResponse:
     """Add a matched series to your AniList list (the same add as Matches → Unlisted), and to your
-    MyAnimeList list when Sync covers MyAnimeList."""
+    MyAnimeList list while list edits are mirrored there."""
     key = series_key(kind, ident)
     svc = get_services(request)
     s = svc.series.view(key)
     if s is None or s["entry"] or not s["md_id"]:
         raise HTTPException(404, "This series can't be added from here.")
 
-    def answer(note: str, ok: bool) -> HTMLResponse:
-        return verdict_panel(request, key, status_note=note, status_ok=ok, oob_yours=ok)
-
-    if svc.orchestrator.lock.locked():
-        return answer("A sync is running; add it after it finishes.", False)
-    try:
-        entry = await add_entry.add(svc.repo, svc.anilist, s["md_id"], status, progress, svc.orchestrator.user_id)
-    except add_entry.AddEntryError as exc:
-        return answer(str(exc), False)
-    except AniListError as exc:
-        return answer(f"AniList error: {exc}", False)
-    refresh_item(svc.repo, s["md_id"])
-    label = STATUS_LABELS.get(entry["status"], entry["status"])
-    note = f"Added to AniList as {label}, progress {entry['progress']}"
-    if entry["progress"] != progress:
-        note += f" (AniList filled in its total; you entered {progress})"
-    mal_id = mal_add_id(svc, entry["mediaId"])
-    if mal_id is None:
-        return answer(note + ".", True)
-    try:
-        saved = await add_by_hand(svc.mal, svc.repo, entry["mediaId"], mal_id, status, progress)
-    except (MalAddError, MalError) as exc:
-        return answer(f"{note}. MyAnimeList: {exc}.", False)
-    svc.ranker.start_save()   # a score you set in Shiori follows it to MyAnimeList
-    return answer(f"{note}. Added to MyAnimeList too, progress {saved.get('num_chapters_read', progress)}.", True)
+    edit = await svc.your_list.add(f"md:{s['md_id']}", status, progress)
+    _after_add(svc, edit)
+    added = bool((main := edit.site("AniList")) and main.saved)
+    return verdict_panel(request, key, status_note=edit.note, status_ok=edit.ok, oob_yours=added)
 
 
 @router.post("/series/{kind}/{ident}/add-mal", response_class=HTMLResponse)
@@ -160,23 +127,18 @@ async def series_add_mal(request: Request, kind: str, ident: str) -> HTMLRespons
     key = series_key(kind, ident)
     svc = get_services(request)
     s = svc.series.view(key)
-    mal_id = mal_add_id(svc, s["al_id"]) if s and s["entry"] else None
-    if mal_id is None:
+    if not (s and s["entry"] and svc.your_list.mirror_can_add(key)):
         raise HTTPException(404, "This series can't be added to MyAnimeList from here.")
-
-    def answer(note: str, ok: bool) -> HTMLResponse:
-        return verdict_panel(request, key, status_note=note, status_ok=ok)
-
     status = s["entry"]["status_code"] if s["entry"]["status_code"] in EDIT_STATUSES else "CURRENT"
-    if svc.orchestrator.lock.locked():
-        return answer("A sync is running; add it after it finishes.", False)
-    try:
-        saved = await add_by_hand(svc.mal, svc.repo, s["al_id"], mal_id, status, s["entry"]["progress"] or 0)
-    except (MalAddError, MalError) as exc:
-        return answer(f"MyAnimeList: {exc}.", False)
-    svc.ranker.start_save()
-    return answer(f"Added to MyAnimeList as {STATUS_LABELS[status]}, "
-                  f"progress {saved.get('num_chapters_read', s['entry']['progress'] or 0)}.", True)
+    edit = await svc.your_list.add(f"al:{s['al_id']}", status, s["entry"]["progress"] or 0)
+    _after_add(svc, edit)
+    return verdict_panel(request, key, status_note=edit.note, status_ok=edit.ok)
+
+
+def _after_add(svc: Any, edit: Any) -> None:
+    """A series just added to MyAnimeList gets the scores you set in Shiori."""
+    if (mirror := edit.site("MyAnimeList")) and mirror.saved:
+        svc.ranker.start_save()
 
 
 @router.post("/series/{kind}/{ident}/score", response_class=HTMLResponse)

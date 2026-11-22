@@ -1,6 +1,6 @@
 """Writing and verifying approved items (architecture §9, story 16).
 
-This module and `sync/add_entry.py` are the only places that may contain a mutation.
+This module and `lists/anilist.py` (list edits) are the only places that may contain a mutation.
 Safety rules enforced here:
 - updates target an existing list entry by `id` and send only `progress`, for approved completions the literal
   status `COMPLETED`, and for an approved MangaDex rating a `scoreRaw`; a status is never changed to anything else;
