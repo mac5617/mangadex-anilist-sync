@@ -7,8 +7,17 @@ import pytest
 from mdal.backup import restore
 from mdal.db.connection import _migrations, connect, schema_version
 from mdal.db.repo import Repo
-from mdal.sync.changes import build_items, dismiss, undismiss
-from tests.factories import al_media_row, md_manga_row
+from mdal.sync.changes import (
+    ApprovalError,
+    Selection,
+    approved_plan,
+    build_items,
+    dismiss,
+    plan_estimate,
+    undismiss,
+    write_plan,
+)
+from tests.factories import al_media_row, md_manga_row, seed_diffed_run
 
 
 @pytest.fixture
@@ -110,3 +119,32 @@ def test_stored_dismissed_reasons_lose_their_prefix(tmp_path):
     old.commit()
     old.close()
     assert Repo(connect(path)).items(1)[0]["reason"] == "a big jump"
+
+
+@pytest.mark.parametrize("selection, writes, refused", [
+    (Selection.of(["w"]), {"w"}, False),
+    (Selection.of(["c"], ["c"]), {"c"}, False),
+    (Selection.of(["c"]), {"c"}, False),                  # progress still goes out without the completion
+    (Selection.of(["s"], ["s"]), {"s"}, False),
+    (Selection.of(["s"]), set(), False),                  # status-only, completion unticked: nothing to send
+    (Selection.of(["i"]), set(), True),                   # a Flag needs override
+    (Selection.of(["i"], overrides=["i"]), {"i"}, False),
+    (Selection.of(["x"], overrides=["x"]), set(), True),  # past the total: never
+    (Selection.of(["k"]), set(), True),
+    (Selection.of(["w", "i"]), {"w"}, True),
+])
+def test_approval_and_estimate_read_one_write_plan(repo, selection, writes, refused):
+    run_id = seed_diffed_run(repo)
+    plan = write_plan(repo, run_id, selection)
+    assert {w.md_id for w in plan.writes} == writes
+    assert plan_estimate(repo, "anilist", plan).selected == len(writes)
+    if refused or not writes:
+        with pytest.raises(ApprovalError):
+            approved_plan(repo, run_id, selection)
+    else:
+        assert approved_plan(repo, run_id, selection) == plan
+
+
+def test_the_page_opens_on_the_plan_of_what_it_ticked(repo):
+    run_id = seed_diffed_run(repo)
+    assert {w.md_id for w in write_plan(repo, run_id).writes} == {"w", "c", "s"}

@@ -114,6 +114,14 @@ def test_mal_adapter_statuses_and_writes():
     assert "update_list_status" not in (SRC / "lists" / "myanimelist.py").read_text(encoding="utf-8")
 
 
+def test_dismissals_only_through_changes():
+    """A Dismissal also changes the open Change, so nothing else may store one."""
+    allowed = {SRC / "sync" / "changes.py", SRC / "db" / "repo.py"}
+    offenders = [str(p.relative_to(ROOT)) for p in python_files()
+                 if p not in allowed and re.search(r"\.(un)?dismiss_flag\(", p.read_text(encoding="utf-8"))]
+    assert offenders == []
+
+
 def test_pages_edit_your_list_only_through_your_list():
     """Routes call YourList (mdal.lists); the site adapters behind it are its own business."""
     adapters = re.compile(r"^\s*(from|import)\s+mdal\.lists\.(anilist|myanimelist)\b", re.MULTILINE)

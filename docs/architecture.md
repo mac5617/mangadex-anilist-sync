@@ -38,6 +38,7 @@ src/mdal/
   matching/normalize.py  matching/score.py  matching/pipeline.py
   sync/rules.py                  # pure progress rules -> DiffItem
   sync/estimate.py               # request count + duration
+  sync/changes.py                # Changes: building, Dismissals, Selection -> Write plan and its estimate
   sync/orchestrator.py           # state machine, run persistence
   sync/writer.py                 # batched aliased mutations, resume, verify
   sync/add_entry.py              # Unlisted rows and add proposals (FR-30)
@@ -52,6 +53,7 @@ Dependency rules, enforced by a test that scans imports:
 - `matching/normalize.py`, `matching/score.py`, `sync/rules.py` and `sync/estimate.py` are pure: no I/O, no DB.
 - `web/*` calls `sync/*`, `matching/pipeline` and `db/repo`, never `clients/*` directly. The one exception is `web/routes/auth.py`, which uses `clients/anilist_oauth`.
 - `web/*` makes list edits through `YourList` (`mdal/lists`), never through the site adapters behind it.
+- Dismissals are made only through `sync/changes.py`.
 - Mutations live only in `sync/writer.py` and `lists/anilist.py`; MyAnimeList writes only in `sync/mal_writer.py` and `lists/myanimelist.py`.
 
 ## 3. Configuration
@@ -228,8 +230,8 @@ any            ──MangaDexBlocked / AniListUnavailable──→ halted
 diffed ──user discards──→ cancelled
 ```
 - The `sync_run.state` change is committed before each phase starts. On startup, a run left in `fetching`/`resolving` is marked `failed`; these phases are cheap to redo, so starting a new sync is the recovery. A run left in `writing`/`verifying` gets a **Resume** button.
-- `diffed`: computes `est_requests` and `est_seconds` (§11) and waits for the user.
-- Approve: marks the selected items `approved=1, write_state='pending'`. Validation rejects `exceeds_total` items and enforces FR-9: while `first_write_done` is false, exactly one approved item is allowed.
+- `diffed`: waits for the user. The estimate (§11) is the cost of the current Write plan, computed when the page asks; `est_requests` and `est_seconds` are no longer filled in.
+- Approve: marks the Write plan's items (`sync/changes.py`, the same plan the estimate reads) `approved=1, write_state='pending'`. Validation rejects `exceeds_total` items and enforces FR-9: while `first_write_done` is false, exactly one approved item is allowed.
 - **writing** (`sync/writer.py`):
   1. Re-fetch the AniList list (1 request) and store `al_status_before` on each pending item. An item is `dropped`, with a reason, if:
      - the entry is gone; or
@@ -286,7 +288,7 @@ Assumptions: 500 library series; 85% have `links.al`, 5% only `links.mal`, 10% n
 | verify re-read | 1 | 1 |
 | **Write phase** | **8 → ≈ 24 s** | **8 → ≈ 24 s** |
 
-Worst case, all 500 need updating: 52 write-phase requests ≈ 2.6 min. Estimate formula shown before approval: `est_requests = 2 + ceil(n_approved / batch)`, `est_seconds = est_requests × 60 / anilist_rpm`.
+Worst case, all 500 need updating: 52 write-phase requests ≈ 2.6 min. Estimate formula shown before approval: `requests = 2 + ceil(n_in_write_plan / batch)`, `seconds = requests × 60 / anilist_rpm`.
 
 A test (story 13) runs the whole dry run against a mocked 500-series library, asserts the AniList dry-run count ≤ 24 and MangaDex ≤ 317, and asserts zero AniList requests on a second, unchanged run apart from the single list fetch.
 

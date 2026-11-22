@@ -166,7 +166,7 @@ The header has four sections:
      and like any AniList list change, an activity post.
    - **Flagged**: *over total* rows can't be written; *unusual* rows (very large jumps, chapter numbers that
      restart each volume) are written only with **override** ticked. **Dismiss** moves a flagged row to
-     Skipped until your MangaDex progress for that series changes.
+     Skipped on that site until your MangaDex progress for that series changes.
    - **Skipped**: already up to date, not matched, or dismissed.
    - Rows that would finish a series have a **mark completed** box, ticked by default.
    - A series you rated on MangaDex gets a **score** box (ticked by default) when neither AniList nor
