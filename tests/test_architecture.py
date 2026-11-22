@@ -27,13 +27,19 @@ def test_only_clients_import_httpx():
 
 
 MUTATION_MODULES = {SRC / "sync" / "writer.py", SRC / "sync" / "add_entry.py", SRC / "sync" / "list_edit.py"}
+MUTATION = re.compile(r"SaveMediaListEntry|\bmutation\b")
+
+
+def test_mutation_pattern_finds_any_graphql_mutation():
+    assert MUTATION.search('f"mutation ($e: Int) {{ DeleteMediaListEntry(id: $e) }}"')
+    assert not MUTATION.search("mutation_document(ops)")
 
 
 def test_mutations_only_in_writer_and_add_entry():
     offenders = [
         str(p.relative_to(ROOT))
         for p in python_files()
-        if p not in MUTATION_MODULES and re.search(r"SaveMediaListEntry|bmutationb", p.read_text(encoding="utf-8"))
+        if p not in MUTATION_MODULES and MUTATION.search(p.read_text(encoding="utf-8"))
     ]
     assert offenders == []
 
