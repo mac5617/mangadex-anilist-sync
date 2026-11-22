@@ -45,7 +45,7 @@ def test_discard_offers_undo_and_restore_brings_it_back(client, services, run_id
 
 
 def test_discarded_diff_page_and_history_offer_restore(client, services, run_id):
-    services.orchestrator.discard(run_id)
+    services.orchestrator.runs.discard(run_id)
     page = client.get(f"/sync/{run_id}").text
     assert f'action="/sync/{run_id}/restore"' in page and "This sync was discarded by you." in page
     assert f'action="/sync/{run_id}/restore"' in client.get("/history").text
@@ -53,13 +53,13 @@ def test_discarded_diff_page_and_history_offer_restore(client, services, run_id)
 
 
 def test_restoring_closes_the_other_open_diff(client, services, run_id):
-    services.orchestrator.discard(run_id)
+    services.orchestrator.runs.discard(run_id)
     newer = seed_diffed_run(services.repo)
     client.post(f"/sync/{run_id}/restore")
     r = services.repo.get_run(newer)
     assert (r["state"], r["error"]) == ("cancelled", f"superseded by restored sync #{run_id}")
     assert open_diff(services.repo)["run_id"] == run_id
-    assert services.orchestrator.can_restore(newer)  # and that one can come back too
+    assert services.orchestrator.runs.can_restore(newer)  # and that one can come back too
 
 
 @pytest.mark.parametrize("state, approved", [("done", True), ("failed", True), ("diffed", False), ("cancelled", True)])
@@ -70,7 +70,7 @@ def test_only_unapproved_cancelled_runs_restore(client, services, run_id, state,
 
 
 def test_match_decisions_update_a_restored_older_run(services, run_id):
-    services.orchestrator.discard(run_id)
+    services.orchestrator.runs.discard(run_id)
     newer = services.repo.create_run("cancelled")  # newest run is not the open one
     services.orchestrator.restore(run_id)
     assert services.repo.latest_run()["run_id"] == newer

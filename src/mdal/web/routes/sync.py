@@ -37,12 +37,11 @@ from mdal.sync.changes import (
     write_plan,
 )
 from mdal.sync.orchestrator import (
-    ACTIVE_STATES,
     SyncAlreadyRunning,
     SyncCoolingDown,
-    SyncStateError,
 )
 from mdal.sync.rules import completion_label
+from mdal.sync.runs import ACTIVE_STATES, SyncStateError
 from mdal.web.app import clock, get_services, md_cover_url, render, templates
 
 router = APIRouter()
@@ -225,7 +224,7 @@ def still_reading(svc: Any, runs: list[Any]) -> list[str]:
     """Sites whose changes aren't ready yet (a Sync covering both reads them one after the other)."""
     shown = {r["target"] for r in runs}
     sites = [t for t in svc.orchestrator.queued if t not in shown]
-    active = svc.orchestrator.active_run()
+    active = svc.orchestrator.runs.active()
     if active and active["state"] in ("fetching", "resolving", "diffing") and active["target"] not in shown:
         sites.insert(0, active["target"])
     return [SITE_NAMES[t] for t in dict.fromkeys(sites)]
@@ -279,7 +278,7 @@ def _diff_page(request: Request, run_id: int, f: str | None = None, error: str |
         "reading": still_reading(svc, runs) if run["state"] == "diffed" else [],
         "filter": f,
         "approvable": run["state"] == "diffed",
-        "restorable": svc.orchestrator.can_restore(run_id),
+        "restorable": svc.orchestrator.runs.can_restore(run_id),
         "error": error,
     }, status_code=status_code)
 
@@ -393,7 +392,7 @@ def diff_discard(request: Request, run_id: int) -> HTMLResponse:
     runs = group(svc.repo, run)
     try:
         for r in runs:
-            svc.orchestrator.discard(r["run_id"])
+            svc.orchestrator.runs.discard(r["run_id"])
     except SyncStateError as exc:
         return render(request, "message.html", {"error": str(exc), "back": f"/sync/{run_id}"}, status_code=409)
     names = " and ".join(f"#{r['run_id']}" for r in runs)

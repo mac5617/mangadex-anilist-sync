@@ -116,23 +116,23 @@ async def test_viewer_is_cached(fast, world):
 @pytest.mark.parametrize("state", ["fetching", "resolving", "diffing"])
 def test_restart_marks_interrupted_runs_failed(fast, state):
     run_id = fast.repo.create_run(state)
-    assert fast.orchestrator.recover_interrupted() == [run_id]
+    assert fast.orchestrator.runs.recover_interrupted() == [run_id]
     r = fast.repo.get_run(run_id)
     assert r["state"] == "failed" and "interrupted" in r["error"]
 
 
 def test_restart_leaves_writing_runs_alone(fast):
     run_id = fast.repo.create_run("writing")
-    assert fast.orchestrator.recover_interrupted() == []
+    assert fast.orchestrator.runs.recover_interrupted() == []
     assert fast.repo.get_run(run_id)["state"] == "writing"
 
 
 async def test_discard(fast, world):
     run_id = await run(fast)
-    fast.orchestrator.discard(run_id)
+    fast.orchestrator.runs.discard(run_id)
     assert fast.repo.get_run(run_id)["state"] == "cancelled"
     with pytest.raises(SyncStateError):
-        fast.orchestrator.discard(run_id)
+        fast.orchestrator.runs.discard(run_id)
 
 
 async def test_status(fast, world):

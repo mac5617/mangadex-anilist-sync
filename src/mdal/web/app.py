@@ -108,7 +108,7 @@ def render(request: Request, name: str, context: dict[str, Any] | None = None, s
 def create_app(services: Services) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        services.orchestrator.recover_interrupted()
+        services.orchestrator.runs.recover_interrupted()
         schedule = asyncio.create_task(services.releases.run_schedule())
         services.ranker.start_save()   # scores still waiting for MyAnimeList (e.g. series added there since)
         yield

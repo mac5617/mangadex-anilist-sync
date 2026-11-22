@@ -34,7 +34,7 @@ def history(request: Request) -> HTMLResponse:
     for r in repo.runs(200):
         c = counts.get(r["run_id"], {})
         runs.append({**dict(r), "counts": c, "duration": _duration(r["started_at"], r["finished_at"]),
-                     "restorable": svc.orchestrator.can_restore(r["run_id"])})
+                     "restorable": svc.orchestrator.runs.can_restore(r["run_id"])})
     return render(request, "history.html", {"runs": runs, "sites": SITE_NAMES})
 
 
@@ -52,5 +52,5 @@ def history_run(request: Request, run_id: int) -> HTMLResponse:
     return render(request, "history_run.html", {
         "run": run, "rows": rows, "unchanged": len(every) - len(rows),
         "duration": _duration(run["started_at"], run["finished_at"]),
-        "restorable": svc.orchestrator.can_restore(run_id), "site": SITE_NAMES[run["target"]],
+        "restorable": svc.orchestrator.runs.can_restore(run_id), "site": SITE_NAMES[run["target"]],
     })

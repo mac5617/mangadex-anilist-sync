@@ -307,7 +307,7 @@ async def test_rate_limit_halts_and_can_resume(fast, world, mock):
     run = fast.repo.get_run(run_id)
     assert run["state"] == "halted" and "429" in run["error"]
     patch.side_effect = side_effect
-    assert fast.orchestrator.can_resume(run_id)
+    assert fast.orchestrator.runs.can_resume(run_id)
     await fast.orchestrator.resume(run_id)
     await fast.orchestrator.wait()
     assert fast.repo.get_run(run_id)["state"] == "done"

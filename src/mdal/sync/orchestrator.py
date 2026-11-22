@@ -36,9 +36,9 @@ from mdal.sync.changes import (
     WritePlan,
     approved_plan,
     build_items,
-    open_diff,
 )
 from mdal.sync.mal_writer import MalWriter
+from mdal.sync.runs import Runs, SyncStateError
 from mdal.sync.writer import Writer
 
 if TYPE_CHECKING:
@@ -46,8 +46,6 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
-ACTIVE_STATES = ("fetching", "resolving", "diffing", "writing", "verifying")
-INTERRUPTIBLE = ("fetching", "resolving", "diffing")  # cheap to redo: a restart marks them failed
 HALTING = (MangaDexBlocked, MangaDexRateLimited, MangaDexUnreachable, MangaDexCoolingDown,
            AniListUnavailable, AniListRateLimited, MalRateLimited, MalUnavailable)
 MD_REUSE_SECONDS = 600  # a MyAnimeList sync reuses a MangaDex read this recent instead of reading again
@@ -59,15 +57,8 @@ class SyncAlreadyRunning(Exception):
     pass
 
 
-class SyncStateError(Exception):
-    pass
-
-
 class SyncCoolingDown(Exception):
     """MangaDex cooldown active: a new sync would only knock again."""
-
-
-RESUMABLE = ("writing", "verifying", "failed", "halted")
 
 
 @dataclass(frozen=True)
@@ -113,6 +104,7 @@ class SyncOrchestrator:
 
     def __init__(self, services: Services) -> None:
         self.services = services
+        self.runs = Runs(services.repo)
         self.lock = asyncio.Lock()
         self.task: asyncio.Task[None] | None = None
         self.queued: list[str] = []      # sites still to sync after the current one (Sync covers both)
@@ -120,16 +112,6 @@ class SyncOrchestrator:
     @property
     def repo(self) -> Repo:
         return self.services.repo
-
-    # ---- lifecycle ------------------------------------------------------
-    def recover_interrupted(self) -> list[int]:
-        """On startup: runs that died in a cheap phase are failed; start a new sync to recover."""
-        ids = [r["run_id"] for r in self.repo.conn.execute(
-            f"SELECT run_id FROM sync_run WHERE state IN ({','.join('?' * len(INTERRUPTIBLE))})", INTERRUPTIBLE
-        )]
-        for run_id in ids:
-            self.repo.update_run(run_id, state="failed", error="interrupted; start a new sync", finished_at=now_iso())
-        return ids
 
     def busy(self) -> bool:
         """Whether a Sync is in progress for any site, including the gap before a queued site starts.
@@ -145,12 +127,6 @@ class SyncOrchestrator:
         if not self.busy():
             self.services.ranker.start_save()
 
-    def active_run(self) -> Any:
-        return self.repo.conn.execute(
-            f"SELECT * FROM sync_run WHERE state IN ({','.join('?' * len(ACTIVE_STATES))}) ORDER BY run_id DESC LIMIT 1",
-            ACTIVE_STATES,
-        ).fetchone()
-
     async def start_run(self, target: str = "anilist") -> int:
         if target not in TARGETS:
             raise SyncStateError(f"unknown sync target {target!r}")
@@ -165,13 +141,7 @@ class SyncOrchestrator:
                 raise SyncCoolingDown(str(exc)) from exc
         await self.lock.acquire()
         try:
-            run_id = self.repo.create_run("fetching", target)
-            # An older diff for the same site is superseded: only the newest one can be approved.
-            for old in self.repo.conn.execute(
-                "SELECT run_id FROM sync_run WHERE state='diffed' AND target=? AND run_id<?", (target, run_id)
-            ).fetchall():
-                self.repo.update_run(old["run_id"], state="cancelled", finished_at=now_iso(),
-                                     error=f"superseded by sync #{run_id}")
+            run_id = self.runs.create(target)
         except BaseException:
             self.lock.release()
             raise
@@ -265,54 +235,23 @@ class SyncOrchestrator:
         finally:
             self.lock.release()
 
-    def can_resume(self, run_id: int) -> bool:
-        r = self.repo.get_run(run_id)
-        if r is None or r["state"] not in RESUMABLE or r["approved_at"] is None:
-            return False
-        if r["state"] in ("writing", "verifying") and self.task and not self.task.done():
-            return False
-        return bool(self.repo.items_in_state(run_id, "pending")) or bool(self.repo.items_in_state(run_id, "done"))
-
     async def resume(self, run_id: int) -> None:
         if self.lock.locked() or (self.task and not self.task.done()):
             raise SyncAlreadyRunning("a sync is already running")
-        if not self.can_resume(run_id):
+        if not self.runs.can_resume(run_id):
             raise SyncStateError("this sync cannot be resumed")
         await self.lock.acquire()
-        self.repo.update_run(run_id, state="writing", error=None, finished_at=None, phase_detail="resuming")
+        self.runs.mark_resuming(run_id)
         self.task = self._watch(asyncio.create_task(self._guarded(run_id, self._write_phase)))
 
-    def resumable_run(self) -> Any:
-        r = self.repo.conn.execute(
-            f"SELECT run_id FROM sync_run WHERE state IN ({','.join('?' * len(RESUMABLE))}) "
-            "AND approved_at IS NOT NULL ORDER BY run_id DESC LIMIT 1", RESUMABLE,
-        ).fetchone()
-        return r["run_id"] if r and self.can_resume(r["run_id"]) else None
-
-    def can_restore(self, run_id: int) -> bool:
-        """A discarded or superseded sync that never reached approval."""
-        r = self.repo.get_run(run_id)
-        if r is None or r["state"] != "cancelled" or r["approved_at"] is not None:
-            return False
-        return self.repo.conn.execute("SELECT 1 FROM sync_item WHERE run_id=? LIMIT 1", (run_id,)).fetchone() is not None
+    def resumable_run(self) -> int | None:
+        """The Run a Resume would continue. None while something is running."""
+        return None if self.lock.locked() or (self.task and not self.task.done()) else self.runs.resumable()
 
     def restore(self, run_id: int) -> None:
-        """Bring a discarded sync back to `diffed`. Any other open diff is closed (only one can be approved)."""
         if self.lock.locked() or (self.task and not self.task.done()):
             raise SyncAlreadyRunning("a sync is running; restore it when it finishes")
-        if not self.can_restore(run_id):
-            raise SyncStateError("only a discarded sync that was never approved can be restored")
-        other = open_diff(self.repo, self.repo.get_run(run_id)["target"])
-        if other is not None:
-            self.repo.update_run(other["run_id"], state="cancelled", finished_at=now_iso(),
-                                 error=f"superseded by restored sync #{run_id}")
-        self.repo.update_run(run_id, state="diffed", error=None, finished_at=None)
-
-    def discard(self, run_id: int) -> None:
-        r = self.repo.get_run(run_id)
-        if r is None or r["state"] != "diffed":
-            raise SyncStateError("only a diffed run can be discarded")
-        self.repo.update_run(run_id, state="cancelled", finished_at=now_iso(), error="discarded by you")
+        self.runs.restore(run_id)
 
     # ---- running --------------------------------------------------------
     @contextmanager

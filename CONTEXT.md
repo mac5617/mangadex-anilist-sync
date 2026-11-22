@@ -67,3 +67,19 @@ _Avoid_: choices, ticks
 **Write plan**:
 What a Selection will actually send to a site. The estimate is the cost of the Write plan.
 _Avoid_: approved items, payload
+
+**Run**:
+One Sync's record for one site.
+_Avoid_: job, sync (for the record)
+
+**Phase**:
+The read or the write part of a Run.
+_Avoid_: step, stage
+
+**Resume**:
+Continuing the unfinished writes of the Runs that stopped partway.
+_Avoid_: retry, restart
+
+**Superseded**:
+A Run closed because a newer one for the same site replaced it.
+_Avoid_: stale, overwritten

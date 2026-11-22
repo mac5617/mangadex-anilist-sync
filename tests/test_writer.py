@@ -230,7 +230,7 @@ async def test_restart_while_writing_can_resume(fast, fake):
     run_id = seed(fast, fake, [{"md_progress": 10, "al_progress": 1}])
     fast.repo.update_items(run_id, [("md00", {"approved": 1, "write_state": "pending"})])
     fast.repo.update_run(run_id, state="writing", approved_at="2026-10-03T00:00:00+00:00")
-    assert fast.orchestrator.recover_interrupted() == []
+    assert fast.orchestrator.runs.recover_interrupted() == []
     assert fast.orchestrator.resumable_run() == run_id
     await fast.orchestrator.resume(run_id)
     await fast.orchestrator.wait()
