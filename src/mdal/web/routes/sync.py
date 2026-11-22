@@ -18,6 +18,7 @@ from mdal.db.repo import Repo
 from mdal.recommend.series import series_url
 from mdal.services import Services
 from mdal.sync.changes import (
+    DISMISSED_PREFIX,
     SITE_NAMES,
     TARGETS,
     ApprovalError,
@@ -26,18 +27,17 @@ from mdal.sync.changes import (
     is_preselected,
     is_selectable,
     is_status_only,
+    open_diff,
     plan_estimate,
     write_plan,
 )
 from mdal.sync.orchestrator import (
     ACTIVE_STATES,
-    DISMISSED_PREFIX,
     SyncAlreadyRunning,
     SyncCoolingDown,
     SyncStateError,
-    open_diff,
 )
-from mdal.sync.rules import AlMediaInfo, MdInfo, completion_info, completion_label
+from mdal.sync.rules import completion_label
 from mdal.web.app import clock, get_services, md_cover_url, render, templates
 
 router = APIRouter()
@@ -147,10 +147,7 @@ def diff_rows(repo: Repo, run_id: int) -> list[DiffRow]:
         status_label = None
         is_new = r["al_entry_id"] is None and r["action"] in ("add", "flag")
         if r["set_status"] == "COMPLETED":
-            total = completion_info(
-                AlMediaInfo(r["al_chapters"], r["al_media_status"]), MdInfo(r["pub_status"], r["last_chapter"])
-            ).total
-            status_label = completion_label(r["al_status"], r["status_source"], total, site)
+            status_label = completion_label(r["al_status"], r["status_source"], r["total"], site)
             if is_new:
                 status_label = "New entry → " + status_label.split(" → ", 1)[1] + "; untick to add as Reading"
         elif is_new:
@@ -308,7 +305,7 @@ def dismiss_flag(request: Request, run_id: int, md_id: str) -> HTMLResponse:
     if item["action"] != "flag" or item["md_progress"] is None:
         raise HTTPException(409, "only flagged rows can be dismissed")
     repo.dismiss_flag(md_id, item["md_progress"], item["flag_kind"], item["reason"])
-    # Flip this row only; the next sync applies the stored dismissal itself (orchestrator.build_items).
+    # Flip this row only; the next sync applies the stored dismissal itself (changes.build_items).
     repo.update_items(run_id, [(md_id, {"action": "skip", "reason": f"{DISMISSED_PREFIX}{item['reason']}"})])
     return _row_update(request, run_id, md_id)
 

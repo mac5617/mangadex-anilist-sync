@@ -18,7 +18,7 @@ from typing import Any, Protocol
 from mdal.db.repo import Repo
 from mdal.clients.anilist import AniListError
 from mdal.lists.anilist import ADD_STATUSES, EDIT_STATUSES, NOTES_MAX
-from mdal.sync.orchestrator import mal_target, refresh_item
+from mdal.sync.changes import mal_target, refresh_item
 from mdal.sync.rules import STATUS_LABELS
 
 BUSY = "Shiori is syncing; try again when it finishes."
@@ -222,7 +222,7 @@ class YourList:
 
 
 def _mal_link(media_id: int | None, media: dict[int, Any], library: list[tuple[Any, Any]]) -> tuple[int | None, str | None]:
-    """Sync's rule (orchestrator.mal_target) for each MangaDex series matched to the media: AniList's link, else
+    """Sync's rule (changes.mal_target) for each MangaDex series matched to the media: AniList's link, else
     MangaDex's; links that disagree mean there is none."""
     row = media.get(media_id) if media_id is not None else None
     al_mal = row["id_mal"] if row is not None else None

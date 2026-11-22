@@ -19,7 +19,8 @@ from mdal.clients.myanimelist import (
 )
 from mdal.clients.ratelimit import PacedQueue
 from mdal.config import Settings
-from mdal.sync.orchestrator import SyncStateError, mal_target
+from mdal.sync.changes import mal_target
+from mdal.sync.orchestrator import SyncStateError
 from mdal.web.app import create_app
 from tests.factories import FakeAniList, FakeMal, FakeMangaDex, FakeSeries, al_media, connect_mal
 

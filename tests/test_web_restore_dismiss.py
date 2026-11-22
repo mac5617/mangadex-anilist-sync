@@ -5,7 +5,7 @@ import re
 import pytest
 from fastapi.testclient import TestClient
 
-from mdal.sync.orchestrator import open_diff, refresh_item
+from mdal.sync.changes import open_diff, refresh_item
 from mdal.web.app import create_app
 from tests.factories import seed_diffed_run
 

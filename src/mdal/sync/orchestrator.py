@@ -6,7 +6,6 @@ A run syncs MangaDex to one target: AniList or MyAnimeList (`sync_run.target`).
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import time
 from datetime import datetime
@@ -29,8 +28,16 @@ from mdal.fetch.anilist_list import fetch_list, fetch_staff, viewer
 from mdal.fetch.mal_list import fetch_mal_list
 from mdal.fetch.mangadex_library import fetch_library
 from mdal.matching.pipeline import AniListFetch, resolve_all
-from mdal.sync.changes import SITE_NAMES, TARGETS, ApprovalError, Selection, WritePlan, approved_plan
-from mdal.sync.rules import AlEntry, AlMediaInfo, MdInfo, evaluate, score_from_md
+from mdal.sync.changes import (
+    SITE_NAMES,
+    TARGETS,
+    ApprovalError,
+    Selection,
+    WritePlan,
+    approved_plan,
+    build_items,
+    open_diff,
+)
 from mdal.sync.mal_writer import MalWriter
 from mdal.sync.writer import Writer
 
@@ -45,15 +52,6 @@ HALTING = (MangaDexBlocked, MangaDexRateLimited, MangaDexUnreachable, MangaDexCo
            AniListUnavailable, AniListRateLimited, MalRateLimited, MalUnavailable)
 MD_REUSE_SECONDS = 600  # a MyAnimeList sync reuses a MangaDex read this recent instead of reading again
 
-MAPPING_SKIPS = {
-    None: "awaiting match review",
-    "review": "awaiting match review",
-    "unmatched": "no match",
-    "not_on_anilist": "marked not on AniList",
-}
-
-
-DISMISSED_PREFIX = "dismissed by you: "
 STAFF_REQUESTS_PER_SYNC = 20  # 25 series each; about 1 minute of AniList pacing
 
 
@@ -108,174 +106,6 @@ def failure_message(exc: Exception) -> str:
     if isinstance(exc, MangaDexAuthError):
         return f"MangaDex login failed: check credentials in .env. ({exc})"
     return f"{exc.__class__.__name__}: {exc}"
-
-
-def _evaluated(
-    repo: Repo, row: Any, entry: AlEntry | None, media: AlMediaInfo, jump_limit: int,
-    dismissed: dict[str, Any], site: str,
-) -> dict[str, Any]:
-    """The rules applied to one series (§8): the item columns shared by both targets."""
-    md_id = row["md_id"]
-    reads = repo.read_chapters(md_id)
-    chapters = [r["chapter"] for r in reads if r["missing"] in (0, None) and r["chapter"] is not None]
-    d = evaluate(
-        chapters, len(reads) - len(chapters), entry, media,
-        MdInfo(row["pub_status"], row["last_chapter"], bool(row["chapter_numbers_reset"]), row["reading_status"]),
-        jump_limit, site,
-    )
-    action, reason = d.action, d.reason
-    gone = dismissed.get(md_id)
-    if action == "flag" and gone is not None and gone["md_progress"] == d.md_progress:
-        action, reason = "skip", f"{DISMISSED_PREFIX}{d.reason}"
-    return {
-        "al_entry_id": entry.entry_id if entry else None,
-        "al_progress": d.al_progress,
-        "md_progress": d.md_progress,
-        "set_status": d.set_status,
-        "status_source": d.status_source,
-        "status_approved": 1 if d.set_status else 0,
-        "action": action,
-        "flag_kind": d.flag_kind,
-        "reason": reason,
-        "hint": d.hint,
-        "unresolved_reads": d.unresolved,
-    }
-
-
-def _with_score(item: dict[str, Any], score: int | None, site: str) -> dict[str, Any]:
-    """Offer your MangaDex rating for an entry the site hasn't scored. A row with nothing else to change becomes a
-    score-only update; a dismissed flag stays dismissed, and a row that can't be written stays as it is."""
-    if score is None or item["flag_kind"] == "exceeds_total":
-        return item
-    if item["action"] == "skip":
-        if item["al_entry_id"] is None or item["reason"].startswith(DISMISSED_PREFIX):
-            return item
-        item = {**item, "action": "write", "reason": f"rated {score}/10 on MangaDex; {site} has no score"}
-    return {**item, "set_score": score, "score_approved": 1}
-
-
-def md_mal_link(row: Any) -> int | None:
-    """The MyAnimeList id from MangaDex's links, if it is a plain number."""
-    try:
-        value = json.loads(row["links"] or "{}").get("mal")
-    except (ValueError, AttributeError):
-        return None
-    text = str(value or "").strip()
-    return int(text) if text.isdigit() and int(text) > 0 else None
-
-
-def mal_target(row: Any, mapping: Any, media: dict[int, Any]) -> tuple[int | None, int | None, str | None]:
-    """(mal_id, al_media_id, skip reason) for one series.
-
-    The AniList match's idMal is preferred (it was matched or confirmed); MangaDex's own MAL link is
-    the fallback, so series that are unmatched on AniList can still sync. A series whose AniList match
-    awaits review waits too (its links are often the reason it needs review), and if the two ids
-    disagree the series is skipped rather than guessed.
-    """
-    state = mapping["state"] if mapping else None
-    if state == "review":
-        return None, None, "awaiting match review"
-    matched = state in ("auto", "confirmed") and mapping["al_media_id"] is not None
-    al_id = mapping["al_media_id"] if matched else None
-    al_mal = media[al_id]["id_mal"] if al_id is not None and al_id in media else None
-    md_mal = md_mal_link(row)
-    if al_mal and md_mal and al_mal != md_mal:
-        return None, al_id, f"AniList and MangaDex link different MyAnimeList entries ({al_mal} and {md_mal})"
-    mal_id = al_mal or md_mal
-    if mal_id is None:
-        why = "the AniList match has none" if matched else "no AniList match, and no MyAnimeList link on MangaDex"
-        return None, al_id, f"no MyAnimeList id ({why})"
-    return mal_id, al_id, None
-
-
-def build_items(repo: Repo, run_id: int, md_ids: set[str] | None = None, target: str = "anilist") -> list[dict[str, Any]]:
-    """One sync_item per library series (§8), or only `md_ids`. Pure DB reads; no API calls."""
-    mappings = repo.mappings()
-    dismissed = repo.dismissed_flags()
-    jump_limit = repo.get_setting("jump_limit")
-    rows = [r for r in repo.md_manga() if md_ids is None or r["md_id"] in md_ids]
-    mapped_ids = [m["al_media_id"] for m in mappings.values() if m["al_media_id"] is not None]
-    media = repo.media(mapped_ids)
-    if target == "mal":
-        return _build_mal_items(repo, run_id, rows, mappings, media, dismissed, jump_limit)
-    entries = repo.al_entries()
-    mal_scores = {mal_id: e["score"] for mal_id, e in repo.mal_entries().items()}
-    items: list[dict[str, Any]] = []
-    for row in rows:
-        md_id = row["md_id"]
-        m = mappings.get(md_id)
-        base: dict[str, Any] = {"run_id": run_id, "md_id": md_id}
-        state = m["state"] if m else None
-        if state not in ("auto", "confirmed") or m["al_media_id"] is None:
-            items.append({**base, "action": "skip", "reason": MAPPING_SKIPS.get(state, "no match")})
-            continue
-        al_id = m["al_media_id"]
-        entry_row = entries.get(al_id)
-        media_row = media.get(al_id)
-        entry = AlEntry(entry_row["entry_id"], entry_row["status"], entry_row["progress"]) if entry_row else None
-        info = AlMediaInfo(media_row["chapters"] if media_row else None, media_row["status"] if media_row else None)
-        item = {**base, "al_media_id": al_id, **_evaluated(repo, row, entry, info, jump_limit, dismissed, "AniList")}
-        mal_score = mal_scores.get(media_row["id_mal"]) if media_row and media_row["id_mal"] else None
-        score = score_from_md(row["rating"], entry_row["score"] if entry_row else None, (mal_score or 0) * 10)
-        items.append(_with_score(item, score, "AniList"))
-    return items
-
-
-def _build_mal_items(
-    repo: Repo, run_id: int, rows: list[Any], mappings: dict[str, Any], media: dict[int, Any],
-    dismissed: dict[str, Any], jump_limit: int,
-) -> list[dict[str, Any]]:
-    entries = repo.mal_entries()
-    al_entries = repo.al_entries()
-    items: list[dict[str, Any]] = []
-    for row in rows:
-        md_id = row["md_id"]
-        mal_id, al_id, skip = mal_target(row, mappings.get(md_id), media)
-        base: dict[str, Any] = {"run_id": run_id, "md_id": md_id, "al_media_id": al_id, "mal_id": mal_id}
-        if skip:
-            items.append({**base, "action": "skip", "reason": skip})
-            continue
-        e = entries.get(mal_id)
-        entry = AlEntry(mal_id, e["status"], e["progress"]) if e else None
-        al = media.get(al_id) if al_id is not None else None
-        if e is not None:
-            info = AlMediaInfo(e["chapters"], e["media_status"], "MyAnimeList")
-        elif al is not None and al["id_mal"] == mal_id:
-            # Not on the MAL list yet: MyAnimeList's total is unknown here, AniList's stands in for it.
-            info = AlMediaInfo(al["chapters"], al["status"], "AniList")
-        else:
-            info = AlMediaInfo(None, None, "MyAnimeList")
-        item = {**base, **_evaluated(repo, row, entry, info, jump_limit, dismissed, "MyAnimeList")}
-        al_entry = al_entries.get(al_id) if al_id is not None else None
-        score = score_from_md(row["rating"], (e["score"] or 0) * 10 if e else None, al_entry["score"] if al_entry else None)
-        items.append(_with_score(item, score, "MyAnimeList"))
-    return items
-
-
-def open_diff(repo: Repo, target: str | None = None) -> Any:
-    """The sync waiting for approval (at most one per target; it may be an older, restored run)."""
-    if target is None:
-        return repo.conn.execute("SELECT * FROM sync_run WHERE state='diffed' ORDER BY run_id DESC LIMIT 1").fetchone()
-    return repo.conn.execute(
-        "SELECT * FROM sync_run WHERE state='diffed' AND target=? ORDER BY run_id DESC LIMIT 1", (target,)
-    ).fetchone()
-
-
-def refresh_item(repo: Repo, md_id: str) -> bool:
-    """After a match or dismiss decision: recompute this series' row in each open `diffed` run. No requests."""
-    refreshed = False
-    for target in TARGETS:
-        run = open_diff(repo, target)
-        if run is None:
-            continue
-        if not repo.conn.execute("SELECT 1 FROM sync_item WHERE run_id=? AND md_id=?", (run["run_id"], md_id)).fetchone():
-            continue
-        for item in build_items(repo, run["run_id"], {md_id}, target):
-            with repo.conn:
-                repo.conn.execute("DELETE FROM sync_item WHERE run_id=? AND md_id=?", (run["run_id"], md_id))
-            repo.upsert_item(item)
-        refreshed = True
-    return refreshed
 
 
 class SyncOrchestrator:

@@ -14,7 +14,7 @@ from fastapi.responses import HTMLResponse
 from mdal import titles
 from mdal.db.repo import Repo
 from mdal.matching.pipeline import AniListFetch, confirm, confirm_manual, mark_not_on_anilist, retry_matching
-from mdal.sync.orchestrator import refresh_item
+from mdal.sync.changes import refresh_item
 from mdal.web.app import get_services, md_cover_url, render, templates
 
 router = APIRouter()

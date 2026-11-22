@@ -310,18 +310,10 @@ class Repo:
         return counts
 
     def diff_rows(self, run_id: int) -> list[sqlite3.Row]:
-        """Items with display data: MangaDex title, target title/link/total, current status on the target.
-
-        For MyAnimeList runs the list entry, its total and its publication status come from mal_entry,
-        falling back to the AniList match's total while the series is not on the MAL list.
-        """
+        """Items with display data: MangaDex title, the site's title and link, current status on the site."""
         return self.conn.execute(
             "SELECT i.*, r.target, m.title AS md_title, m.pub_status, m.last_chapter, m.cover_file, "
             "a.romaji, a.english, a.native, a.site_url, "
-            "CASE WHEN r.target='mal' THEN COALESCE(me.chapters, CASE WHEN me.mal_id IS NULL THEN a.chapters END) "
-            "     ELSE a.chapters END AS al_chapters, "
-            "CASE WHEN r.target='mal' THEN COALESCE(me.media_status, CASE WHEN me.mal_id IS NULL THEN a.status END) "
-            "     ELSE a.status END AS al_media_status, "
             "CASE WHEN r.target='mal' THEN me.status ELSE e.status END AS al_status, "
             "me.title AS mal_title "
             "FROM sync_item i "
