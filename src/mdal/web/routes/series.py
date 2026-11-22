@@ -15,12 +15,10 @@ from mdal.recommend.ratings import rate
 from mdal.recommend.series import series_url
 from mdal.sync import add_entry
 from mdal.sync.list_edit import EDIT_STATUSES, ListEditError, read_notes, save_notes, set_status
-from mdal.sync.list_edit import save_scores
-from mdal.sync.mal_list_edit import mirror_scores, mirror_status, on_mal
+from mdal.sync.mal_list_edit import mirror_status, on_mal
 from mdal.sync.orchestrator import refresh_item
 from mdal.sync.rules import STATUS_LABELS
 from mdal.sync.mal_writer import MalAddError, MalCommentsError, add_by_hand, save_comments
-from mdal.recommend import ranking
 from mdal.web.app import get_services, render, templates
 
 router = APIRouter()
@@ -212,26 +210,10 @@ async def series_score(request: Request, kind: str, ident: str, score: str = For
         value = float(score.replace(",", "."))
     except ValueError:
         value = -1
-    if not 0 < value <= 10:
-        return verdict_panel(request, key, score_note="A score is a number from 0.1 to 10.", score_ok=False)
-    try:
-        saved, failed = await save_scores(svc.anilist, svc.repo, {media_id: ranking.to_anilist(value)})
-    except AniListError as exc:
-        return verdict_panel(request, key, score_note=f"AniList didn't save it: {exc}", score_ok=False)
-    if failed:
-        return verdict_panel(request, key, score_note=f"AniList didn't save it: {failed[media_id]}", score_ok=False)
-    svc.ranker.remove(media_id)
-    where = "AniList"
-    if svc.mirror_to_mal():
-        try:
-            mal_saved, mal_failed = await mirror_scores(svc.mal, svc.repo, {media_id: ranking.to_anilist(value)})
-            where = "AniList and MyAnimeList" if mal_saved else where
-            if mal_failed:
-                return verdict_panel(request, key, score_note=f"Saved to AniList; MyAnimeList: {mal_failed[media_id]}.",
-                                     score_ok=False)
-        except MalError as exc:
-            return verdict_panel(request, key, score_note=f"Saved to AniList; MyAnimeList: {exc}.", score_ok=False)
-    return verdict_panel(request, key, score_note=f"Saved {value:g}/10 to {where}.", score_ok=True)
+    edit = await svc.your_list.set_score(f"al:{media_id}", value)
+    if (main := edit.site("AniList")) and main.took():
+        svc.ranker.remove(media_id)
+    return verdict_panel(request, key, score_note=edit.note, score_ok=edit.ok)
 
 
 def notes_panel(request: Request, key: str, **extra) -> HTMLResponse:

@@ -21,6 +21,9 @@ from mdal.clients.ratelimit import PacedQueue
 from mdal.config import ENV_FILE, Settings
 from mdal.db.connection import connect
 from mdal.db.repo import Repo
+from mdal.lists import YourList
+from mdal.lists.anilist import AniListSite
+from mdal.lists.myanimelist import MalSite
 from mdal.recommend.releases import NewReleases
 from mdal.recommend.ranker import Ranker
 from mdal.recommend.series import SeriesPages
@@ -91,6 +94,8 @@ class Services:
         self.mangaupdates_queue = PacedQueue(1.0 / repo.get_setting("mangaupdates_rps"))
         self.mangaupdates = MangaUpdatesClient(self.mangaupdates_queue)
         self.orchestrator = SyncOrchestrator(self)
+        self.your_list = YourList(repo, AniListSite(repo, self.anilist, lambda: repo.get_setting("anilist_write_batch")),
+                                  MalSite(repo, self.mal), busy=self.orchestrator.busy, mirroring=self.mirror_to_mal)
         self.recommender = Recommender(self)
         self.releases = NewReleases(self)
         self.series = SeriesPages(self)

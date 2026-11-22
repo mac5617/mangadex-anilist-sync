@@ -26,7 +26,8 @@ def test_only_clients_import_httpx():
     assert offenders == []
 
 
-MUTATION_MODULES = {SRC / "sync" / "writer.py", SRC / "sync" / "add_entry.py", SRC / "sync" / "list_edit.py"}
+MUTATION_MODULES = {SRC / "sync" / "writer.py", SRC / "sync" / "add_entry.py", SRC / "sync" / "list_edit.py",
+                    SRC / "lists" / "anilist.py"}
 MUTATION = re.compile(r"SaveMediaListEntry|\bmutation\b")
 
 
@@ -68,8 +69,10 @@ def test_pure_modules_do_no_io():
 
 
 def test_mal_writes_only_from_mal_writer():
-    """MyAnimeList writes: syncs from sync/mal_writer.py, list edits from sync/mal_list_edit.py, nowhere else."""
-    allowed = {SRC / "sync" / "mal_writer.py", SRC / "sync" / "mal_list_edit.py", SRC / "clients" / "myanimelist.py"}
+    """MyAnimeList writes: syncs from sync/mal_writer.py, list edits from lists/myanimelist.py and
+    sync/mal_list_edit.py, nowhere else."""
+    allowed = {SRC / "sync" / "mal_writer.py", SRC / "sync" / "mal_list_edit.py", SRC / "lists" / "myanimelist.py",
+               SRC / "clients" / "myanimelist.py"}
     offenders = [
         str(p.relative_to(ROOT))
         for p in python_files()

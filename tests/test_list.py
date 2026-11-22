@@ -132,7 +132,7 @@ def test_ranking_a_series_by_comparison_saves_scores(services, lists):
 def test_quick_score_and_bad_input(services, lists):
     with TestClient(create_app(services), follow_redirects=False) as c:
         ok = c.post("/list/rank/score", data={"media_id": 2, "score": "8.5"}).text
-        assert "Saved 8.5/10 for Series 2" in ok and services.repo.al_entries()[2]["score"] == 85
+        assert "Series 2: Saved 8.5/10 to AniList." in ok and "notice ok" in ok and services.repo.al_entries()[2]["score"] == 85
         assert "number from 0.1 to 10" in c.post("/list/rank/score", data={"media_id": 2, "score": "11"}).text
         assert c.post("/list/rank/tier", data={"media_id": 999, "tier": "liked"}).status_code == 404
         assert c.post("/list/rank/compare", data={"media_id": 2, "tier": "liked", "low": 5, "high": 9,

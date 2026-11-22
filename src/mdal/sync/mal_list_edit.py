@@ -1,12 +1,11 @@
-"""List edits mirrored to MyAnimeList: scores (List → Rank), Paused/Dropped (List → Stalled) and the status
-picked on a series page.
+"""List edits mirrored to MyAnimeList: Paused/Dropped (List → Stalled) and the status picked on a series page.
+Scores have moved to mdal/lists/myanimelist.py.
 
 The AniList edit (sync/list_edit.py) comes first; this repeats it on MyAnimeList for series on your
 MAL list. Rules:
 - only an entry already on your MyAnimeList list is edited: each edit reads the entry first
   (MyAnimeList's save would otherwise create it), so an edit costs 2 requests;
-- it sends only a score (MyAnimeList scores are whole numbers, 1-10) or one of the statuses in MAL_STATUS;
-- a score whose whole number didn't change isn't sent;
+- it sends only one of the statuses in MAL_STATUS;
 - every change is logged in list_edit with site 'mal'.
 """
 
@@ -22,11 +21,6 @@ log = logging.getLogger(__name__)
 
 MAL_STATUS = {"CURRENT": "reading", "COMPLETED": "completed", "PAUSED": "on_hold", "DROPPED": "dropped",
               "PLANNING": "plan_to_read"}
-
-
-def mal_score(score_100: int) -> int:
-    """AniList POINT_100 -> MyAnimeList's 1-10."""
-    return max(1, min(10, round(score_100 / 10)))
 
 
 def on_mal(repo: Repo, media_ids: list[int]) -> dict[int, int]:
@@ -50,25 +44,6 @@ async def _edit(mal: MalClient, repo: Repo, media_id: int, mal_id: int, field: s
         return str(exc)
     repo.log_edit(media_id, mal_id, field, entry.get(field), new, "done", site="mal")
     return None
-
-
-async def mirror_scores(mal: MalClient, repo: Repo, scores: dict[int, int]) -> tuple[list[int], dict[int, str]]:
-    """Send AniList scores (0-100) on to MyAnimeList. Returns (saved, {media id: why not})."""
-    ids = on_mal(repo, list(scores))
-    listed = repo.mal_entries()
-    saved: list[int] = []
-    failed: dict[int, str] = {}
-    for media_id, mal_id in ids.items():
-        value = mal_score(scores[media_id])
-        if (listed[mal_id]["score"] or 0) == value:
-            continue                                  # same whole number: nothing to send
-        problem = await _edit(mal, repo, media_id, mal_id, "score", value, score=value)
-        if problem:
-            failed[media_id] = problem
-        else:
-            repo.update_mal_entry(mal_id, score=value)
-            saved.append(media_id)
-    return saved, failed
 
 
 async def mirror_status(mal: MalClient, repo: Repo, media_id: int, status: str) -> str | None:

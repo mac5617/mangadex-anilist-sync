@@ -1,9 +1,9 @@
-"""Edits to your AniList list outside syncs: scores (List → Rank), Paused/Dropped (List → Stalled) and the
-status you pick on a series page.
+"""Edits to your AniList list outside syncs: Paused/Dropped (List → Stalled), the status you pick on a series
+page, and notes. Scores have moved to mdal/lists/anilist.py.
 
 Like writer.py and add_entry.py, this module may contain a mutation. Its rules:
 - it only edits an entry that exists, addressed by its entry `id` (never `mediaId`), so nothing can be added;
-- it sends only `scoreRaw` (1-100), `notes`, or one of the literal statuses in EDIT_STATUSES (never Rereading);
+- it sends only `notes`, or one of the literal statuses in EDIT_STATUSES (never Rereading);
 - every change is logged in list_edit, and the local copy of the entry follows what AniList answered.
 SaveMediaListEntry with absolute values is idempotent, so the client's retry of a failure is safe.
 """
@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from mdal.clients.anilist import AniListClient, AniListComplexityError, AniListGraphQLError
+from mdal.clients.anilist import AniListClient, AniListGraphQLError
 from mdal.db.repo import Repo
 
 log = logging.getLogger(__name__)
@@ -24,12 +24,6 @@ EDIT_STATUSES = ("CURRENT", "COMPLETED", "PAUSED", "DROPPED", "PLANNING")
 
 class ListEditError(Exception):
     pass
-
-
-def score_document(n: int) -> str:
-    params = ", ".join(f"$e{i}: Int, $s{i}: Int" for i in range(n))
-    fields = " ".join(f"m{i}: SaveMediaListEntry(id: $e{i}, scoreRaw: $s{i}) {SELECTION}" for i in range(n))
-    return f"mutation ({params}) {{ {fields} }}"
 
 
 def status_document(status: str) -> str:
@@ -48,43 +42,6 @@ def _entry(repo: Repo, media_id: int) -> Any:
     if entry is None:
         raise ListEditError("This series isn't on your AniList list.")
     return entry
-
-
-async def save_scores(client: AniListClient, repo: Repo, scores: dict[int, int],
-                      batch: int = 10) -> tuple[list[int], dict[int, str]]:
-    """Send scores (0-100, AniList's POINT_100) for entries on your list. Returns (saved media ids, {failed: reason})."""
-    entries = repo.al_entries()
-    todo = [(m, max(1, min(100, int(round(s))))) for m, s in scores.items() if m in entries]
-    failed = {m: "not on your AniList list" for m in scores if m not in entries}
-    saved: list[int] = []
-    start = 0
-    while start < len(todo):
-        chunk = todo[start:start + batch]
-        variables: dict[str, Any] = {}
-        for i, (m, s) in enumerate(chunk):
-            variables[f"e{i}"], variables[f"s{i}"] = entries[m]["entry_id"], s
-        try:
-            data, errors = await client.graphql(score_document(len(chunk)), variables), []
-        except AniListComplexityError:
-            if batch == 1:
-                raise
-            batch = max(1, batch // 2)
-            continue
-        except AniListGraphQLError as exc:
-            data, errors = exc.data or {}, exc.errors
-        problems = {str((e.get("path") or [""])[0]): str(e.get("message") or "error") for e in errors}
-        for i, (m, s) in enumerate(chunk):
-            result = (data or {}).get(f"m{i}")
-            old = entries[m]["score"]
-            if result and f"m{i}" not in problems:
-                repo.update_al_entry(m, score=result.get("score") or s)
-                repo.log_edit(m, entries[m]["entry_id"], "score", old, s, "done")
-                saved.append(m)
-            else:
-                failed[m] = problems.get(f"m{i}") or "AniList returned no result"
-                repo.log_edit(m, entries[m]["entry_id"], "score", old, s, "failed", failed[m])
-        start += len(chunk)
-    return saved, failed
 
 
 async def read_notes(client: AniListClient, repo: Repo, media_id: int) -> str:

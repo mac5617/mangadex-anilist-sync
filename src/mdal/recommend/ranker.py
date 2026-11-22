@@ -1,7 +1,7 @@
 """Your ranking and the scores it gives (List → Rank), saved to AniList in the background.
 
 Placing a series recomputes every score in its tier; whatever now differs from your AniList score is
-saved (by entry id, through sync/list_edit.py), a batch of up to 10 per request.
+saved through Your list (mdal/lists), AniList first and then MyAnimeList.
 """
 
 from __future__ import annotations
@@ -10,12 +10,10 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING, Any
 
-from mdal.clients.anilist import AniListError
 from mdal.db.repo import now_iso
 from mdal.recommend import ranking
-from mdal.clients.myanimelist import MalError
-from mdal.sync.list_edit import save_scores
-from mdal.sync.mal_list_edit import mal_score, mirror_scores, on_mal
+from mdal.lists.myanimelist import mal_score
+from mdal.sync.mal_list_edit import on_mal
 
 if TYPE_CHECKING:
     from mdal.services import Services
@@ -92,16 +90,27 @@ class Ranker:
         scores = {m: entries[m]["score"] for m in ids if m in entries and entries[m]["score"]}
         listed = self.repo.mal_entries()
         return {m: scores[m] for m, mal_id in on_mal(self.repo, list(scores)).items()
-                if (listed[mal_id]["score"] or 0) != mal_score(scores[m])}
+                if (listed[mal_id]["score"] or 0) != mal_score(scores[m] / 10)}
 
     def status(self) -> dict[str, Any]:
         return self.repo.get_setting("rank_save") or {}
 
+    def wanted(self) -> dict[str, float]:
+        """The scores Shiori set, out of 10 by series key: each ranked series' place, and the quick scores
+        already on AniList. Scores you set yourself are never in it."""
+        entries = self.repo.al_entries()
+        out = {f"al:{m}": entries[m]["score"] / 10 for m in self.repo.scored_by_shiori()
+               if m in entries and entries[m]["score"]}
+        out.update({f"al:{m}": s for m, s in self.ranked_scores().items() if m in entries})
+        return out
+
     def start_save(self) -> None:
         """Save pending scores in the background (AniList, then MyAnimeList); a save already running picks up
-        new ones after it."""
+        new ones after it. While Shiori is syncing it waits: the sync starts it when it finishes."""
         if self.saving:
             self._again = True
+            return
+        if self.services.orchestrator.busy():
             return
         if not (self.services.anilist_token() and self.pending()) and not self.pending_mal():
             return
@@ -111,34 +120,14 @@ class Ranker:
         while True:
             self._again = False
             self.repo.set_setting("rank_save", {"state": "running", "detail": "saving scores", "started_at": now_iso()})
-            parts: list[str] = []
-            problems: list[str] = []
-            todo = self.pending() if self.services.anilist_token() else {}
-            if todo:
-                self.repo.set_setting("rank_save", {**self.status(), "detail": f"saving {len(todo)} scores to AniList"})
-                try:
-                    saved, failed = await save_scores(self.services.anilist, self.repo, todo,
-                                                      self.repo.get_setting("anilist_write_batch"))
-                    parts.append(f"{len(saved)} scores saved to AniList" + (f", {len(failed)} failed" if failed else ""))
-                    problems += sorted(set(failed.values()))
-                except AniListError as exc:
-                    log.warning("saving scores failed: %s", exc)
-                    self.repo.set_setting("rank_save", {"state": "failed", "finished_at": now_iso(), "error": str(exc),
-                                                        "detail": "scores not saved"})
-                    break
-            mal_todo = self.pending_mal()
-            if mal_todo:
-                self.repo.set_setting("rank_save", {**self.status(), "detail": f"saving {len(mal_todo)} scores to MyAnimeList"})
-                try:
-                    mal_saved, mal_failed = await mirror_scores(self.services.mal, self.repo, mal_todo)
-                    parts.append(f"{len(mal_saved)} on MyAnimeList" + (f", {len(mal_failed)} failed" if mal_failed else ""))
-                    problems += [f"MyAnimeList: {p}" for p in sorted(set(mal_failed.values()))]
-                except MalError as exc:
-                    parts.append("MyAnimeList not updated")
-                    problems.append(f"MyAnimeList: {exc}")
+            edit = await self.services.your_list.set_scores(self.wanted())
+            if edit.refused:
+                self.repo.set_setting("rank_save", {"state": "done", "finished_at": now_iso(), "detail": edit.note,
+                                                    "error": None})
+                break
+            problems = edit.problems()
             self.repo.set_setting("rank_save", {
-                "state": "failed" if problems else "done", "finished_at": now_iso(),
-                "detail": "; ".join(parts) or "nothing to save",
+                "state": "failed" if problems else "done", "finished_at": now_iso(), "detail": edit.note,
                 "error": "; ".join(problems)[:300] if problems else None})
             if not self._again:
                 break

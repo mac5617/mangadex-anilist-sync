@@ -337,6 +337,20 @@ class SyncOrchestrator:
             self.repo.update_run(run_id, state="failed", error="interrupted; start a new sync", finished_at=now_iso())
         return ids
 
+    def busy(self) -> bool:
+        """Whether a Sync is in progress for any site, including the gap before a queued site starts.
+        A sync waiting for your approval (`diffed`) is not busy. No list edit is made while busy."""
+        return self.lock.locked() or bool(self.task and not self.task.done()) or bool(self.queued)
+
+    def _watch(self, task: asyncio.Task[Any]) -> asyncio.Task[Any]:
+        task.add_done_callback(lambda _task: self._after())
+        return task
+
+    def _after(self) -> None:
+        """Once nothing is syncing, scores held back meanwhile (List → Rank) go out."""
+        if not self.busy():
+            self.services.ranker.start_save()
+
     def active_run(self) -> Any:
         return self.repo.conn.execute(
             f"SELECT * FROM sync_run WHERE state IN ({','.join('?' * len(ACTIVE_STATES))}) ORDER BY run_id DESC LIMIT 1",
@@ -367,7 +381,7 @@ class SyncOrchestrator:
         except BaseException:
             self.lock.release()
             raise
-        self.task = asyncio.create_task(self._guarded(run_id, self._dry_run))
+        self.task = self._watch(asyncio.create_task(self._guarded(run_id, self._dry_run)))
         return run_id
 
     def sync_targets(self) -> list[str]:
@@ -397,6 +411,7 @@ class SyncOrchestrator:
         except (SyncAlreadyRunning, SyncCoolingDown, SyncStateError) as exc:
             log.warning("queued %s sync not started: %s", target, exc)
             self.queued = []
+            self._after()
 
     async def wait(self) -> None:
         if self.task:
@@ -444,7 +459,7 @@ class SyncOrchestrator:
             self.lock.release()
             raise
         to_write = [r for r in order if plan[r]]
-        self.task = asyncio.create_task(self._write_all(to_write))
+        self.task = self._watch(asyncio.create_task(self._write_all(to_write)))
         return sum(len(v) for v in plan.values())
 
     async def _write_all(self, run_ids: list[int]) -> None:
@@ -470,7 +485,7 @@ class SyncOrchestrator:
             raise SyncStateError("this sync cannot be resumed")
         await self.lock.acquire()
         self.repo.update_run(run_id, state="writing", error=None, finished_at=None, phase_detail="resuming")
-        self.task = asyncio.create_task(self._guarded(run_id, self._write_phase))
+        self.task = self._watch(asyncio.create_task(self._guarded(run_id, self._write_phase)))
 
     def resumable_run(self) -> Any:
         r = self.repo.conn.execute(

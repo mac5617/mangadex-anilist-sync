@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 
 from mdal.clients.anilist import ANILIST_URL
 from mdal.clients.myanimelist import API_URL as MAL_URL
-from mdal.sync.mal_list_edit import mal_score
+from mdal.lists.myanimelist import mal_score
 from mdal.web.app import create_app
 from tests.factories import al_media_row, connect_mal
 from tests.test_list import FakeLists
@@ -19,7 +19,7 @@ DAY = 86400
 
 
 def test_mal_scores_are_whole_numbers():
-    assert [mal_score(s) for s in (1, 68, 84, 85, 100)] == [1, 7, 8, 8, 10]   # 84.5 rounds half to even: 8
+    assert [mal_score(s) for s in (0.1, 6.8, 8.4, 8.5, 10)] == [1, 7, 8, 8, 10]   # 8.5 rounds half to even: 8
 
 
 class FakeMal:
@@ -67,14 +67,10 @@ def test_quick_scores_go_to_both_sites(setup):
     services, mal = setup
     with TestClient(create_app(services)) as c:
         done = c.post("/list/rank/score", data={"media_id": 1, "score": "8.4"}).text
-        assert "Saved 8.4/10 for Series 1 to AniList and MyAnimeList." in done
+        assert "Series 1: Saved 8.4/10 to AniList and MyAnimeList." in done
         assert mal.edits == [(501, {"score": "8"})]
         assert services.repo.mal_entries()[501]["score"] == 8
-        c.post("/list/rank/score", data={"media_id": 3, "score": "7.6"})          # already 8 on MAL: nothing sent
-        assert len(mal.edits) == 1
-        only = c.post("/list/rank/score", data={"media_id": 4, "score": "9"}).text  # not on the MAL list
-        assert "Saved 9/10 for Series 4 to AniList." in only and len(mal.edits) == 1
-    assert {(e["site"], e["field"], e["state"]) for e in services.repo.list_edits()} >= {("mal", "score", "done")}
+    # which scores each site sends, and the notes for them: tests/test_your_list.py
 
 
 def test_ranking_saves_repeat_on_mal_in_the_background(setup):

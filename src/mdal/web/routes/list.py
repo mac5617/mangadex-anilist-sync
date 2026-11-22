@@ -18,8 +18,8 @@ from mdal.recommend.fresh import english_meta
 from mdal.recommend.series import big_cover, series_url
 from mdal.stats import entry_rows
 from mdal.clients.myanimelist import MalError
-from mdal.sync.list_edit import ListEditError, save_scores, set_status
-from mdal.sync.mal_list_edit import mirror_scores, mirror_status, on_mal
+from mdal.sync.list_edit import ListEditError, set_status
+from mdal.sync.mal_list_edit import mirror_status, on_mal
 from mdal.web.app import get_services, render, templates
 
 router = APIRouter()
@@ -58,13 +58,14 @@ def list_home() -> RedirectResponse:
 # ---- rank -------------------------------------------------------------------------------------
 
 
-def tier_step(request: Request, media_id: int | None = None, note: str | None = None) -> dict[str, Any]:
+def tier_step(request: Request, media_id: int | None = None, note: str | None = None,
+              note_ok: bool = False) -> dict[str, Any]:
     svc = get_services(request)
     entries = entries_by_id(request)
     queue = svc.ranker.queue()
     current = entries.get(media_id) if media_id else (queue[0] if queue else None)
     sizes = {t: len(svc.ranker.tier(t)) for t in ranking.TIERS}
-    return {"step": "tier" if current else "empty", "s": view(current) if current else None, "note": note,
+    return {"step": "tier" if current else "empty", "s": view(current) if current else None, "note": note, "note_ok": note_ok,
             "suggested": ranking.tier_for(current.get("score")) if current else None,
             "left": len(queue), "sizes": sizes, "tiers": ranking.TIERS, **save_context(request)}
 
@@ -146,27 +147,13 @@ async def rank_score(request: Request, media_id: int = Form(...), score: str = F
         value = float(score.replace(",", "."))
     except ValueError:
         value = -1
-    if not 0 < value <= 10:
-        return step(request, tier_step(request, media_id, note="A score is a number from 0.1 to 10."))
-    try:
-        saved, failed = await save_scores(svc.anilist, svc.repo, {media_id: ranking.to_anilist(value)})
-    except AniListError as exc:
-        return step(request, tier_step(request, media_id, note=f"AniList didn't save it: {exc}"))
-    if failed:
-        return step(request, tier_step(request, media_id, note=f"AniList didn't save it: {failed[media_id]}"))
+    edit = await svc.your_list.set_score(f"al:{media_id}", value)
+    main = edit.site("AniList")
+    if not (main and main.took()):
+        return step(request, tier_step(request, media_id, note=edit.note))
     svc.ranker.skip(media_id)        # scored now: it goes to the back of the queue
     title = entries_by_id(request)[media_id]["title"]
-    where = "AniList"
-    if svc.mirror_to_mal():
-        try:
-            mal_saved, mal_failed = await mirror_scores(svc.mal, svc.repo, {media_id: ranking.to_anilist(value)})
-            where = "AniList and MyAnimeList" if mal_saved else where
-            if mal_failed:
-                return step(request, tier_step(request, note=f"Saved {value:g}/10 for {title} to AniList; "
-                                                             f"MyAnimeList: {mal_failed[media_id]}."))
-        except MalError as exc:
-            return step(request, tier_step(request, note=f"Saved {value:g}/10 for {title} to AniList; MyAnimeList: {exc}."))
-    return step(request, tier_step(request, note=f"Saved {value:g}/10 for {title} to {where}."))
+    return step(request, tier_step(request, note=f"{title}: {edit.note}", note_ok=edit.ok))
 
 
 @router.post("/list/rank/skip", response_class=HTMLResponse)

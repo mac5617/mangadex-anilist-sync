@@ -4,7 +4,7 @@
   <span class="rank-title">{{ x.title }}</span>
   <span class="rank-meta muted small">{{ x.meta }}</span>
 {%- endmacro -%}
-{% if note %}<p class="notice {{ 'ok' if note.startswith('Saved') else 'err' }}" role="status">{{ note }}</p>{% endif %}
+{% if note %}<p class="notice {{ 'ok' if note_ok else 'err' }}" role="status">{{ note }}</p>{% endif %}
 
 {% if step == "empty" %}
   <div class="rank-done panel">
