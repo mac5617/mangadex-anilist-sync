@@ -15,6 +15,7 @@ from mdal.sync.estimate import estimate
 
 TARGETS = ("anilist", "mal")
 SITE_NAMES = {"anilist": "AniList", "mal": "MyAnimeList"}
+NOTHING_LEFT = {"write_state": "dropped", "verify_note": "dropped: nothing left to send"}
 
 
 class ApprovalError(Exception):
@@ -72,6 +73,15 @@ def sends_score(item: Any) -> bool:
     return item["set_score"] is not None and bool(item["score_approved"])
 
 
+def _sends_nothing(item: Any, completes: bool, scored: bool) -> bool:
+    return (item["md_progress"] is None or is_status_only(item)) and not completes and not scored
+
+
+def nothing_to_send(item: Any) -> bool:
+    """An approved Change with nothing left to send, as it stands after the writer's re-read."""
+    return _sends_nothing(item, sends_completion(item), sends_score(item))
+
+
 def is_selectable(item: Any) -> bool:
     return item["action"] in ("write", "add", "flag") and item["flag_kind"] != "exceeds_total"
 
@@ -104,8 +114,8 @@ def plan_items(items: Iterable[Any], selection: Selection) -> WritePlan:
             continue
         completes = item["set_status"] == "COMPLETED" and md_id in selection.completing
         scored = item["set_score"] is not None and md_id in selection.scoring
-        if is_status_only(item) and not completes and not scored:
-            continue  # nothing to send
+        if _sends_nothing(item, completes, scored):
+            continue
         writes.append(PlannedWrite(md_id, completes, scored))
     return WritePlan(tuple(writes), refusal)
 

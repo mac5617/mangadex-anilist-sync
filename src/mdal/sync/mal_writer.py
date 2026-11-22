@@ -17,7 +17,7 @@ from typing import Any
 from mdal.clients.myanimelist import MalClient, MalRequestError
 from mdal.db.repo import Repo, now_iso
 from mdal.fetch.mal_list import fetch_mal_list
-from mdal.sync.changes import is_status_only, sends_completion, sends_score
+from mdal.sync.changes import NOTHING_LEFT, is_status_only, nothing_to_send, sends_completion, sends_score
 from mdal.sync.writer import recheck, site_score, verify_note, with_note
 
 SITE = "MyAnimeList"
@@ -59,11 +59,10 @@ class MalWriter:
         await self.prewrite(run_id)
         pending = self.repo.items_in_state(run_id, "pending")
         for n, item in enumerate(pending, start=1):
-            chapters, status, score = mal_request(item)
-            if chapters is None and status is None and score is None:
-                self.repo.update_items(run_id, [(item["md_id"], {"write_state": "dropped",
-                                                                 "verify_note": "dropped: nothing left to send"})])
+            if nothing_to_send(item):
+                self.repo.update_items(run_id, [(item["md_id"], NOTHING_LEFT)])
                 continue
+            chapters, status, score = mal_request(item)
             self.progress(f"writing {n}/{len(pending)}, about {self.client.queue.min_interval:.0f} s each")
             try:
                 await self.client.update_list_status(item["mal_id"], chapters=chapters, status=status, score=score)

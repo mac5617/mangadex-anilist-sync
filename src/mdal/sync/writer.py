@@ -22,7 +22,7 @@ from typing import Any
 
 from mdal.clients.anilist import AniListClient, AniListComplexityError, AniListGraphQLError
 from mdal.db.repo import Repo, now_iso
-from mdal.sync.changes import is_status_only, sends_completion, sends_score
+from mdal.sync.changes import NOTHING_LEFT, is_status_only, nothing_to_send, sends_completion, sends_score
 from mdal.fetch.anilist_list import fetch_list
 
 log = logging.getLogger(__name__)
@@ -238,12 +238,10 @@ class Writer:
     async def write(self, run_id: int) -> None:
         await self.prewrite(run_id)
         pending = self.repo.items_in_state(run_id, "pending")
-        ops = [op_for(i) for i in pending]
-        # An approved row that ends up with nothing to send (status-only whose completion was unticked).
-        empty = [op.md_id for op in ops if op.progress is None and not op.complete and op.score is None]
+        empty = [i["md_id"] for i in pending if nothing_to_send(i)]
         if empty:
-            self.repo.update_items(run_id, [(m, {"write_state": "dropped", "verify_note": "dropped: nothing left to send"}) for m in empty])
-        ops = [op for op in ops if op.md_id not in set(empty)]
+            self.repo.update_items(run_id, [(m, NOTHING_LEFT) for m in empty])
+        ops = [op_for(i) for i in pending if not nothing_to_send(i)]
         batches_sent = 0
         while ops:
             batch_size = max(1, int(self.repo.get_setting("anilist_write_batch")))
