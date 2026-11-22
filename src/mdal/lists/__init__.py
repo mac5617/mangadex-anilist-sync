@@ -11,8 +11,9 @@ Callers name series by series key (`al:<id>` / `md:<uuid>`) and scores out of 10
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from functools import wraps
 from typing import Any, Protocol
 
 from mdal.db.repo import Repo
@@ -87,11 +88,30 @@ class Site(Protocol):
     async def add(self, series: Series, status: str, progress: int) -> SiteResult: ...
 
 
+def _edit(method: Callable[..., Awaitable[Edit]]) -> Callable[..., Awaitable[Edit]]:
+    """A list edit: refused while Shiori is busy, and counted while it saves so a Sync won't start under it."""
+    @wraps(method)
+    async def edit(self: YourList, *args: Any, **kwargs: Any) -> Edit:
+        if self.busy():
+            return Edit(BUSY, refused=True)
+        self._saving += 1
+        try:
+            return await method(self, *args, **kwargs)
+        finally:
+            self._saving -= 1
+    return edit
+
+
 class YourList:
     def __init__(self, repo: Repo, main: Site, mirror: Site, busy: Callable[[], bool],
                  mirroring: Callable[[], bool], refresh: Callable[[Repo, str], Any] = refresh_item) -> None:
         self.repo, self.main, self.mirror = repo, main, mirror
         self.busy, self.mirroring, self.refresh = busy, mirroring, refresh
+        self._saving = 0
+
+    def saving(self) -> bool:
+        """Whether a list edit is still on its way to the sites."""
+        return self._saving > 0
 
     # ---- naming series -------------------------------------------------------------------
     def series(self, keys: list[str]) -> dict[str, Series]:
@@ -127,10 +147,9 @@ class YourList:
             edit.note = _score_note(edit, score)
         return edit
 
+    @_edit
     async def set_scores(self, scores: dict[str, float]) -> Edit:
         """Scores out of 10, by series key, with a note counting them. A score a site already has isn't sent there."""
-        if self.busy():
-            return Edit(BUSY, refused=True)
         if not all(0 < s <= 10 for s in scores.values()):
             return Edit(BAD_SCORE, refused=True)
         series = self.series(list(scores))
@@ -144,10 +163,9 @@ class YourList:
         edit.note = _scores_note(edit)
         return edit
 
+    @_edit
     async def set_status(self, key: str, status: str) -> Edit:
         """One series' status, in AniList's words (EDIT_STATUSES)."""
-        if self.busy():
-            return Edit(BUSY, refused=True)
         if status not in EDIT_STATUSES:
             return Edit(BAD_STATUS, refused=True)
         series = self.series([key])[key]
@@ -166,11 +184,10 @@ class YourList:
         series = self.series([key])[key]
         return bool(self.mirroring() and series.mal_id and self.mirror.entry(series) is None)
 
+    @_edit
     async def add(self, key: str, status: str, progress: int) -> Edit:
         """Add a series to your list with this status (ADD_STATUSES) and chapters read: to AniList, and to
         MyAnimeList while mirroring. A series already on AniList goes on to MyAnimeList only."""
-        if self.busy():
-            return Edit(BUSY, refused=True)
         if status not in ADD_STATUSES:
             return Edit(f"Unsupported status {status!r}.", refused=True)
         series = self.series([key])[key]
@@ -195,11 +212,10 @@ class YourList:
             return f"Couldn't read your notes from AniList: {exc}"
         return None
 
+    @_edit
     async def set_notes(self, key: str, notes: str, mirror: bool = True) -> Edit:
         """Replace your notes (trimmed, at most NOTES_MAX characters). `mirror=False` keeps this save off
         MyAnimeList even while mirroring is on."""
-        if self.busy():
-            return Edit(BUSY, refused=True)
         notes = notes.strip()[:NOTES_MAX]
         series = self.series([key])[key]
         main = await self.main.set_notes(series, notes)

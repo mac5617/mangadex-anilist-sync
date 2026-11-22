@@ -5,4 +5,5 @@
     Writing now only writes what's shown.</p>
   {%- elif ready %}<p class="notice ok small">{{ ready | join(" and ") }} {{ "has" if ready | length == 1 else "have" }} changes too.
     <a href="/sync/{{ run.run_id }}">Show them here</a> to approve everything together.</p>{% endif -%}
+  {%- for note in not_read %}<p class="notice warn small">{{ note }}</p>{% endfor -%}
 </div>

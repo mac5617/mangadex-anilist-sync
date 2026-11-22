@@ -7,6 +7,7 @@
     {% if run.phase_detail %}<p>{{ run.phase_detail }}</p>{% endif %}
     {% if queued %}<p class="muted small">Then {{ queued | join(" and ") }}, reusing this MangaDex read.</p>{% endif %}
     {% if run.error %}<p class="notice err">{{ run.error }}</p>{% endif %}
+    {% for note in not_read %}<p class="notice warn">{{ note }}</p>{% endfor %}
     <p class="muted small">Requests: {% if run.target == "mal" %}MyAnimeList {{ run.req_mal }}{% if run.req_anilist %}, AniList {{ run.req_anilist }}{% endif %}{% else %}AniList {{ run.req_anilist }}{% endif %}, MangaDex {{ run.req_mangadex }}</p>
   {% else %}
     <p class="muted">No syncs yet. A sync reads your MangaDex library and one of your lists, then shows what would change.

@@ -14,7 +14,6 @@ from mdal.fetch.mangadex_library import fetch_library
 from mdal.matching.pipeline import AniListFetch, resolve_all
 from mdal.sync.changes import SITE_NAMES, build_items
 from mdal.sync.mal_writer import MalWriter
-from mdal.sync.runs import Runs
 from mdal.sync.writer import Writer
 
 if TYPE_CHECKING:
@@ -55,8 +54,8 @@ class SyncSite(Protocol):
 class _Site:
     target = ""
 
-    def __init__(self, services: Services, runs: Runs) -> None:
-        self.services, self.runs, self.repo = services, runs, services.repo
+    def __init__(self, services: Services) -> None:
+        self.services, self.repo = services, services.repo
 
     def _phase(self, run_id: int, state: str | None = None, detail: str | None = None) -> None:
         fields: dict[str, Any] = {"phase_detail": detail}
@@ -92,8 +91,8 @@ class _Site:
 class AniListSync(_Site):
     target = "anilist"
 
-    def __init__(self, services: Services, runs: Runs, user_id: Callable[[], Awaitable[int]]) -> None:
-        super().__init__(services, runs)
+    def __init__(self, services: Services, user_id: Callable[[], Awaitable[int]]) -> None:
+        super().__init__(services)
         self.user_id = user_id
 
     def reads_mangadex(self) -> bool:
@@ -176,5 +175,5 @@ class MalSync(_Site):
         repo.update_run(run_id, state="diffed", phase_detail=detail)
 
 
-def sync_sites(services: Services, runs: Runs, user_id: Callable[[], Awaitable[int]]) -> dict[str, SyncSite]:
-    return {"anilist": AniListSync(services, runs, user_id), "mal": MalSync(services, runs)}
+def sync_sites(services: Services, user_id: Callable[[], Awaitable[int]]) -> dict[str, SyncSite]:
+    return {"anilist": AniListSync(services, user_id), "mal": MalSync(services)}

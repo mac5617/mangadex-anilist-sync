@@ -24,6 +24,7 @@ from mdal.clients.myanimelist import MalAuthError, MalRateLimited, MalUnavailabl
 from mdal.db.repo import Repo, now_iso
 from mdal.fetch.anilist_list import viewer
 from mdal.sync.changes import (
+    SITE_NAMES,
     TARGETS,
     ApprovalError,
     Selection,
@@ -94,7 +95,9 @@ class SyncOrchestrator:
     def __init__(self, services: Services) -> None:
         self.services = services
         self.runs = Runs(services.repo)
-        self.sites = sync_sites(services, self.runs, self.user_id)
+        self.sites = sync_sites(services, self.user_id)
+        self.editing: Callable[[], bool] = lambda: False   # list edits still saving (set by Services)
+        self.not_read: list[str] = []    # why a site this Sync covers wasn't read
         self.lock = asyncio.Lock()
         self.task: asyncio.Task[None] | None = None
         self.queued: list[str] = []      # sites still to sync after the current one (Sync covers both)
@@ -108,6 +111,16 @@ class SyncOrchestrator:
         A sync waiting for your approval (`diffed`) is not busy. No list edit is made while busy."""
         return self.lock.locked() or bool(self.task and not self.task.done()) or bool(self.queued)
 
+    def _refuse_if_busy(self, message: str = "a sync is already running") -> None:
+        if self.busy():
+            raise SyncAlreadyRunning(message)
+
+    def _refuse_if_unavailable(self) -> None:
+        """Before anything that reads or writes a site: no Sync, and no list edit still saving."""
+        self._refuse_if_busy()
+        if self.editing():
+            raise SyncStateError("Saving your list edits; try again when they finish.")
+
     def _watch(self, task: asyncio.Task[Any]) -> asyncio.Task[Any]:
         task.add_done_callback(lambda _task: self._after())
         return task
@@ -118,10 +131,13 @@ class SyncOrchestrator:
             self.services.ranker.start_save()
 
     async def start_run(self, target: str = "anilist") -> int:
+        self._refuse_if_unavailable()
+        self.not_read = []
+        return await self._start(target)
+
+    async def _start(self, target: str) -> int:
         if target not in TARGETS:
             raise SyncStateError(f"unknown sync target {target!r}")
-        if self.lock.locked() or (self.task and not self.task.done()):
-            raise SyncAlreadyRunning("a sync is already running")
         if target == "mal" and not self.services.mal.connected:
             raise SyncStateError("Connect MyAnimeList in Settings first.")
         if self.sites[target].reads_mangadex():
@@ -161,9 +177,10 @@ class SyncOrchestrator:
             return
         target = self.queued.pop(0)
         try:
-            await self.start_run(target)
+            await self._start(target)
         except (SyncAlreadyRunning, SyncCoolingDown, SyncStateError) as exc:
             log.warning("queued %s sync not started: %s", target, exc)
+            self.not_read.append(f"{SITE_NAMES[target]} wasn't read: {exc}")
             self.queued = []
             self._after()
 
@@ -188,8 +205,7 @@ class SyncOrchestrator:
         """Approve the changes of several sites at once ({run_id: Selection}), then write
         them one site after another (AniList first), each re-checked and verified as on its own. A site with
         nothing ticked is closed without writing. Returns the number of approved items."""
-        if self.lock.locked() or (self.task and not self.task.done()):
-            raise SyncAlreadyRunning("a sync is already running")
+        self._refuse_if_unavailable()
         several = len(choices) > 1
         plan: dict[int, WritePlan] = {run_id: approved_plan(self.repo, run_id, chosen, allow_empty=several)
                                       for run_id, chosen in choices.items()}
@@ -226,8 +242,7 @@ class SyncOrchestrator:
             self.lock.release()
 
     async def resume(self, run_id: int) -> None:
-        if self.lock.locked() or (self.task and not self.task.done()):
-            raise SyncAlreadyRunning("a sync is already running")
+        self._refuse_if_unavailable()
         if not self.runs.can_resume(run_id):
             raise SyncStateError("this sync cannot be resumed")
         await self.lock.acquire()
@@ -236,11 +251,10 @@ class SyncOrchestrator:
 
     def resumable_run(self) -> int | None:
         """The Run a Resume would continue. None while something is running."""
-        return None if self.lock.locked() or (self.task and not self.task.done()) else self.runs.resumable()
+        return None if self.busy() else self.runs.resumable()
 
     def restore(self, run_id: int) -> None:
-        if self.lock.locked() or (self.task and not self.task.done()):
-            raise SyncAlreadyRunning("a sync is running; restore it when it finishes")
+        self._refuse_if_busy("a sync is running; restore it when it finishes")
         self.runs.restore(run_id)
 
     # ---- running --------------------------------------------------------
@@ -279,6 +293,8 @@ class SyncOrchestrator:
                 if body == self._read and self.repo.get_run(run_id)["state"] == "diffed":
                     asyncio.create_task(self._start_queued(asyncio.current_task()))
                 else:
+                    failed = SITE_NAMES[self.repo.get_run(run_id)["target"]]
+                    self.not_read += [f"{SITE_NAMES[t]} wasn't read because {failed}'s read failed." for t in self.queued]
                     self.queued = []
 
     async def user_id(self) -> int:

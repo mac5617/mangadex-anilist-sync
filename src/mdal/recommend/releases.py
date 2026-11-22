@@ -171,7 +171,7 @@ class NewReleases:
         s = self.services
         if self.busy or not s.settings.mangadex_username:
             return False
-        if s.orchestrator.lock.locked() or (s.orchestrator.task and not s.orchestrator.task.done()):
+        if s.orchestrator.busy():
             return False                               # a sync is using MangaDex
         cooldown = s.mangadex_guard.cooldown()
         return not (cooldown and cooldown[0] > time.time())

@@ -97,6 +97,7 @@ class Services:
         self.your_list = YourList(repo, AniListSite(repo, self.anilist, lambda: repo.get_setting("anilist_write_batch"),
                                                           self.orchestrator.user_id),
                                   MalSite(repo, self.mal), busy=self.orchestrator.busy, mirroring=self.mirror_to_mal)
+        self.orchestrator.editing = self.your_list.saving
         self.recommender = Recommender(self)
         self.releases = NewReleases(self)
         self.series = SeriesPages(self)

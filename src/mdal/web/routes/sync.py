@@ -77,6 +77,7 @@ def status_context(svc: Services, message: str | None = None) -> dict[str, Any]:
         "md_fresh": md_snapshot_fresh(svc.repo),
         "sync_sites": [SITE_NAMES[t] for t in svc.orchestrator.sync_targets()],
         "queued": [SITE_NAMES[t] for t in svc.orchestrator.queued],
+        "not_read": svc.orchestrator.not_read,
     }
 
 
@@ -277,6 +278,7 @@ def _diff_page(request: Request, run_id: int, f: str | None = None, error: str |
         "site": " and ".join(SITE_NAMES[r["target"]] for r in runs),
         "site_names": SITE_NAMES,
         "reading": still_reading(svc, runs) if run["state"] == "diffed" else [],
+        "not_read": svc.orchestrator.not_read,
         "filter": f,
         "approvable": run["state"] == "diffed",
         "restorable": svc.orchestrator.runs.can_restore(run_id),
@@ -350,7 +352,8 @@ def diff_others(request: Request, run_id: int, shown: str = "") -> HTMLResponse:
     runs = [r for r in group(svc.repo, run) if r["run_id"] in ids] or [run]
     ready = [SITE_NAMES[r["target"]] for r in group(svc.repo, run) if r["run_id"] not in ids]
     return templates.TemplateResponse(request, "_diff_others.html", {
-        "run": run, "shown": shown, "reading": still_reading(svc, runs), "ready": ready})
+        "run": run, "shown": shown, "reading": still_reading(svc, runs), "ready": ready,
+        "not_read": svc.orchestrator.not_read})
 
 
 @router.post("/sync/{run_id}/approve", response_class=HTMLResponse)
@@ -360,7 +363,7 @@ async def approve(request: Request, run_id: int) -> Response:
     form = await request.form()
     try:
         await svc.orchestrator.approve_many(choices(form, group(svc.repo, run), run_id))
-    except (ApprovalError, SyncAlreadyRunning) as exc:
+    except (ApprovalError, SyncAlreadyRunning, SyncStateError) as exc:
         return _diff_page(request, run_id, str(form.get("f") or "write"), error=str(exc), status_code=400)
     return RedirectResponse("/", status_code=303)
 
