@@ -18,7 +18,7 @@
       after: {{ cooldown.reason }}{% endif %}. Nothing is sent to MangaDex until then.</p>
   {% endif %}
   {% if resumable and not active %}
-    <p class="notice warn">Sync #{{ resumable }} stopped while writing. Resuming sends only the rows not yet written.</p>
+    <p class="notice warn">Sync {% for r in resumable %}#{{ r }}{% if not loop.last %} and {% endif %}{% endfor %} stopped while writing. Resuming sends only the rows not yet written.</p>
   {% endif %}
   <div class="row">
     {% if open_diffs %}
@@ -26,7 +26,7 @@
       <span class="muted small">{{ open_diffs | map("first") | join(" and ") }}, approved together</span>
     {% endif %}
     {% if resumable and not active %}
-      <button hx-post="/sync/{{ resumable }}/resume" hx-target="#sync-status" hx-swap="outerHTML">Resume</button>
+      <button hx-post="/sync/{{ resumable[0] }}/resume" hx-target="#sync-status" hx-swap="outerHTML">Resume</button>
     {% endif %}
     {% if not active and not queued %}
       {% set style = "secondary" if open_diffs else "" %}

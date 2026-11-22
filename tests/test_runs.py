@@ -24,14 +24,14 @@ def test_a_failed_list_add_does_not_hide_resume(repo):
     run_id = stopped_write(repo)
     add = repo.create_run("failed")
     repo.update_run(add, approved_at=now_iso(), error="AniList refused the add")
-    assert Runs(repo).resumable() == run_id
+    assert Runs(repo).resumable() == [run_id]
 
 
 def test_a_run_with_nothing_to_send_or_verify_cannot_resume(repo):
     run_id = stopped_write(repo)
     repo.update_items(run_id, [("w", {"write_state": "failed"})])
     assert not Runs(repo).can_resume(run_id)
-    assert Runs(repo).resumable() is None
+    assert Runs(repo).resumable() == []
 
 
 def test_a_new_run_supersedes_the_open_diff_for_its_site_only(repo):
@@ -56,3 +56,28 @@ def test_only_an_open_diff_can_be_discarded(repo):
     run_id = stopped_write(repo)
     with pytest.raises(SyncStateError):
         Runs(repo).discard(run_id)
+
+
+def test_a_new_run_supersedes_an_unfinished_write_for_its_site(repo):
+    run_id = stopped_write(repo)
+    newer = Runs(repo).create("anilist")
+    old = repo.get_run(run_id)
+    assert (old["state"], old["error"]) == ("cancelled", f"superseded by sync #{newer}")
+    item = {i["md_id"]: i for i in repo.items(run_id)}["w"]
+    assert (item["write_state"], item["verify_note"]) == ("dropped", f"dropped: superseded by sync #{newer}")
+    assert Runs(repo).resumable() == [] and not Runs(repo).can_restore(run_id)
+
+
+def test_a_new_run_leaves_the_other_sites_unfinished_write(repo):
+    run_id = stopped_write(repo)
+    Runs(repo).create("mal")
+    assert Runs(repo).resumable() == [run_id]
+
+
+def test_resume_covers_each_site_with_the_main_site_first(repo):
+    anilist = stopped_write(repo)
+    mal = repo.create_run("halted", "mal")
+    repo.replace_items(mal, [{"run_id": mal, "md_id": "w", "action": "write", "reason": "r", "approved": 1,
+                              "write_state": "pending"}])
+    repo.update_run(mal, approved_at=now_iso())
+    assert Runs(repo).resumable() == [anilist, mal]

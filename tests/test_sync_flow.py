@@ -33,7 +33,7 @@ async def test_nothing_starts_in_the_gap_between_sites(services):
     with pytest.raises(SyncAlreadyRunning):
         await orch.start_run("anilist")
     assert orch.queued == ["mal"] and services.repo.get_run(run_id)["state"] == "diffed"
-    assert orch.resumable_run() is None
+    assert orch.resumable_runs() == []
 
 
 async def test_a_sync_waits_for_list_edits_to_save(services):
@@ -84,3 +84,25 @@ async def test_a_failed_read_says_the_next_site_was_not_read(services):
     await orch.start_sync(["anilist", "mal"])
     await settle(orch)
     assert orch.not_read == ["MyAnimeList wasn't read because AniList's read failed."]
+
+
+async def test_one_resume_continues_both_sites_anilist_first(services):
+    orch = services.orchestrator
+    written = []
+
+    async def write(run_id):
+        written.append(services.repo.get_run(run_id)["target"])
+        services.repo.update_run(run_id, state="done")
+
+    orch.sites = fake_sites(write=write)
+    anilist = seed_diffed_run(services.repo)
+    services.repo.update_items(anilist, [("w", {"approved": 1, "write_state": "pending"})])
+    services.repo.update_run(anilist, state="halted", approved_at="then")
+    mal = services.repo.create_run("failed", "mal")
+    services.repo.replace_items(mal, [{"run_id": mal, "md_id": "w", "action": "write", "reason": "r", "approved": 1,
+                                       "write_state": "pending"}])
+    services.repo.update_run(mal, approved_at="then")
+    assert orch.resumable_runs() == [anilist, mal]
+    await orch.resume(mal)
+    await orch.wait()
+    assert written == ["anilist", "mal"] and not orch.lock.locked()

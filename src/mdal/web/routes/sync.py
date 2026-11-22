@@ -71,7 +71,7 @@ def status_context(svc: Services, message: str | None = None) -> dict[str, Any]:
         "site": SITE_NAMES[run["target"]] if run else None,
         "active": bool(run and run["state"] in ACTIVE_STATES),
         "status_message": message,
-        "resumable": svc.orchestrator.resumable_run(),
+        "resumable": svc.orchestrator.resumable_runs(),
         "open_diffs": [(SITE_NAMES[t], d["run_id"]) for t in TARGETS if (d := open_diff(svc.repo, t))],
         "mal_connected": svc.mal.connected,
         "md_fresh": md_snapshot_fresh(svc.repo),

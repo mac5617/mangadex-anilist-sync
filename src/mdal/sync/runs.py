@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 from mdal.db.repo import Repo, now_iso
-from mdal.sync.changes import open_diff
+from mdal.sync.changes import TARGETS, open_diff
 
 ACTIVE_STATES = ("fetching", "resolving", "diffing", "writing", "verifying")
 INTERRUPTIBLE = ("fetching", "resolving", "diffing")  # cheap to redo: a restart marks them failed
@@ -43,14 +43,27 @@ class Runs:
         return ids
 
     def create(self, target: str) -> int:
-        """A new Run for this site. An older diff for the site is Superseded: only the newest can be approved."""
+        """A new Run for this site. An older diff or unfinished write for the site is Superseded: only the newest
+        can be approved, and whatever the old one still had to send comes back in the new Changes if it's needed."""
         run_id = self.repo.create_run("fetching", target)
         for old in self.repo.conn.execute(
             "SELECT run_id FROM sync_run WHERE state='diffed' AND target=? AND run_id<?", (target, run_id)
         ).fetchall():
             self.repo.update_run(old["run_id"], state="cancelled", finished_at=now_iso(),
                                  error=f"superseded by sync #{run_id}")
+        for old in self.repo.conn.execute(
+            f"SELECT run_id FROM sync_run WHERE state IN ({_in(RESUMABLE)}) AND approved_at IS NOT NULL "
+            "AND target=? AND run_id<?", (*RESUMABLE, target, run_id),
+        ).fetchall():
+            if self.can_resume(old["run_id"]):
+                self._supersede_write(old["run_id"], run_id)
         return run_id
+
+    def _supersede_write(self, old: int, new: int) -> None:
+        note = f"dropped: superseded by sync #{new}"
+        self.repo.update_items(old, [(i["md_id"], {"write_state": "dropped", "verify_note": note})
+                                     for i in self.repo.items_in_state(old, "pending")])
+        self.repo.update_run(old, state="cancelled", finished_at=now_iso(), error=f"superseded by sync #{new}")
 
     def can_resume(self, run_id: int) -> bool:
         """An approved Run that stopped with writes to send or to verify."""
@@ -59,18 +72,22 @@ class Runs:
             return False
         return bool(self.repo.items_in_state(run_id, "pending")) or bool(self.repo.items_in_state(run_id, "done"))
 
-    def resumable(self) -> int | None:
-        """The newest Run that can resume. A failed list add has nothing to resume and hides nothing."""
+    def resumable(self) -> list[int]:
+        """What a Resume continues: each site's newest Run that can resume, the main site first. A failed list add
+        has nothing to resume and hides nothing."""
+        newest: dict[str, int] = {}
         for r in self.repo.conn.execute(
-            f"SELECT run_id FROM sync_run WHERE state IN ({_in(RESUMABLE)}) AND approved_at IS NOT NULL "
+            f"SELECT run_id, target FROM sync_run WHERE state IN ({_in(RESUMABLE)}) AND approved_at IS NOT NULL "
             "ORDER BY run_id DESC", RESUMABLE,
         ).fetchall():
-            if self.can_resume(r["run_id"]):
-                return r["run_id"]
-        return None
+            if r["target"] not in newest and self.can_resume(r["run_id"]):
+                newest[r["target"]] = r["run_id"]
+        return [newest[t] for t in TARGETS if t in newest]
 
-    def mark_resuming(self, run_id: int) -> None:
-        self.repo.update_run(run_id, state="writing", error=None, finished_at=None, phase_detail="resuming")
+    def mark_resuming(self, run_ids: list[int]) -> None:
+        for n, run_id in enumerate(run_ids):
+            self.repo.update_run(run_id, state="writing", error=None, finished_at=None,
+                                 phase_detail="resuming" if n == 0 else "waiting for the site before")
 
     def can_restore(self, run_id: int) -> bool:
         """A discarded or Superseded sync that never reached approval."""

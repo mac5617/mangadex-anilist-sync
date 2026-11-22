@@ -151,7 +151,7 @@ class SyncOrchestrator:
         except BaseException:
             self.lock.release()
             raise
-        self.task = self._watch(asyncio.create_task(self._guarded(run_id, self._read)))
+        self.task = self._watch(asyncio.create_task(self._read_then_next(run_id)))
         return run_id
 
     def sync_targets(self) -> list[str]:
@@ -242,16 +242,18 @@ class SyncOrchestrator:
             self.lock.release()
 
     async def resume(self, run_id: int) -> None:
+        """Continue every site that stopped partway through writing, AniList first."""
         self._refuse_if_unavailable()
-        if not self.runs.can_resume(run_id):
+        run_ids = self.runs.resumable()
+        if run_id not in run_ids:
             raise SyncStateError("this sync cannot be resumed")
         await self.lock.acquire()
-        self.runs.mark_resuming(run_id)
-        self.task = self._watch(asyncio.create_task(self._guarded(run_id, self._write)))
+        self.runs.mark_resuming(run_ids)
+        self.task = self._watch(asyncio.create_task(self._write_all(run_ids)))
 
-    def resumable_run(self) -> int | None:
-        """The Run a Resume would continue. None while something is running."""
-        return None if self.busy() else self.runs.resumable()
+    def resumable_runs(self) -> list[int]:
+        """The Runs a Resume would continue. None while something is running."""
+        return [] if self.busy() else self.runs.resumable()
 
     def restore(self, run_id: int) -> None:
         self._refuse_if_busy("a sync is running; restore it when it finishes")
@@ -283,14 +285,14 @@ class SyncOrchestrator:
             log.exception("sync %s failed", run_id)
             self.repo.update_run(run_id, state="failed", error=failure_message(exc), finished_at=now_iso())
 
-    async def _guarded(self, run_id: int, body: Callable[[int], Awaitable[None]]) -> None:
+    async def _read_then_next(self, run_id: int) -> None:
         try:
-            await self._run_body(run_id, body)
+            await self._run_body(run_id, self._read)
         finally:
             self.lock.release()
             # Sync covering both sites: once this site's changes are ready, read the next one's.
             if self.queued:
-                if body == self._read and self.repo.get_run(run_id)["state"] == "diffed":
+                if self.repo.get_run(run_id)["state"] == "diffed":
                     asyncio.create_task(self._start_queued(asyncio.current_task()))
                 else:
                     failed = SITE_NAMES[self.repo.get_run(run_id)["target"]]
