@@ -7,7 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from mdal import titles, tunables
-from mdal.backup import restore
+from mdal.backup import make_backup, restore
 from mdal.db.repo import SETTING_DEFAULTS
 from mdal.tunables import TUNABLES
 from mdal.web.app import create_app
@@ -106,3 +106,19 @@ def test_a_whole_number_comes_back_whole(services):
     restore(services.repo, backup(anilist_write_batch=5.0))
     value = services.repo.get_setting("anilist_write_batch")
     assert value == 5 and isinstance(value, int)                 # it's used to slice batches
+
+
+IDENTITY = {"anilist_user_id": 111, "anilist_user_name": "someone", "mal_user_name": "someone"}
+
+
+def test_backups_leave_out_who_is_signed_in(services):
+    for key, value in IDENTITY.items():
+        services.repo.set_setting(key, value)
+    assert not set(IDENTITY) & set(make_backup(services.repo)["settings"])
+
+
+def test_an_older_backup_cannot_change_who_is_signed_in(services):
+    services.repo.set_setting("anilist_user_id", 222)
+    restored = restore(services.repo, backup(**IDENTITY))
+    assert services.repo.get_setting("anilist_user_id") == 222 and services.repo.get_setting("mal_user_name") is None
+    assert restored.kept == []

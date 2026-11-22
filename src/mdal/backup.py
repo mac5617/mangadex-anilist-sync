@@ -26,7 +26,10 @@ TABLES = {   # table -> primary key (restore replaces rows with the same key)
     "series_note": "key",
 }
 SECRET_SETTINGS = {"mangadex_session", "mal_session", "mangadex_cooldown_until", "mangadex_cooldown_reason"}
+IDENTITY_SETTINGS = {"anilist_user_id", "anilist_user_name", "mal_user_name"}  # comes from who is signed in
 STATE_SETTINGS = {"rec_status", "new_status", "rank_save"}       # what a job was doing: meaningless elsewhere
+
+LEFT_OUT = SECRET_SETTINGS | IDENTITY_SETTINGS | STATE_SETTINGS
 
 
 class BackupError(Exception):
@@ -41,7 +44,7 @@ class Restored:
 
 def make_backup(repo: Repo) -> dict[str, Any]:
     tables = {t: [dict(r) for r in repo.conn.execute(f"SELECT * FROM {t}")] for t in TABLES}
-    settings = {k: v for k, v in repo.all_settings().items() if k not in SECRET_SETTINGS | STATE_SETTINGS}
+    settings = {k: v for k, v in repo.all_settings().items() if k not in LEFT_OUT}
     return {"format": FORMAT, "version": __version__, "exported_at": now_iso(), "tables": tables, "settings": settings}
 
 
@@ -59,7 +62,7 @@ def restore(repo: Repo, data: Any) -> Restored:
         raise BackupError("This isn't a Shiori backup file.")
     counts: dict[str, int] = {}
     offered = data.get("settings")
-    offered = {k: v for k, v in offered.items() if k in SETTING_DEFAULTS and k not in SECRET_SETTINGS | STATE_SETTINGS} \
+    offered = {k: v for k, v in offered.items() if k in SETTING_DEFAULTS and k not in LEFT_OUT} \
         if isinstance(offered, dict) else {}
     settings, kept = tunables.restorable(repo, offered)
     with repo.conn:
