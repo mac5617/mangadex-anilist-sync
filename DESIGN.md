@@ -74,10 +74,48 @@ typography:
   mono:
     fontFamily: "ui-monospace, Cascadia Code, Consolas, monospace"
     fontSize: "0.86em"
+  small:
+    fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, sans-serif"
+    fontSize: "0.85rem"
+  aside:
+    fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, sans-serif"
+    fontSize: "0.9rem"
+  axis:
+    fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, sans-serif"
+    fontSize: "0.72rem"
+    fontFeature: "tnum"
+  placeholder:
+    fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, sans-serif"
+    fontSize: "0.6rem"
+  card-title:
+    fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, sans-serif"
+    fontSize: "1.15rem"
+    fontWeight: 600
+  prompt:
+    fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, sans-serif"
+    fontSize: "1.5rem"
+    fontWeight: 650
+  rank-prompt:
+    fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, sans-serif"
+    fontSize: "1.75rem"
+    fontWeight: 650
+    letterSpacing: "-0.01em"
+  graph-label:
+    fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, sans-serif"
+    fontSize: "11px"
+  graph-pill:
+    fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, sans-serif"
+    fontSize: "11.5px"
+    fontWeight: 600
+  graph-focus:
+    fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, sans-serif"
+    fontSize: "14px"
+    fontWeight: 700
 rounded:
   meter: "2px"
   tag: "3px"
   cover-sm: "4px"
+  swatch: "0.45rem"
   base: "6px"
   cover: "8px"
   tier: "10px"
@@ -232,14 +270,24 @@ machine. Hierarchy comes from weight (600–700) and size steps, not from a seco
   to 70–110ch.
 - **Lead** (400, 1.25rem, 1.45): one headline sentence that sums up a stats page; balanced, at most 60ch.
 - **Figure** (650, 1.4rem, tabular): the summary numbers that lead a page.
-- **Label** (600, 0.76rem): table headers and badges. Small text elsewhere runs 0.78–0.88rem.
+- **Label** (600, 0.76rem): table headers and badges.
+- **Small** (0.85rem): the `.small` class, the theme toggle, link buttons and most secondary lines. Other
+  small text runs 0.78–0.88rem.
+- **Aside** (0.9rem): muted text beside a heading, breadcrumbs and button text.
+- **Axis** (0.72rem, tabular): chart axis and scale labels, heat-map corners and nav counts.
+- **Placeholder** (0.6rem): the title in a cover thumbnail that has no image.
+- **Card Title** (600, 1.15rem): recommendation and rank card titles, ranking tiers and the all-clear line.
+- **Prompt** (650, 1.5rem): the Ask empty-state heading, the score badge and series titles on phones.
+- **Rank Prompt** (650, 1.75rem, -0.01em): the question at the top of a rank or compare step.
+- **Graph text** (11px labels, 11.5px pills at 600, 14px focus pill at 700): text inside the network SVGs,
+  set in px because the graph scales as one drawing.
 
 ### Named Rules
 **The Tabular Figures Rule.** Every count, chapter number, score and date uses tabular numerals and doesn't
 wrap.
 
-**The No Shouting Rule.** No uppercase labels, no letter-spaced caps, no display sizes outside series titles
-and the Ask empty state.
+**The No Shouting Rule.** No uppercase labels, no letter-spaced caps, no display sizes outside series titles,
+the Ask empty state and the rank prompt.
 
 ## Layout
 
@@ -275,7 +323,7 @@ side columns) stay flat and rely on their Sheet background and a border.
 ## Shapes
 
 Corners are gently rounded and grow with the warmth of the surface: 2px for meter bars; 3px for tags, badges
-and thumbnails; 4px for cover tiles and chart bars; 6px for buttons, inputs, panels, tables and cards; 8px for large covers; 10px for ranking tiers; 12px
+and thumbnails; 4px for cover tiles and chart bars; 0.45rem for the network legend's focus swatch; 6px for buttons, inputs, panels, tables and cards; 8px for large covers; 10px for ranking tiers; 12px
 for the chat composer; 14px for chat bubbles (with a 4px tail corner); full pills only for Ask's prompt
 chips. Covers keep a 2:3 aspect ratio everywhere. Chart bars round only their outer end (4px) and are at most 32px thick (26px when paired). A bar taller than
 the axis (a one-off import year, a huge first sync) is drawn to the top with a small break across it, so the
