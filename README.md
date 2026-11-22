@@ -480,7 +480,7 @@ uv run pytest --cov=mdal --cov-report=html      # with coverage
 uv run pytest tests/test_orchestrator.py -v     # one file
 ```
 
-Migrations in `src/mdal/db/migrations/` run on startup. Only `src/mdal/sync/writer.py` and
+Migrations in `src/mdal/db/migrations/` run on startup, after saving a copy as `sync.db.before-migration`. Only `src/mdal/sync/writer.py` and
 `src/mdal/sync/add_entry.py` may contain AniList mutations, and only `src/mdal/sync/mal_writer.py` may write to
 MyAnimeList; tests enforce both. Design notes and the build
 stories are in `docs/`.

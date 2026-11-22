@@ -36,6 +36,7 @@ src/mdal/
   fetch/mangadex_library.py      # library + details + read markers + chapter numbers
   fetch/anilist_list.py          # Viewer, MediaListCollection, Page lookups/search
   matching/normalize.py  matching/score.py  matching/pipeline.py
+  matching/matches.py            # the one definition of a Match
   sync/rules.py                  # pure progress rules -> DiffItem
   sync/estimate.py               # request count + duration
   sync/changes.py                # Changes: building, Dismissals, Selection -> Write plan and its estimate
@@ -55,10 +56,14 @@ Dependency rules, enforced by a test that scans imports:
 - `matching/normalize.py`, `matching/score.py`, `sync/rules.py` and `sync/estimate.py` are pure: no I/O, no DB.
 - `web/*` calls `sync/*`, `matching/pipeline` and `db/repo`, never `clients/*` directly. The one exception is `web/routes/auth.py`, which uses `clients/anilist_oauth`.
 - `web/*` makes list edits through `YourList` (`mdal/lists`), never through the site adapters behind it.
+- What counts as a Match is decided only in `matching/matches.py`.
+- SQL lives in `db/repo.py` and in the modules that own a rule over it (`sync/runs.py`, `sync/changes.py`, `matching/matches.py`, `stats.py`, `backup.py`, and similar), never in `web/*`.
 - Dismissals are made only through `sync/changes.py`.
 - Runs are created only by `sync/runs.py`, or as the finished record of a list add in `lists/anilist.py`.
 - `sync/orchestrator.py` doesn't know the writers or the list readers: they sit behind `SyncSite` (`sync/sites.py`).
 - Mutations live only in `sync/writer.py` and `lists/anilist.py`; MyAnimeList writes only in `sync/mal_writer.py` and `lists/myanimelist.py`.
+
+Before a migration changes an existing database, `db/connection.py` saves one consistent copy beside it as `sync.db.before-migration`, replacing the previous one. If the copy fails, nothing is migrated and Shiori says why at start-up. The copy holds the same sign-in data as the database.
 
 ## 3. Configuration
 - `.env` (secrets + identity): `MANGADEX_USERNAME`, `MANGADEX_PASSWORD`, `MANGADEX_CLIENT_ID`, `MANGADEX_CLIENT_SECRET`, `ANILIST_CLIENT_ID`, `ANILIST_CLIENT_SECRET`, `ANILIST_REDIRECT_URI` (default `http://127.0.0.1:8765/auth/anilist/callback`), `ANILIST_ACCESS_TOKEN` (written by the app after OAuth), `MDAL_DB_PATH` (optional), `MDAL_PORT` (optional).
@@ -122,8 +127,9 @@ CREATE TABLE sync_run(run_id INTEGER PRIMARY KEY, started_at TEXT NOT NULL,
   est_requests INTEGER, est_seconds INTEGER, req_anilist INTEGER NOT NULL DEFAULT 0,
   req_mangadex INTEGER NOT NULL DEFAULT 0, approved_at TEXT, finished_at TEXT);
 CREATE TABLE sync_item(run_id INTEGER NOT NULL, md_id TEXT NOT NULL,
-  al_media_id INTEGER, al_entry_id INTEGER, al_progress INTEGER, md_progress INTEGER,
-  al_status_before TEXT,           -- set by the pre-write re-read; verify compares against it
+  al_media_id INTEGER,             -- the AniList match, on either site's run (titles, covers)
+  site_entry_id INTEGER, site_progress INTEGER, md_progress INTEGER,  -- the run's site: AniList or MyAnimeList
+  site_status_before TEXT,           -- set by the pre-write re-read; verify compares against it
   set_status TEXT CHECK(set_status IS NULL OR set_status = 'COMPLETED'),
   status_source TEXT,              -- 'AniList' | 'MangaDex' (where the total came from)
   status_approved INTEGER NOT NULL DEFAULT 0,
@@ -240,7 +246,7 @@ diffed ──user discards──→ cancelled
 - `diffed`: waits for the user. The estimate (§11) is the cost of the current Write plan, computed when the page asks; `est_requests` and `est_seconds` are no longer filled in.
 - Approve: marks the Write plan's items (`sync/changes.py`, the same plan the estimate reads) `approved=1, write_state='pending'`. Validation rejects `exceeds_total` items and enforces FR-9: while `first_write_done` is false, exactly one approved item is allowed.
 - **writing** (`sync/writer.py`):
-  1. Re-fetch the AniList list (1 request) and store `al_status_before` on each pending item. An item is `dropped`, with a reason, if:
+  1. Re-fetch the AniList list (1 request) and store `site_status_before` on each pending item. An item is `dropped`, with a reason, if:
      - the entry is gone; or
      - it is a progress item and AniList is now ≥ `md_progress`, unless the only remaining change is an approved completion that is still valid (then it becomes status-only); or
      - it is a status-only item and AniList is already COMPLETED or its progress has moved away from the total.
@@ -249,7 +255,7 @@ diffed ──user discards──→ cancelled
   4. Per-alias errors (partial data): affected items are marked `failed` with the message; the others are `done`.
   5. `AniListComplexityError` → halve the batch size (min 1), persist it, retry the same items. Nothing was written, because the complexity check rejects the whole document.
   6. Resume = run writing again, for every site that stopped partway, AniList first. Only `pending` items are sent; `done` items are never re-sent.
-- **verifying:** re-fetch the list (1 request). For each `done` item, compare progress (≠ written → `verify_note`) and status. The expected status is COMPLETED if we sent it, else `al_status_before`; anything else → `verify_note` "status changed by AniList: X→Y". Completion dates are reported if AniList set them itself (informational). On the first-ever write, success sets `first_write_done=true`, and the UI shows the status-change result prominently.
+- **verifying:** re-fetch the list (1 request). For each `done` item, compare progress (≠ written → `verify_note`) and status. The expected status is COMPLETED if we sent it, else `site_status_before`; anything else → `verify_note` "status changed by AniList: X→Y". Completion dates are reported if AniList set them itself (informational). On the first-ever write, success sets `first_write_done=true`, and the UI shows the status-change result prominently.
 - "Add to AniList" (FR-30) is not part of a run. The status dropdown defaults to Completed when the §8 completion check holds, else Reading. It is one `SaveMediaListEntry(mediaId, status, progress)` through the same client, recorded in history once it is over, as a one-item run with `state='done'`, so it is never an in-progress run. While `first_write_done` is false, it counts as the first write (FR-9).
 - The diff page recomputes the estimate locally when checkboxes change (`POST /sync/{id}/estimate`, no API calls).
 
