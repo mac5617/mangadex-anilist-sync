@@ -15,9 +15,10 @@ from mdal.matching.mal_link import media_links, series_link
 from mdal.matching.matches import is_matched, library_series
 from mdal.sync.estimate import estimate
 from mdal.scores import score_offer
+from mdal.tunables import SYNC_SITES
 from mdal.sync.rules import AlEntry, AlMediaInfo, evaluate_series
 
-TARGETS = ("anilist", "mal")
+TARGETS = SYNC_SITES
 SITE_NAMES = {"anilist": "AniList", "mal": "MyAnimeList"}
 MAPPING_SKIPS = {
     None: "awaiting match review",

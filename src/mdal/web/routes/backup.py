@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, File, Request, UploadFile
 from fastapi.responses import HTMLResponse, Response
 
+from mdal import tunables
 from mdal.backup import BackupError, make_backup, restore, to_csv
 from mdal.recommend import ranking
 from mdal.stats import entry_rows
@@ -50,12 +51,18 @@ def ratings_csv(request: Request) -> Response:
 
 @router.post("/backup/restore", response_class=HTMLResponse)
 async def backup_restore(request: Request, file: UploadFile = File(...)) -> HTMLResponse:
+    svc = get_services(request)
     raw = await file.read()
     try:
-        counts = restore(get_services(request).repo, json.loads(raw.decode("utf-8-sig")))
+        restored = restore(svc.repo, json.loads(raw.decode("utf-8-sig")))
     except (BackupError, ValueError, UnicodeDecodeError) as exc:
         message = str(exc) if isinstance(exc, BackupError) else "That file isn't a readable Shiori backup."
         return render_settings(request, error=message, status_code=400)
-    total = sum(counts.values())
-    detail = ", ".join(f"{n} {t.replace('_', ' ')}" for t, n in counts.items() if n)
-    return render_settings(request, message=f"Restored {total} rows ({detail or 'nothing new'}) and your settings.")
+    tunables.apply(svc)
+    total = sum(restored.counts.values())
+    detail = ", ".join(f"{n} {t.replace('_', ' ')}" for t, n in restored.counts.items() if n)
+    kept = ""
+    if restored.kept:
+        value = "value isn't" if len(restored.kept) == 1 else "values aren't"
+        kept = f" Kept your current {', '.join(restored.kept)}: the backup's {value} valid."
+    return render_settings(request, message=f"Restored {total} rows ({detail or 'nothing new'}) and your settings.{kept}")

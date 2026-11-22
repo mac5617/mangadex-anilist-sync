@@ -140,7 +140,7 @@ def test_backup_round_trip_without_secrets(seeded):
     repo.unrank(1)
     repo.set_setting("new_scan_hours", 24)
     counts = restore(repo, data)
-    assert counts["rec_feedback"] == 1 and counts["ranking"] == 1
+    assert counts.counts["rec_feedback"] == 1 and counts.counts["ranking"] == 1
     assert "al:2" in repo.feedback() and repo.get_setting("new_scan_hours") == 12
     with pytest.raises(BackupError):
         restore(repo, {"tables": {}})

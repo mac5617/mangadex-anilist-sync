@@ -12,9 +12,11 @@ import csv
 import io
 import json
 import sqlite3
+from dataclasses import dataclass, field
 from typing import Any
 
 from mdal import __version__
+from mdal import tunables
 from mdal.db.repo import SETTING_DEFAULTS, Repo, now_iso
 
 FORMAT = "shiori-backup"
@@ -31,6 +33,12 @@ class BackupError(Exception):
     pass
 
 
+@dataclass
+class Restored:
+    counts: dict[str, int] = field(default_factory=dict)   # rows put back, per table
+    kept: list[str] = field(default_factory=list)          # settings whose backup value wasn't valid: yours stayed
+
+
 def make_backup(repo: Repo) -> dict[str, Any]:
     tables = {t: [dict(r) for r in repo.conn.execute(f"SELECT * FROM {t}")] for t in TABLES}
     settings = {k: v for k, v in repo.all_settings().items() if k not in SECRET_SETTINGS | STATE_SETTINGS}
@@ -44,11 +52,16 @@ def _site_copies(table: str, row: dict[str, Any]) -> list[dict[str, Any]]:
     return [row]
 
 
-def restore(repo: Repo, data: Any) -> dict[str, int]:
-    """Put a backup back. Rows replace rows with the same key; nothing else is deleted. Returns rows per table."""
+def restore(repo: Repo, data: Any) -> Restored:
+    """Put a backup back. Rows replace rows with the same key; nothing else is deleted. A setting whose value isn't
+    valid keeps your current one."""
     if not isinstance(data, dict) or data.get("format") != FORMAT:
         raise BackupError("This isn't a Shiori backup file.")
     counts: dict[str, int] = {}
+    offered = data.get("settings")
+    offered = {k: v for k, v in offered.items() if k in SETTING_DEFAULTS and k not in SECRET_SETTINGS | STATE_SETTINGS} \
+        if isinstance(offered, dict) else {}
+    settings, kept = tunables.restorable(repo, offered)
     with repo.conn:
         for table, rows in (data.get("tables") or {}).items():
             if table not in TABLES or not isinstance(rows, list):
@@ -69,10 +82,9 @@ def restore(repo: Repo, data: Any) -> dict[str, int]:
                 except sqlite3.IntegrityError:
                     continue            # a value this version no longer accepts
             counts[table] = n
-        for key, value in (data.get("settings") or {}).items():
-            if key in SETTING_DEFAULTS and key not in SECRET_SETTINGS | STATE_SETTINGS:
-                repo.conn.execute("INSERT OR REPLACE INTO settings(key, value) VALUES (?, ?)", (key, json.dumps(value)))
-    return counts
+        for key, value in settings.items():
+            repo.conn.execute("INSERT OR REPLACE INTO settings(key, value) VALUES (?, ?)", (key, json.dumps(value)))
+    return Restored(counts, kept)
 
 
 def to_csv(header: list[str], rows: list[list[Any]]) -> str:

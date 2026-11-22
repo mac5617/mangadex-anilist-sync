@@ -77,7 +77,7 @@ def test_older_dismissals_are_kept_for_both_sites(tmp_path):
 def test_a_backup_from_before_per_site_dismissals_restores_to_both(repo):
     row = {"md_id": "f", "md_progress": 40, "flag_kind": "implausible", "reason": "why", "dismissed_at": "then"}
     counts = restore(repo, {"format": "shiori-backup", "tables": {"dismissed_flag": [row]}})
-    assert counts["dismissed_flag"] == 1
+    assert counts.counts["dismissed_flag"] == 1
     assert "f" in repo.dismissed_flags("anilist") and "f" in repo.dismissed_flags("mal")
 
 

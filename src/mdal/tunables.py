@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from mdal import titles
 from mdal.db.repo import SETTING_DEFAULTS, Repo
 
 if TYPE_CHECKING:
@@ -44,6 +45,10 @@ TUNABLES = (
     Tunable("match_margin", "Auto-accept margin over the runner-up", float, 0, 0.5),
     Tunable("jump_limit", "Largest believable jump in chapters", int, 1, 10000),
 )
+SYNC_SITES = ("anilist", "mal")
+_BY_KEY = {t.key: t for t in TUNABLES}
+_NAMES = {"title_language": "title language", "sync_targets": "sites Sync covers"}
+
 # Rate setting -> (the Services queue it paces, seconds it is counted over).
 RATES = {
     "anilist_rpm": ("anilist_queue", 60.0),
@@ -73,10 +78,51 @@ def validate(form: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
     return values, errors
 
 
+def _is_number(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def is_valid(key: str, value: Any) -> bool:
+    """Whether a stored or restored value is one this setting can hold."""
+    if key in _BY_KEY:
+        t = _BY_KEY[key]
+        return _is_number(value) and t.low <= value <= t.high and (t.kind is not int or float(value).is_integer())
+    if key == "title_language":
+        return isinstance(value, str) and value in titles.LANGUAGES
+    if key == "sync_targets":
+        return isinstance(value, list) and all(isinstance(t, str) and t in SYNC_SITES for t in value)
+    default = SETTING_DEFAULTS[key]
+    if default is None:          # saved job data
+        return value is None or isinstance(value, (list, dict, str)) or _is_number(value)
+    if isinstance(default, bool):
+        return isinstance(value, bool)
+    return _is_number(value) if _is_number(default) else isinstance(value, type(default))
+
+
+def restorable(repo: Repo, incoming: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    """The settings from a backup that can be put back, and the names of those that can't (yours stay)."""
+    good = {k: int(v) if k in _BY_KEY and _BY_KEY[k].kind is int and is_valid(k, v) else v
+            for k, v in incoming.items() if is_valid(k, v)}
+    bad = [k for k in incoming if k not in good]
+    review = good.get("match_review", repo.get_setting("match_review"))
+    auto = good.get("match_auto", repo.get_setting("match_auto"))
+    if not (_is_number(review) and _is_number(auto) and review < auto):
+        for key in ("match_review", "match_auto"):
+            if key in good:
+                del good[key]
+                bad.append(key)
+    return good, [name(k) for k in bad]
+
+
+def name(key: str) -> str:
+    return _BY_KEY[key].label if key in _BY_KEY else _NAMES.get(key, key.replace("_", " "))
+
+
 def apply(services: Services) -> None:
-    """Live request queues follow the stored rates immediately."""
+    """Live request queues and the title language follow what's stored immediately."""
     for key, (queue, seconds) in RATES.items():
         getattr(services, queue).set_interval(seconds / services.repo.get_setting(key))
+    titles.set_language(services.repo.get_setting("title_language"))
 
 
 def reset(repo: Repo, key: str) -> Any:
