@@ -305,13 +305,13 @@ class Repo:
         return self.conn.execute(
             "SELECT i.*, r.target, m.title AS md_title, m.pub_status, m.last_chapter, m.cover_file, "
             "a.romaji, a.english, a.native, a.site_url, "
-            "CASE WHEN r.target='mal' THEN me.status ELSE e.status END AS al_status, "
+            "CASE WHEN r.target='mal' THEN me.status ELSE e.status END AS site_status, "
             "me.title AS mal_title "
             "FROM sync_item i "
             "JOIN sync_run r ON r.run_id = i.run_id "
             "LEFT JOIN md_manga m ON m.md_id = i.md_id "
             "LEFT JOIN al_media a ON a.media_id = i.al_media_id "
-            "LEFT JOIN al_entry e ON e.entry_id = i.al_entry_id AND r.target='anilist' "
+            "LEFT JOIN al_entry e ON e.entry_id = i.site_entry_id AND r.target='anilist' "
             "LEFT JOIN mal_entry me ON me.mal_id = i.mal_id AND r.target='mal' "
             "WHERE i.run_id=? ORDER BY COALESCE(m.title, i.md_id) COLLATE NOCASE",
             (run_id,),

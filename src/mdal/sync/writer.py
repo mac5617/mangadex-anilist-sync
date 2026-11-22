@@ -41,7 +41,7 @@ class WriteOp:
 
 
 def is_add(item: Any) -> bool:
-    return item["al_entry_id"] is None and item["al_media_id"] is not None
+    return item["site_entry_id"] is None and item["al_media_id"] is not None
 
 
 def site_score(item: Any, site: str) -> int:
@@ -56,7 +56,7 @@ def op_for(item: Any) -> WriteOp:
                        score=score)
     return WriteOp(
         md_id=item["md_id"],
-        entry_id=item["al_entry_id"],
+        entry_id=item["site_entry_id"],
         progress=None if is_status_only(item) else item["md_progress"],
         complete=sends_completion(item),
         score=score,
@@ -79,7 +79,7 @@ def recheck(item: Any, adding: bool, entry: Any, site: str = "AniList") -> dict[
     if entry is None:
         return {"write_state": "dropped", "verify_note": f"dropped: the entry is no longer on your {site} list"}
     now, status = entry["progress"], entry["status"]
-    fields: dict[str, Any] = {"al_status_before": status, "al_progress": now}
+    fields: dict[str, Any] = {"site_status_before": status, "site_progress": now}
     completing = sends_completion(item) and status != "COMPLETED"
     scoring = sends_score(item)
     if scoring and entry["score"]:
@@ -112,7 +112,7 @@ def verify_note(item: Any, entry: Any, site: str = "AniList") -> tuple[str, bool
     if entry is None:
         problems.append("entry missing after write")
     else:
-        expected_progress = item["al_progress"] if is_status_only(item) else item["md_progress"]
+        expected_progress = item["site_progress"] if is_status_only(item) else item["md_progress"]
         filled_in = sends_completion(item) and entry["status"] == "COMPLETED" and entry["progress"] > expected_progress
         if filled_in:   # the site sets progress to its own chapter total when a series is marked Completed
             notes.append(f"{site} filled in its total of {entry['progress']} chapters")
@@ -120,14 +120,14 @@ def verify_note(item: Any, entry: Any, site: str = "AniList") -> tuple[str, bool
             problems.append(f"progress is {entry['progress']}, expected {expected_progress}")
         if sends_score(item) and (entry["score"] or 0) != site_score(item, site):
             problems.append(f"score is {entry['score'] or 'unset'}, expected {site_score(item, site)}")
-        if item["al_status_before"] is None:  # added by this run
+        if item["site_status_before"] is None:  # added by this run
             expected_status = "COMPLETED" if sends_completion(item) else "CURRENT"
             if entry["status"] != expected_status:
                 problems.append(f"{site} stored status {entry['status']}, expected {expected_status}")
         else:
-            expected_status = "COMPLETED" if sends_completion(item) else item["al_status_before"]
+            expected_status = "COMPLETED" if sends_completion(item) else item["site_status_before"]
             if entry["status"] != expected_status:
-                problems.append(f"status changed by {site}: {item['al_status_before']}→{entry['status']}")
+                problems.append(f"status changed by {site}: {item['site_status_before']}→{entry['status']}")
     if problems:
         return "; ".join(problems), True
     return "; ".join(["verified", *notes]), False
@@ -230,7 +230,7 @@ class Writer:
         for item in pending:
             adding = is_add(item)
             # An add is checked by media id: saving by mediaId would update an existing entry (never).
-            entry = by_media.get(item["al_media_id"]) if adding else entries.get(item["al_entry_id"])
+            entry = by_media.get(item["al_media_id"]) if adding else entries.get(item["site_entry_id"])
             updates.append((item["md_id"], recheck(item, adding, entry)))
         self.repo.update_items(run_id, updates)
 
@@ -261,7 +261,7 @@ class Writer:
             adds = {op.md_id for op in batch if op.entry_id is None}
             self.repo.update_items(run_id, [
                 (md_id, ({"write_state": state, "written_at": written_at}
-                         | ({"al_entry_id": entry_id} if md_id in adds and entry_id else {}))
+                         | ({"site_entry_id": entry_id} if md_id in adds and entry_id else {}))
                  if state == "done" else {"write_state": state, "verify_note": f"write failed: {msg}"})
                 for md_id, (state, msg, entry_id) in results.items()
             ])
@@ -280,7 +280,7 @@ class Writer:
         notes: list[str] = []
         updates: list[tuple[str, dict[str, Any]]] = []
         for item in done:
-            note, problem = verify_note(item, entries.get(item["al_entry_id"]))
+            note, problem = verify_note(item, entries.get(item["site_entry_id"]))
             if problem:
                 notes.append(f"{item['md_id']}: {note}")
             updates.append((item["md_id"], {"verify_note": with_note(item["verify_note"], note)}))

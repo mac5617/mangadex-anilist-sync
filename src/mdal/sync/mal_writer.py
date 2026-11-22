@@ -24,7 +24,7 @@ SITE = "MyAnimeList"
 
 
 def is_mal_add(item: Any) -> bool:
-    return item["al_entry_id"] is None
+    return item["site_entry_id"] is None
 
 
 def mal_request(item: Any) -> tuple[int | None, str | None, int | None]:
@@ -71,7 +71,7 @@ class MalWriter:
                 continue
             fields: dict[str, Any] = {"write_state": "done", "written_at": now_iso()}
             if is_mal_add(item):
-                fields["al_entry_id"] = item["mal_id"]  # now on the list
+                fields["site_entry_id"] = item["mal_id"]  # now on the list
             self.repo.update_items(run_id, [(item["md_id"], fields)])
 
     async def verify(self, run_id: int) -> list[str]:

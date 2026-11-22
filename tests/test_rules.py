@@ -49,7 +49,7 @@ def test_skip_reason_never_lower():
 
 def test_not_on_list_becomes_add():
     d = ev(["9"], entry=False)
-    assert (d.action, d.md_progress, d.al_progress, d.set_status) == ("add", 9, None, None)
+    assert (d.action, d.md_progress, d.site_progress, d.set_status) == ("add", 9, None, None)
     assert "add as Reading at 9" in d.reason
 
 
@@ -194,7 +194,7 @@ def test_marked_completed_writes_progress_and_status():
 
 def test_marked_completed_with_anilist_ahead_changes_only_the_status():
     d = ev(["28"], al=30, media=FIN36, md=DONE_ON_MD)
-    assert (d.action, d.md_progress, d.al_progress, d.set_status) == ("write", 28, 30, "COMPLETED")
+    assert (d.action, d.md_progress, d.site_progress, d.set_status) == ("write", 28, 30, "COMPLETED")
     assert "only the status changes" in d.reason
 
 

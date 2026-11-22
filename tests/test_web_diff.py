@@ -150,9 +150,9 @@ def test_every_page_makes_no_api_calls(client, run_id, mock):
 
 def test_add_rows(client, services, run_id):
     repo = services.repo
-    repo.upsert_item({"run_id": run_id, "md_id": "w2", "al_media_id": 2, "al_entry_id": None, "al_progress": None,
+    repo.upsert_item({"run_id": run_id, "md_id": "w2", "al_media_id": 2, "site_entry_id": None, "site_progress": None,
                       "md_progress": 7, "action": "add", "reason": "not on your AniList list; add as Reading at 7"})
-    repo.upsert_item({"run_id": run_id, "md_id": "w3", "al_media_id": 2, "al_entry_id": None, "al_progress": None,
+    repo.upsert_item({"run_id": run_id, "md_id": "w3", "al_media_id": 2, "site_entry_id": None, "site_progress": None,
                       "md_progress": 120, "action": "add", "reason": "add as Completed", "set_status": "COMPLETED",
                       "status_source": "AniList", "status_approved": 1, "total": 120})
     html = client.get(f"/sync/{run_id}?f=add").text

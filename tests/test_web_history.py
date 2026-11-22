@@ -21,7 +21,7 @@ def test_history_lists_runs_with_counts(client, services):
     repo = services.repo
     run_id = seed_diffed_run(repo)
     repo.update_items(run_id, [("w", {"approved": 1, "write_state": "done", "written_at": "2026-10-03T10:00:05+00:00",
-                                      "verify_note": "verified", "al_status_before": "CURRENT"}),
+                                      "verify_note": "verified", "site_status_before": "CURRENT"}),
                                ("c", {"approved": 1, "write_state": "failed", "verify_note": "write failed: boom"})])
     repo.update_run(run_id, state="done", started_at="2026-10-03T10:00:00+00:00",
                     finished_at="2026-10-03T10:01:05+00:00", req_anilist=5, req_mangadex=12)

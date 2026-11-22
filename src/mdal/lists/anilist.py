@@ -255,8 +255,8 @@ class AniListSite:
         self.repo.add_al_entry({"entry_id": entry["id"], "media_id": entry["mediaId"], "status": entry["status"],
                                 "progress": entry["progress"] or 0, "fetched_at": written_at})
         self.repo.replace_items(run_id, [{
-            "run_id": run_id, "md_id": md_id, "al_media_id": series.media_id, "al_entry_id": entry["id"],
-            "al_progress": None, "md_progress": progress, "action": "write",
+            "run_id": run_id, "md_id": md_id, "al_media_id": series.media_id, "site_entry_id": entry["id"],
+            "site_progress": None, "md_progress": progress, "action": "write",
             "set_status": "COMPLETED" if status == "COMPLETED" else None, "status_approved": int(status == "COMPLETED"),
             "reason": f"added to AniList as {STATUS_LABELS[status]}", "approved": 1,
             "write_state": "done", "written_at": written_at,

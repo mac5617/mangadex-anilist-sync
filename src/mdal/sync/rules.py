@@ -51,7 +51,7 @@ class DiffItem:
     action: Action
     reason: str
     md_progress: int | None = None
-    al_progress: int | None = None
+    site_progress: int | None = None
     flag_kind: str | None = None
     hint: str | None = None
     set_status: str | None = None
@@ -133,7 +133,7 @@ def evaluate(
             numbers.append(d)
     # 2. Nothing numeric
     if not numbers:
-        return DiffItem("skip", "nothing read", al_progress=entry.progress if entry else None, unresolved=unresolved)
+        return DiffItem("skip", "nothing read", site_progress=entry.progress if entry else None, unresolved=unresolved)
     # 3. Proposed progress
     md_progress = math.floor(max(numbers))
 
@@ -153,7 +153,7 @@ def evaluate(
 
     def item(action: Action, reason: str, flag_kind: str | None = None, completing: bool = complete) -> DiffItem:
         return DiffItem(
-            action, reason, md_progress=md_progress, al_progress=al, flag_kind=flag_kind,
+            action, reason, md_progress=md_progress, site_progress=al, flag_kind=flag_kind,
             hint="; ".join(hints) or None,
             set_status="COMPLETED" if completing else None,
             status_source=source if completing else None,

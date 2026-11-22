@@ -420,8 +420,8 @@ def sync_stats(repo: Repo, run_id: int | None = None, target: str | None = None)
                                "cover_file": i["cover_file"], "note": i["verify_note"]})
         if state != "done":
             continue
-        is_add = i["action"] == "add" or i["al_progress"] is None  # diff adds and single "Add" runs
-        before = 0 if i["al_progress"] is None else i["al_progress"]
+        is_add = i["action"] == "add" or i["site_progress"] is None  # diff adds and single "Add" runs
+        before = 0 if i["site_progress"] is None else i["site_progress"]
         gain = max(0, (i["md_progress"] or 0) - before)
         if is_add:
             s.added += 1
@@ -436,7 +436,7 @@ def sync_stats(repo: Repo, run_id: int | None = None, target: str | None = None)
                     break
         if i["set_status"] == "COMPLETED" and i["status_approved"]:
             s.completed += 1
-            before_label = "New entry" if is_add else STATUS_LABELS.get(i["al_status_before"] or "", "Unknown")
+            before_label = "New entry" if is_add else STATUS_LABELS.get(i["site_status_before"] or "", "Unknown")
             transitions[before_label] += 1
         gains.append({"run_id": i["run_id"], "md_id": i["md_id"], "title": i["md_title"] or i["md_id"],
                       "cover_file": i["cover_file"], "al_title": titles.pick(i["romaji"], i["english"]), "al_url": i["site_url"],

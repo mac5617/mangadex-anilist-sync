@@ -216,11 +216,11 @@ async def test_dry_run_builds_mal_rows(fast, world):
     assert run["state"] == "diffed", run["error"]
     assert run["target"] == "mal" and run["req_mal"] == 1
     items = {i["md_id"]: i for i in fast.repo.items(run_id)}
-    assert (items["a"]["action"], items["a"]["al_progress"], items["a"]["md_progress"], items["a"]["mal_id"]) == ("write", 5, 10, 11)
+    assert (items["a"]["action"], items["a"]["site_progress"], items["a"]["md_progress"], items["a"]["mal_id"]) == ("write", 5, 10, 11)
     assert items["a"]["reason"] == "read to 10 on MangaDex; MyAnimeList has 5"
     assert (items["b"]["action"], items["b"]["reason"]) == ("skip", "MyAnimeList at/ahead")
     assert (items["c"]["action"], items["c"]["set_status"], items["c"]["status_source"]) == ("write", "COMPLETED", "MyAnimeList")
-    assert (items["d"]["action"], items["d"]["al_entry_id"], items["d"]["mal_id"]) == ("add", None, 44)
+    assert (items["d"]["action"], items["d"]["site_entry_id"], items["d"]["mal_id"]) == ("add", None, 44)
     assert (items["e"]["action"], items["e"]["mal_id"], items["e"]["al_media_id"]) == ("add", 55, None)
     assert items["e"]["reason"].startswith("not on your MyAnimeList list")
     # Conflicting links put the AniList match in review; the MyAnimeList sync waits for that too.
@@ -271,7 +271,7 @@ async def test_write_sends_only_progress_and_allowed_statuses(fast, world):
     }
     items = {i["md_id"]: i for i in fast.repo.items(run_id)}
     assert all(items[m]["write_state"] == "done" and items[m]["verify_note"] == "verified" for m in "acde")
-    assert items["d"]["al_entry_id"] == 44
+    assert items["d"]["site_entry_id"] == 44
 
 
 async def test_prewrite_never_lowers_or_overwrites(fast, world):

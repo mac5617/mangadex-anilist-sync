@@ -75,7 +75,7 @@ class Estimate:
 
 def is_status_only(item: Any) -> bool:
     """No progress to send: the site is at or ahead (or nothing was read), so only the status or score can change."""
-    return item["al_progress"] is not None and (item["md_progress"] is None or item["md_progress"] <= item["al_progress"])
+    return item["site_progress"] is not None and (item["md_progress"] is None or item["md_progress"] <= item["site_progress"])
 
 
 def sends_completion(item: Any) -> bool:
@@ -202,8 +202,8 @@ def _evaluated(
     if action == "flag" and gone is not None and (gone["md_progress"], gone["flag_kind"]) == (d.md_progress, d.flag_kind):
         action = "skip"
     return {
-        "al_entry_id": entry.entry_id if entry else None,
-        "al_progress": d.al_progress,
+        "site_entry_id": entry.entry_id if entry else None,
+        "site_progress": d.site_progress,
         "md_progress": d.md_progress,
         "set_status": d.set_status,
         "status_source": d.status_source,
@@ -223,7 +223,7 @@ def _with_score(item: dict[str, Any], score: int | None, site: str) -> dict[str,
     if score is None or item["flag_kind"] == "exceeds_total":
         return item
     if item["action"] == "skip":
-        if item["al_entry_id"] is None or is_dismissed(item):
+        if item["site_entry_id"] is None or is_dismissed(item):
             return item
         item = {**item, "action": "write", "reason": f"rated {score}/10 on MangaDex; {site} has no score"}
     return {**item, "set_score": score, "score_approved": 1}

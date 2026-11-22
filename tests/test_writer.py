@@ -34,7 +34,7 @@ def fake(mock):
 
 
 def seed(services, fake, specs):
-    """specs: list of dicts with md_progress, al_progress (on AniList now), and optional diff fields.
+    """specs: list of dicts with md_progress, site_progress (on AniList now), and optional diff fields.
 
     Creates a `diffed` run whose items match; AniList's list holds the given current state.
     """
@@ -47,10 +47,10 @@ def seed(services, fake, specs):
         fake.add_media(al_media(media_id, f"Series {i}", chapters=s.get("chapters")))
         is_add = s.get("action") == "add"
         if not is_add:
-            entries.append((entry_id, media_id, s.get("status", "CURRENT"), s.get("now", s.get("al_progress", 0))))
+            entries.append((entry_id, media_id, s.get("status", "CURRENT"), s.get("now", s.get("site_progress", 0))))
         items.append({
-            "run_id": run_id, "md_id": f"md{i:02}", "al_media_id": media_id, "al_entry_id": None if is_add else entry_id,
-            "al_progress": None if is_add else s.get("al_progress", 0), "md_progress": s["md_progress"],
+            "run_id": run_id, "md_id": f"md{i:02}", "al_media_id": media_id, "site_entry_id": None if is_add else entry_id,
+            "site_progress": None if is_add else s.get("site_progress", 0), "md_progress": s["md_progress"],
             "action": s.get("action", "write"), "flag_kind": s.get("flag_kind"), "reason": "r",
             "set_status": s.get("set_status"), "status_source": "AniList" if s.get("set_status") else None,
             "status_approved": 1 if s.get("set_status") else 0,
@@ -86,10 +86,10 @@ def sent_aliases(fake):
 
 async def test_documents_contain_only_allowed_fields(fast, fake):
     run_id = seed(fast, fake, [
-        {"md_progress": 10, "al_progress": 5},                                         # progress
-        {"md_progress": 120, "al_progress": 110, "chapters": 120, "set_status": "COMPLETED"},  # progress + completion
-        {"md_progress": 50, "al_progress": 50, "chapters": 50, "set_status": "COMPLETED"},     # status-only
-        {"md_progress": 30, "al_progress": 20, "chapters": 30, "set_status": "COMPLETED"},     # completion unticked
+        {"md_progress": 10, "site_progress": 5},                                         # progress
+        {"md_progress": 120, "site_progress": 110, "chapters": 120, "set_status": "COMPLETED"},  # progress + completion
+        {"md_progress": 50, "site_progress": 50, "chapters": 50, "set_status": "COMPLETED"},     # status-only
+        {"md_progress": 30, "site_progress": 20, "chapters": 30, "set_status": "COMPLETED"},     # completion unticked
     ])
     items = await approve_all(fast, run_id, completing=["md01", "md02"])
     assert all(i["write_state"] == "done" for i in items.values()), [dict(i) for i in items.values()]
@@ -111,7 +111,7 @@ async def test_documents_contain_only_allowed_fields(fast, fake):
 
 
 async def test_never_lower_recheck_drops_without_mutation(fast, fake):
-    run_id = seed(fast, fake, [{"md_progress": 10, "al_progress": 5, "now": 12}, {"md_progress": 8, "al_progress": 2}])
+    run_id = seed(fast, fake, [{"md_progress": 10, "site_progress": 5, "now": 12}, {"md_progress": 8, "site_progress": 2}])
     items = await approve_all(fast, run_id)
     assert items["md00"]["write_state"] == "dropped" and "now at 12" in items["md00"]["verify_note"]
     assert [a["id"] for a in sent_aliases(fake)] == [101]
@@ -119,7 +119,7 @@ async def test_never_lower_recheck_drops_without_mutation(fast, fake):
 
 
 async def test_entry_gone_is_dropped(fast, fake):
-    run_id = seed(fast, fake, [{"md_progress": 10, "al_progress": 5}, {"md_progress": 8, "al_progress": 2}])
+    run_id = seed(fast, fake, [{"md_progress": 10, "site_progress": 5}, {"md_progress": 8, "site_progress": 2}])
     fake.lists[0]["entries"] = [e for e in fake.lists[0]["entries"] if e["id"] != 100]
     items = await approve_all(fast, run_id)
     assert items["md00"]["write_state"] == "dropped" and "no longer on your AniList list" in items["md00"]["verify_note"]
@@ -127,8 +127,8 @@ async def test_entry_gone_is_dropped(fast, fake):
 
 async def test_status_only_already_completed_is_dropped(fast, fake):
     run_id = seed(fast, fake, [
-        {"md_progress": 50, "al_progress": 50, "chapters": 50, "set_status": "COMPLETED", "status": "COMPLETED"},
-        {"md_progress": 8, "al_progress": 2},
+        {"md_progress": 50, "site_progress": 50, "chapters": 50, "set_status": "COMPLETED", "status": "COMPLETED"},
+        {"md_progress": 8, "site_progress": 2},
     ])
     items = await approve_all(fast, run_id)
     assert items["md00"]["write_state"] == "dropped" and "already COMPLETED" in items["md00"]["verify_note"]
@@ -137,8 +137,8 @@ async def test_status_only_already_completed_is_dropped(fast, fake):
 
 async def test_status_only_progress_moved_is_dropped(fast, fake):
     run_id = seed(fast, fake, [
-        {"md_progress": 50, "al_progress": 50, "now": 49, "chapters": 50, "set_status": "COMPLETED"},
-        {"md_progress": 8, "al_progress": 2},
+        {"md_progress": 50, "site_progress": 50, "now": 49, "chapters": 50, "set_status": "COMPLETED"},
+        {"md_progress": 8, "site_progress": 2},
     ])
     items = await approve_all(fast, run_id)
     assert items["md00"]["write_state"] == "dropped"
@@ -147,8 +147,8 @@ async def test_status_only_progress_moved_is_dropped(fast, fake):
 async def test_status_only_keeps_a_higher_count(fast, fake):
     # marked Completed on MangaDex at 28 while AniList is at 30: send the status, never the lower number
     run_id = seed(fast, fake, [
-        {"md_progress": 28, "al_progress": 30, "chapters": 36, "set_status": "COMPLETED"},
-        {"md_progress": 8, "al_progress": 2},
+        {"md_progress": 28, "site_progress": 30, "chapters": 36, "set_status": "COMPLETED"},
+        {"md_progress": 8, "site_progress": 2},
     ])
     items = await approve_all(fast, run_id)
     assert items["md00"]["write_state"] == "done"
@@ -158,8 +158,8 @@ async def test_status_only_keeps_a_higher_count(fast, fake):
 
 async def test_progress_plus_completion_becomes_status_only(fast, fake):
     run_id = seed(fast, fake, [
-        {"md_progress": 120, "al_progress": 110, "now": 120, "chapters": 120, "set_status": "COMPLETED"},
-        {"md_progress": 8, "al_progress": 2},
+        {"md_progress": 120, "site_progress": 110, "now": 120, "chapters": 120, "set_status": "COMPLETED"},
+        {"md_progress": 8, "site_progress": 2},
     ])
     items = await approve_all(fast, run_id)
     assert items["md00"]["write_state"] == "done"
@@ -169,8 +169,8 @@ async def test_progress_plus_completion_becomes_status_only(fast, fake):
 
 async def test_completion_dropped_if_already_completed_but_progress_still_written(fast, fake):
     run_id = seed(fast, fake, [
-        {"md_progress": 120, "al_progress": 110, "chapters": 120, "set_status": "COMPLETED", "status": "COMPLETED"},
-        {"md_progress": 8, "al_progress": 2},
+        {"md_progress": 120, "site_progress": 110, "chapters": 120, "set_status": "COMPLETED", "status": "COMPLETED"},
+        {"md_progress": 8, "site_progress": 2},
     ])
     await approve_all(fast, run_id)
     assert {a["id"]: a for a in sent_aliases(fake)}[100] == {"id": 100, "progress": 120}
@@ -180,7 +180,7 @@ async def test_completion_dropped_if_already_completed_but_progress_still_writte
 
 
 async def test_25_items_3_batches_aliases_mapped(fast, fake):
-    run_id = seed(fast, fake, [{"md_progress": 10 + i, "al_progress": 1} for i in range(25)])
+    run_id = seed(fast, fake, [{"md_progress": 10 + i, "site_progress": 1} for i in range(25)])
     items = await approve_all(fast, run_id)
     assert len(fake.mutations) == 3
     assert all(i["write_state"] == "done" and i["written_at"] for i in items.values())
@@ -189,7 +189,7 @@ async def test_25_items_3_batches_aliases_mapped(fast, fake):
 
 
 async def test_request_count_matches_estimate(fast, fake):
-    run_id = seed(fast, fake, [{"md_progress": 10 + i, "al_progress": 1} for i in range(25)])
+    run_id = seed(fast, fake, [{"md_progress": 10 + i, "site_progress": 1} for i in range(25)])
     before = fast.repo.get_run(run_id)["req_anilist"]
     await approve_all(fast, run_id)
     r = fast.repo.get_run(run_id)
@@ -198,7 +198,7 @@ async def test_request_count_matches_estimate(fast, fake):
 
 
 async def test_resume_after_crash_sends_only_remaining(fast, fake, monkeypatch):
-    run_id = seed(fast, fake, [{"md_progress": 10 + i, "al_progress": 1} for i in range(25)])
+    run_id = seed(fast, fake, [{"md_progress": 10 + i, "site_progress": 1} for i in range(25)])
     real = writer_module.send_batch
     calls = {"n": 0}
 
@@ -227,7 +227,7 @@ async def test_resume_after_crash_sends_only_remaining(fast, fake, monkeypatch):
 
 
 async def test_restart_while_writing_can_resume(fast, fake):
-    run_id = seed(fast, fake, [{"md_progress": 10, "al_progress": 1}])
+    run_id = seed(fast, fake, [{"md_progress": 10, "site_progress": 1}])
     fast.repo.update_items(run_id, [("md00", {"approved": 1, "write_state": "pending"})])
     fast.repo.update_run(run_id, state="writing", approved_at="2026-10-03T00:00:00+00:00")
     assert fast.orchestrator.runs.recover_interrupted() == []
@@ -239,7 +239,7 @@ async def test_restart_while_writing_can_resume(fast, fake):
 
 async def test_complexity_halves_and_persists(fast, fake):
     fake.complexity_limit = 5
-    run_id = seed(fast, fake, [{"md_progress": 10 + i, "al_progress": 1} for i in range(10)])
+    run_id = seed(fast, fake, [{"md_progress": 10 + i, "site_progress": 1} for i in range(10)])
     items = await approve_all(fast, run_id)
     assert fast.repo.get_setting("anilist_write_batch") == 5
     assert [len(re.findall(r"SaveMediaListEntry", m["query"])) for m in fake.mutations] == [5, 5]
@@ -247,7 +247,7 @@ async def test_complexity_halves_and_persists(fast, fake):
 
 
 async def test_partial_error_on_one_alias(fast, fake):
-    run_id = seed(fast, fake, [{"md_progress": 10 + i, "al_progress": 1} for i in range(6)])
+    run_id = seed(fast, fake, [{"md_progress": 10 + i, "site_progress": 1} for i in range(6)])
     fake.alias_errors[103] = "Validation error: progress"
     items = await approve_all(fast, run_id)
     assert items["md03"]["write_state"] == "failed"
@@ -258,7 +258,7 @@ async def test_partial_error_on_one_alias(fast, fake):
 
 async def test_429_during_writing_retries_without_double_write(fast, fake):
     fake.status_429 = 1
-    run_id = seed(fast, fake, [{"md_progress": 10 + i, "al_progress": 1} for i in range(3)])
+    run_id = seed(fast, fake, [{"md_progress": 10 + i, "site_progress": 1} for i in range(3)])
     items = await approve_all(fast, run_id)
     assert all(i["write_state"] == "done" for i in items.values())
     assert len(fake.applied) == 3
@@ -273,16 +273,16 @@ async def test_429_during_writing_retries_without_double_write(fast, fake):
 
 async def test_verify_ok_and_status_change_flagged(fast, fake):
     run_id = seed(fast, fake, [
-        {"md_progress": 10, "al_progress": 5},
-        {"md_progress": 50, "al_progress": 40, "chapters": 50, "set_status": "COMPLETED"},
-        {"md_progress": 20, "al_progress": 5},
+        {"md_progress": 10, "site_progress": 5},
+        {"md_progress": 50, "site_progress": 40, "chapters": 50, "set_status": "COMPLETED"},
+        {"md_progress": 20, "site_progress": 5},
     ])
     fake.server_status_after_write[102] = "COMPLETED"  # AniList completes it by itself
     items = await approve_all(fast, run_id)
     assert items["md00"]["verify_note"] == "verified"
     assert items["md01"]["verify_note"] == "verified"  # COMPLETED was sent, so expected
     assert "status changed by AniList: CURRENT→COMPLETED" in items["md02"]["verify_note"]
-    assert items["md00"]["al_status_before"] == "CURRENT"
+    assert items["md00"]["site_status_before"] == "CURRENT"
     assert "1 need a look" in fast.repo.get_run(run_id)["phase_detail"]
 
 
@@ -291,7 +291,7 @@ async def test_verify_ok_and_status_change_flagged(fast, fake):
 
 async def test_first_approval_can_be_a_whole_batch(fast, fake):
     fast.repo.set_setting("first_write_done", False)
-    run_id = seed(fast, fake, [{"md_progress": 10, "al_progress": 5}, {"md_progress": 8, "al_progress": 2}])
+    run_id = seed(fast, fake, [{"md_progress": 10, "site_progress": 5}, {"md_progress": 8, "site_progress": 2}])
     await fast.orchestrator.approve(run_id, ["md00", "md01"], [], [])
     await fast.orchestrator.wait()
     assert sorted(a["id"] for a in sent_aliases(fake)) == [100, 101]
@@ -301,10 +301,10 @@ async def test_first_approval_can_be_a_whole_batch(fast, fake):
 @pytest.mark.parametrize(
     "spec, sel, ov, message",
     [
-        ({"md_progress": 11, "al_progress": 9, "action": "flag", "flag_kind": "exceeds_total"}, ["md00"], [], "exceed"),
-        ({"md_progress": 400, "al_progress": 9, "action": "flag", "flag_kind": "implausible"}, ["md00"], [], "override"),
-        ({"md_progress": 4, "al_progress": 9, "action": "skip"}, ["md00"], [], "cannot be written"),
-        ({"md_progress": 10, "al_progress": 9}, [], [], "Nothing selected"),
+        ({"md_progress": 11, "site_progress": 9, "action": "flag", "flag_kind": "exceeds_total"}, ["md00"], [], "exceed"),
+        ({"md_progress": 400, "site_progress": 9, "action": "flag", "flag_kind": "implausible"}, ["md00"], [], "override"),
+        ({"md_progress": 4, "site_progress": 9, "action": "skip"}, ["md00"], [], "cannot be written"),
+        ({"md_progress": 10, "site_progress": 9}, [], [], "Nothing selected"),
     ],
 )
 async def test_approval_validation(fast, fake, spec, sel, ov, message):
@@ -315,7 +315,7 @@ async def test_approval_validation(fast, fake, spec, sel, ov, message):
 
 
 async def test_implausible_with_override_is_written(fast, fake):
-    run_id = seed(fast, fake, [{"md_progress": 400, "al_progress": 9, "action": "flag", "flag_kind": "implausible"}])
+    run_id = seed(fast, fake, [{"md_progress": 400, "site_progress": 9, "action": "flag", "flag_kind": "implausible"}])
     await fast.orchestrator.approve(run_id, ["md00"], [], ["md00"])
     await fast.orchestrator.wait()
     assert fake.entry(100)["progress"] == 400
@@ -323,8 +323,8 @@ async def test_implausible_with_override_is_written(fast, fake):
 
 async def test_status_only_without_completion_is_not_approved(fast, fake):
     run_id = seed(fast, fake, [
-        {"md_progress": 50, "al_progress": 50, "chapters": 50, "set_status": "COMPLETED"},
-        {"md_progress": 8, "al_progress": 2},
+        {"md_progress": 50, "site_progress": 50, "chapters": 50, "set_status": "COMPLETED"},
+        {"md_progress": 8, "site_progress": 2},
     ])
     await fast.orchestrator.approve(run_id, ["md00", "md01"], [], [])
     await fast.orchestrator.wait()
@@ -334,7 +334,7 @@ async def test_status_only_without_completion_is_not_approved(fast, fake):
 
 
 async def test_only_diffed_runs_can_be_approved(fast, fake):
-    run_id = seed(fast, fake, [{"md_progress": 10, "al_progress": 5}])
+    run_id = seed(fast, fake, [{"md_progress": 10, "site_progress": 5}])
     fast.repo.update_run(run_id, state="cancelled")
     with pytest.raises(ApprovalError):
         await fast.orchestrator.approve(run_id, ["md00"], [], [])
@@ -354,7 +354,7 @@ def sent_documents_by_kind(fake):
 
 async def test_adds_are_written_with_reading_or_completed(fast, fake):
     run_id = seed(fast, fake, [
-        {"md_progress": 10, "al_progress": 5},                                                        # update
+        {"md_progress": 10, "site_progress": 5},                                                        # update
         {"md_progress": 7, "action": "add"},                                                          # add as Reading
         {"md_progress": 50, "action": "add", "chapters": 50, "set_status": "COMPLETED"},             # add as Completed
         {"md_progress": 30, "action": "add", "chapters": 30, "set_status": "COMPLETED"},             # completion unticked
@@ -373,7 +373,7 @@ async def test_adds_are_written_with_reading_or_completed(fast, fake):
     assert (by_media[2]["status"], by_media[2]["progress"]) == ("CURRENT", 7)
     assert (by_media[3]["status"], by_media[3]["progress"]) == ("COMPLETED", 50)
     assert (by_media[4]["status"], by_media[4]["progress"]) == ("CURRENT", 30)
-    assert items["md01"]["al_entry_id"] == by_media[2]["id"]
+    assert items["md01"]["site_entry_id"] == by_media[2]["id"]
     assert all(items[m]["verify_note"] == "verified" for m in ("md01", "md02", "md03"))
 
 
@@ -390,7 +390,7 @@ async def test_add_dropped_if_series_is_on_the_list_by_write_time(fast, fake):
 
 
 async def test_add_failure_is_reported(fast, fake):
-    run_id = seed(fast, fake, [{"md_progress": 7, "action": "add"}, {"md_progress": 3, "al_progress": 1}])
+    run_id = seed(fast, fake, [{"md_progress": 7, "action": "add"}, {"md_progress": 3, "site_progress": 1}])
     del fake.catalogue[1]  # AniList answers "Not Found." for that media
     items = await approve_all(fast, run_id)
     assert items["md00"]["write_state"] == "failed"
@@ -400,7 +400,7 @@ async def test_add_failure_is_reported(fast, fake):
 
 def test_verify_accepts_a_total_filled_in_on_completion():
     from mdal.sync.writer import verify_note
-    item = {"md_progress": 25, "al_progress": 25, "set_status": "COMPLETED", "status_approved": 1, "al_status_before": "CURRENT",
+    item = {"md_progress": 25, "site_progress": 25, "set_status": "COMPLETED", "status_approved": 1, "site_status_before": "CURRENT",
             "set_score": None, "score_approved": 0}
     note, problem = verify_note(item, {"progress": 26, "status": "COMPLETED"})
     assert (note, problem) == ("verified; AniList filled in its total of 26 chapters", False)

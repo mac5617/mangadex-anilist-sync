@@ -123,7 +123,7 @@ class DiffRow:
     al_title: str | None   # the series on the run's site (AniList or MyAnimeList)
     al_url: str | None
     site: str
-    al_progress: int | None
+    site_progress: int | None
     md_progress: int | None
     action: str
     flag_kind: str | None
@@ -152,9 +152,9 @@ def diff_rows(repo: Repo, run_id: int) -> list[DiffRow]:
         else:
             title, url = titles.pick(r["romaji"], r["english"], r["native"]), r["site_url"]
         status_label = None
-        is_new = r["al_entry_id"] is None and r["action"] in ("add", "flag")
+        is_new = r["site_entry_id"] is None and r["action"] in ("add", "flag")
         if r["set_status"] == "COMPLETED":
-            status_label = completion_label(r["al_status"], r["status_source"], r["total"], site)
+            status_label = completion_label(r["site_status"], r["status_source"], r["total"], site)
             if is_new:
                 status_label = "New entry → " + status_label.split(" → ", 1)[1] + "; untick to add as Reading"
         elif is_new:
@@ -169,7 +169,7 @@ def diff_rows(repo: Repo, run_id: int) -> list[DiffRow]:
             al_title=title,
             al_url=url,
             site=site,
-            al_progress=r["al_progress"],
+            site_progress=r["site_progress"],
             md_progress=r["md_progress"],
             action=r["action"],
             flag_kind=r["flag_kind"],

@@ -105,19 +105,19 @@ def seed_writes(repo):
                               md_manga_row("d", "Delta")], {})
     r1 = repo.create_run("done")
     repo.replace_items(r1, [
-        {"run_id": r1, "md_id": "a", "action": "write", "al_entry_id": 1, "al_progress": 10, "md_progress": 15,
-         "write_state": "done", "verify_note": "verified", "al_status_before": "CURRENT", "approved": 1},
-        {"run_id": r1, "md_id": "b", "action": "add", "al_media_id": 2, "al_progress": None, "md_progress": 50,
+        {"run_id": r1, "md_id": "a", "action": "write", "site_entry_id": 1, "site_progress": 10, "md_progress": 15,
+         "write_state": "done", "verify_note": "verified", "site_status_before": "CURRENT", "approved": 1},
+        {"run_id": r1, "md_id": "b", "action": "add", "al_media_id": 2, "site_progress": None, "md_progress": 50,
          "set_status": "COMPLETED", "status_approved": 1, "write_state": "done", "verify_note": "verified", "approved": 1},
-        {"run_id": r1, "md_id": "c", "action": "write", "al_entry_id": 3, "al_progress": 5, "md_progress": 9,
+        {"run_id": r1, "md_id": "c", "action": "write", "site_entry_id": 3, "site_progress": 5, "md_progress": 9,
          "write_state": "failed", "verify_note": "write failed: boom", "approved": 1},
         {"run_id": r1, "md_id": "d", "action": "skip", "reason": "AniList at/ahead"},
     ])
     repo.update_run(r1, req_anilist=4, req_mangadex=40, approved_at="t")
     r2 = repo.create_run("done")
     repo.replace_items(r2, [
-        {"run_id": r2, "md_id": "a", "action": "write", "al_entry_id": 1, "al_progress": 15, "md_progress": 15,
-         "set_status": "COMPLETED", "status_approved": 1, "al_status_before": "PAUSED", "write_state": "done",
+        {"run_id": r2, "md_id": "a", "action": "write", "site_entry_id": 1, "site_progress": 15, "md_progress": 15,
+         "set_status": "COMPLETED", "status_approved": 1, "site_status_before": "PAUSED", "write_state": "done",
          "verify_note": "status changed by AniList: PAUSED→CURRENT", "approved": 1},
     ])
     return r1, r2

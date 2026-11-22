@@ -150,7 +150,7 @@ def test_decision_updates_open_diffed_run(client, services, seeded):
     seeded.replace_items(run_id, [{"run_id": run_id, "md_id": "k", "action": "skip", "reason": "awaiting match review"}])
     client.post("/review/k/accept", data={"al_media_id": "7"})
     item = {i["md_id"]: i for i in seeded.items(run_id)}["k"]
-    assert (item["action"], item["md_progress"], item["al_progress"], item["al_entry_id"]) == ("write", 10, 3, 70)
+    assert (item["action"], item["md_progress"], item["site_progress"], item["site_entry_id"]) == ("write", 10, 3, 70)
 
 
 def test_decision_leaves_older_runs_alone(client, services, seeded):

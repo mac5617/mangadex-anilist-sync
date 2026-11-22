@@ -96,8 +96,8 @@ def mal_run(services):
     """A MyAnimeList sync waiting for approval, beside the AniList one: one update for series "w"."""
     repo = services.repo
     rid = repo.create_run("diffed", "mal")
-    repo.replace_items(rid, [{"run_id": rid, "md_id": "w", "al_media_id": 1, "al_entry_id": 9001, "mal_id": 9001,
-                              "al_progress": 5, "md_progress": 12, "action": "write", "reason": "read to 12 on MangaDex"}])
+    repo.replace_items(rid, [{"run_id": rid, "md_id": "w", "al_media_id": 1, "site_entry_id": 9001, "mal_id": 9001,
+                              "site_progress": 5, "md_progress": 12, "action": "write", "reason": "read to 12 on MangaDex"}])
     return rid
 
 
