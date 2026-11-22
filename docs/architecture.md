@@ -37,6 +37,8 @@ src/mdal/
   fetch/anilist_list.py          # Viewer, MediaListCollection, Page lookups/search
   matching/normalize.py  matching/score.py  matching/pipeline.py
   matching/matches.py            # the one definition of a Match
+  matching/mal_link.py           # the MyAnimeList link, for Sync and list edits (pure)
+  scores.py                      # scores on each site's scale, and the Score offer (pure)
   sync/rules.py                  # pure progress rules -> DiffItem
   sync/estimate.py               # request count + duration
   sync/changes.py                # Changes: building, Dismissals, Selection -> Write plan and its estimate
@@ -53,7 +55,8 @@ tests/ (mirrors src)
 ```
 Dependency rules, enforced by a test that scans imports:
 - Only `clients/*` may import `httpx`.
-- `matching/normalize.py`, `matching/score.py`, `sync/rules.py` and `sync/estimate.py` are pure: no I/O, no DB.
+- `matching/normalize.py`, `matching/score.py`, `matching/mal_link.py`, `scores.py`, `sync/rules.py` and `sync/estimate.py` are pure: no I/O, no DB.
+- Callers reach the progress rules through `rules.evaluate_series`, which builds the rules' input from a library row and its reads.
 - `web/*` calls `sync/*`, `matching/pipeline` and `db/repo`, never `clients/*` directly. The one exception is `web/routes/auth.py`, which uses `clients/anilist_oauth`.
 - `web/*` makes list edits through `YourList` (`mdal/lists`), never through the site adapters behind it.
 - What counts as a Match is decided only in `matching/matches.py`.
@@ -229,6 +232,8 @@ Input per series: read chapter strings; the AniList entry (or none); AniList med
 10. Hints, independent of action: `md == total` but not `known_complete` → "at last known chapter, but AniList lists the series as <status>; status unchanged". Status PLANNING and not completing → "status is Planning; will remain Planning".
 
 `COMPLETED` is the **only** status value the sync ever writes. Score, notes, dates, repeat count and privacy are never sent.
+
+A **Shared entry** (one site entry that two or more MangaDex series are matched to) gets one Change: the highest progress, with its own rules and Flags, even if that Flag is dismissed. The others are skipped, a refresh recomputes the whole entry, and the Write plan refuses two writes to one entry, so progress can't go down.
 
 Mapping states `review`/`unmatched` produce skip rows with reason "awaiting match review" / "no match" so the diff is complete.
 

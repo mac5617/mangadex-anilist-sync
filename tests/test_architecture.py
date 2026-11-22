@@ -148,6 +148,14 @@ def test_pages_hold_no_sql():
     assert offenders == []
 
 
+def test_the_rules_are_reached_through_evaluate_series():
+    """It filters reads and builds the input, so no caller can do that differently."""
+    bare = re.compile(r"(?<![\w.])evaluate\(")
+    offenders = [str(p.relative_to(ROOT)) for p in python_files()
+                 if p != SRC / "sync" / "rules.py" and bare.search(p.read_text(encoding="utf-8"))]
+    assert offenders == []
+
+
 def test_pages_edit_your_list_only_through_your_list():
     """Routes call YourList (mdal.lists); the site adapters behind it are its own business."""
     adapters = re.compile(r"^\s*(from|import)\s+mdal\.lists\.(anilist|myanimelist)\b", re.MULTILINE)
