@@ -244,7 +244,7 @@ requests:
 
 | Page | What's on it |
 |---|---|
-| **For you** | A summary of your taste and the model's 12 picks, then more ranked by the combined score |
+| **For you** | A summary of your taste and the model's 12 picks, then the next best by combined score. Each ask moves on to titles it hasn't picked; once the good matches run out the oldest picks return, and **Start over** clears the history |
 | **Genres / Tags / Creators** | Your strongest ones (each opens the series on your list) and the series that best match them, with the reason for each |
 | **Map** | Your top 24 recommendations, shown as covers, linked to the genres, tags, creators and series on your list that led to them. A table below lists the same links. |
 

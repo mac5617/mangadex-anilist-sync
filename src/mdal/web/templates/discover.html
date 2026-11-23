@@ -22,7 +22,7 @@
 
 {% if more %}
 <section class="block">
-  <div class="block-head"><h2>Also worth a look</h2><span class="muted">ranked by overall score</span></div>
+  <div class="block-head"><h2>Also worth a look</h2><span class="muted">next best by overall score</span></div>
   <div class="recs">
     {% for c in more %}{% with rank = None %}{% include "_rec_card.html" %}{% endwith %}{% endfor %}
   </div>

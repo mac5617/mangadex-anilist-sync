@@ -18,6 +18,7 @@ from typing import Any
 from mdal import __version__
 from mdal import tunables
 from mdal.db.repo import SETTING_DEFAULTS, Repo, now_iso
+from mdal.recommend.rotation import past_picks, remember
 
 FORMAT = "shiori-backup"
 TABLES = {   # table -> primary key (restore replaces rows with the same key)
@@ -65,6 +66,9 @@ def restore(repo: Repo, data: Any) -> Restored:
     offered = {k: v for k, v in offered.items() if k in SETTING_DEFAULTS and k not in LEFT_OUT} \
         if isinstance(offered, dict) else {}
     settings, kept = tunables.restorable(repo, offered)
+    if "rec_llm" in settings and "rec_past" not in settings:      # a backup from before For you kept a history
+        settings["rec_past"] = remember(past_picks(repo.get_setting("rec_past"), repo.get_setting("rec_llm")),
+                                        past_picks(None, settings["rec_llm"]))
     with repo.conn:
         for table, rows in (data.get("tables") or {}).items():
             if table not in TABLES or not isinstance(rows, list):

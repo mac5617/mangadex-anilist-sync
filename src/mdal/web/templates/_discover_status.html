@@ -15,6 +15,8 @@
     {% if anilist %}<button hx-post="/discover-refresh" hx-target="#discover-status" hx-swap="outerHTML">Refresh</button>
     {% else %}<a href="/settings#anilist">Connect AniList to get recommendations</a>{% endif %}
     {% if has_candidates %}<button class="secondary" hx-post="/discover-ask" hx-target="#discover-status" hx-swap="outerHTML">{% if llm.picks %}Ask the model again{% else %}Ask the model{% endif %}</button>{% endif %}
+    {% if earlier %}<button class="secondary" hx-post="/discover-start-over" hx-target="#discover-status" hx-swap="outerHTML"
+        hx-confirm="Start over? Your {{ earlier }} earlier picks can come back.">Start over</button>{% endif %}
     <span hx-get="/discover-models" hx-trigger="load" hx-swap="outerHTML"><span class="muted small">Model: {{ model }}</span></span>
   </div>
   {% endif %}

@@ -45,6 +45,7 @@ SETTING_DEFAULTS: dict[str, Any] = {
     "llm_auto": False,
     "rec_status": None,      # {state, detail, error, started_at, finished_at}
     "rec_llm": None,         # {model, summary, picks: [{id, reason}], created_at, error}
+    "rec_past": None,        # AniList ids the model has picked, oldest first (None: none recorded yet)
     # New releases: the embedding model for description matching, the scan's language, its last run and picks.
     "embed_model": "qwen3-embedding:0.6b",
     "new_language": "en",    # only series with chapters in this language
@@ -99,6 +100,14 @@ class Repo:
             raise KeyError(key)
         with self.conn:
             _upsert(self.conn, "settings", {"key": key, "value": json.dumps(value)}, ["key"])
+
+    def set_settings(self, values: Mapping[str, Any]) -> None:
+        """Several settings, saved together or not at all."""
+        if unknown := set(values) - set(SETTING_DEFAULTS):
+            raise KeyError(sorted(unknown))
+        with self.conn:
+            for key, value in values.items():
+                _upsert(self.conn, "settings", {"key": key, "value": json.dumps(value)}, ["key"])
 
     def all_settings(self) -> dict[str, Any]:
         return {key: self.get_setting(key) for key in SETTING_DEFAULTS}

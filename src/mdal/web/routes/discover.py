@@ -23,6 +23,7 @@ from mdal.recommend.graph import build_graph
 from mdal.recommend.ratings import rate
 from mdal.recommend.series import series_url
 from mdal.recommend.releases import ScanBusy
+from mdal.recommend.rotation import also_worth, shortlist, stored_picks
 from mdal.recommend.score import Rec, ranked
 from mdal.recommend.service import RecsBusy
 from mdal.stats import COUNTRY_LABELS, FORMAT_LABELS, Bar, chart
@@ -104,6 +105,7 @@ def status_context(request: Request) -> dict[str, Any]:
             "llm_auto": svc.repo.get_setting("llm_auto"),
             "model": svc.repo.get_setting("ollama_model"),
             "has_candidates": bool(svc.repo.rec_candidate_ids()),
+            "earlier": len(rec.earlier_picks()),
             "anilist": bool(svc.anilist_token())}
 
 
@@ -118,10 +120,13 @@ def for_you(request: Request) -> HTMLResponse:
     svc = get_services(request)
     profile, recs = svc.recommender.recs(_adult(request))
     by_id = {r.media_id: r for r in recs}
-    llm = svc.repo.get_setting("rec_llm") or {}
-    picks = [card(by_id[p["id"]], "overall", p["reason"]) for p in llm.get("picks") or [] if p["id"] in by_id]
+    stored = svc.repo.get_setting("rec_llm")
+    llm = stored if isinstance(stored, dict) else {}
+    picks = [card(by_id[p["id"]], "overall", p.get("reason")) for p in stored_picks(llm) if p["id"] in by_id]
     shown = {p["id"] for p in picks}
-    more = [card(r, "overall") for r in ranked(recs, "overall", LIST_SIZE + len(shown)) if r.media_id not in shown]
+    earlier = svc.recommender.earlier_picks()
+    rest = also_worth(recs, earlier, shown) if picks else shortlist(recs, earlier, LIST_SIZE)
+    more = [card(r, "overall") for r in rest[:LIST_SIZE]]
     if not picks:
         picks, more = more[:12], more[12:]
     return _page(request, "discover.html", {
@@ -300,6 +305,15 @@ def forget_not_interested(repo: Any, prefix: str) -> None:
     for key, row in repo.feedback().items():
         if key.startswith(prefix) and row["verdict"] == "not_interested":
             repo.clear_feedback(key)
+
+
+@router.post("/discover-start-over", response_class=HTMLResponse)
+def start_over(request: Request) -> Response:
+    try:
+        get_services(request).recommender.start_over()
+    except RecsBusy as exc:
+        return _status_fragment(request, str(exc), 409)
+    return Response(status_code=204, headers={"HX-Refresh": "true"})
 
 
 @router.post("/discover-unhide-all", response_class=HTMLResponse)

@@ -23,7 +23,8 @@ from mdal.matching.matches import matched
 from mdal.recommend.llm import CANDIDATES, SCHEMA, SYSTEM, build_prompt, clean_answer
 from mdal.recommend.feedback import pseudo_entry
 from mdal.recommend.profile import Profile, build_profile, entry_weight
-from mdal.recommend.score import Rec, ranked, score_recs
+from mdal.recommend.rotation import past_picks, remember, shortlist
+from mdal.recommend.score import Rec, score_recs
 from mdal.stats import entry_rows
 
 if TYPE_CHECKING:
@@ -90,6 +91,15 @@ class Recommender:
                 and (r["format"] or "MANGA") in profile.formats
                 and (include_adult or not r["is_adult"])]
         return profile, score_recs(profile, rows, weights)
+
+    def earlier_picks(self) -> list[int]:
+        """What the model has already picked, oldest first."""
+        return past_picks(self.repo.get_setting("rec_past"), self.repo.get_setting("rec_llm"))
+
+    def start_over(self) -> None:
+        if self.busy:
+            raise RecsBusy("Recommendations are already being refreshed.")
+        self.repo.set_setting("rec_past", [])
 
     def status(self) -> dict[str, Any]:
         return self.repo.get_setting("rec_status") or {}
@@ -176,15 +186,18 @@ class Recommender:
             return []
 
     async def _ask_model(self) -> str | None:
-        """Store the model's picks. Returns a note when it could not be asked (the rest still works)."""
+        """Store the model's picks. Returns a note when it could not be asked (the rest still works) or when
+        earlier picks came back."""
         model = self.repo.get_setting("ollama_model")
-        previous = self.repo.get_setting("rec_llm") or {}
+        stored = self.repo.get_setting("rec_llm")
+        previous = stored if isinstance(stored, dict) else {}
         try:
             available = {m["name"]: m for m in await self.ollama().models()}
             if model not in available:
                 raise OllamaUnavailable(f"model {model!r} is not installed in Ollama")
             profile, recs = self.recs()
-            top = ranked(recs, "overall", CANDIDATES)
+            earlier = self.earlier_picks()
+            top = shortlist(recs, earlier, CANDIDATES)
             if not top:
                 raise OllamaError("no candidates to choose from yet")
             self._status(detail=f"asking {model} to pick from {len(top)} candidates")
@@ -196,6 +209,9 @@ class Recommender:
         except OllamaError as exc:
             self.repo.set_setting("rec_llm", {**previous, "error": str(exc), "error_at": now_iso()})
             return f"model not used: {exc}"
-        self.repo.set_setting("rec_llm", {"model": model, "summary": summary, "picks": picks,
-                                          "created_at": now_iso(), "error": None})
-        return None
+        chosen = [p["id"] for p in picks]
+        self.repo.set_settings({
+            "rec_llm": {"model": model, "summary": summary, "picks": picks, "created_at": now_iso(), "error": None},
+            "rec_past": remember(earlier, chosen),
+        })
+        return "some earlier picks are back" if set(chosen) & set(earlier) else None
