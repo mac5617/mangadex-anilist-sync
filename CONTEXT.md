@@ -95,3 +95,9 @@ _Avoid_: retry, restart
 **Superseded**:
 A Run closed because a newer one for the same site replaced it.
 _Avoid_: stale, overwritten
+
+### Settings
+
+**Tunable**:
+A setting you can adjust on the Settings page, with an allowed range.
+_Avoid_: config, preference

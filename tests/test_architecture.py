@@ -156,6 +156,19 @@ def test_the_rules_are_reached_through_evaluate_series():
     assert offenders == []
 
 
+def test_every_setting_named_in_code_exists():
+    from mdal.db.repo import SETTING_DEFAULTS
+    named = re.compile(r"""(?:get_setting|set_setting|usable|interval|reset)\(\s*(?:[\w.]+,\s*)?["'](\w+)["']""")
+    found = {k for p in python_files() for k in named.findall(p.read_text(encoding="utf-8"))}
+    assert "anilist_rpm" in found and found - set(SETTING_DEFAULTS) == set()
+
+
+def test_every_tunable_has_a_default_in_range():
+    from mdal.db.repo import SETTING_DEFAULTS
+    from mdal.tunables import TUNABLES, is_valid
+    assert [t.key for t in TUNABLES if t.key not in SETTING_DEFAULTS or not is_valid(t.key, SETTING_DEFAULTS[t.key])] == []
+
+
 def test_pages_edit_your_list_only_through_your_list():
     """Routes call YourList (mdal.lists); the site adapters behind it are its own business."""
     adapters = re.compile(r"^\s*(from|import)\s+mdal\.lists\.(anilist|myanimelist)\b", re.MULTILINE)

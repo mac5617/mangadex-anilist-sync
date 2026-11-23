@@ -26,7 +26,8 @@ pyproject.toml  .env.example  .gitignore  README.md
 scripts/live_check.py            # read-only live probe (story 09)
 src/mdal/
   main.py                        # uvicorn entry, 127.0.0.1
-  config.py                      # Settings (secrets) + tunables from DB settings table
+  config.py                      # Settings (secrets from .env)
+  tunables.py                    # Tunables: ranges, validation, reset, applying rates live
   logsetup.py                    # logging config + RedactingFilter
   db/connection.py  db/migrations/001_init.sql  db/repo.py
   clients/ratelimit.py           # PacedQueue: single-flight, min-interval, pause_until
@@ -87,7 +88,7 @@ Before a migration changes an existing database, `db/connection.py` saves one co
 | `jump_limit` | 200 |
 | `first_write_done` | false |
 
-Validation: `anilist_rpm` 1–30, `mangadex_rps` 0.2–4; out-of-range values are rejected by the settings form.
+Validation (`tunables.py`): `anilist_rpm` 1–30, `mangadex_rps` 0.2–4; out-of-range values are rejected by the settings form. A restored backup goes through the same checks: an invalid value keeps your current one and the restore note names it, and valid rates and title language apply immediately. Backups leave out logins, job status and who is signed in. If a stored rate or title language is invalid at start-up, Shiori uses the default for that session and leaves the stored value alone.
 
 ## 4. SQLite schema (`001_init.sql`)
 ```sql
