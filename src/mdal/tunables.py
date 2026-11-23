@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 from mdal import titles
 from mdal.db.repo import SETTING_DEFAULTS, Repo
-from mdal.recommend.rotation import is_history
+from mdal.recommend.rotation import is_history, is_new_history
 
 if TYPE_CHECKING:
     from mdal.services import Services
@@ -97,6 +97,8 @@ def is_valid(key: str, value: Any) -> bool:
         return isinstance(value, list) and all(isinstance(t, str) and t in SYNC_SITES for t in value)
     if key == "rec_past":
         return value is None or is_history(value)
+    if key == "new_past":
+        return value is None or is_new_history(value)
     default = SETTING_DEFAULTS[key]
     if default is None:          # saved job data
         return value is None or isinstance(value, (list, dict, str)) or _is_number(value)

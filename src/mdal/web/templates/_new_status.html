@@ -7,7 +7,7 @@
   {% elif ns.finished_at %}
     <p class="row"><span class="muted small">Scanned {{ ns.finished_at | when }}</span>{% if ns.detail %}<span class="muted small">· {{ ns.detail }}</span>{% endif %}</p>
   {% else %}
-    <p class="muted">Not scanned yet. A scan reads the 600 latest series on MangaDex and your follows (about 25 requests, under a minute){% if llm_auto %}, compares their descriptions with your list, then asks your local model to pick{% else %} and ranks them by your tags and creators. <strong>Ask the model</strong> then compares descriptions and has your local model pick{% endif %}.</p>
+    <p class="muted">Not scanned yet. A scan reads the last 7 days of English chapters on MangaDex and your follows (about 40 requests, under a minute){% if llm_auto %}, compares their descriptions with your list, then asks your local model to pick{% else %} and ranks them by your tags and creators. <strong>Ask the model</strong> then compares descriptions and has your local model pick{% endif %}.</p>
   {% endif %}
   {% if new_llm.error and not new_running %}<p class="notice warn">Model: {{ new_llm.error }}</p>{% endif %}
   {% if not new_running %}
@@ -15,6 +15,8 @@
     {% if mangadex %}<button hx-post="/discover-new-scan" hx-target="#new-status" hx-swap="outerHTML">Scan MangaDex</button>
     {% else %}<span class="muted">Add your MangaDex login to <code>.env</code> to scan.</span>{% endif %}
     {% if has_new %}<button class="secondary" hx-post="/discover-new-ask" hx-target="#new-status" hx-swap="outerHTML">{% if new_llm.picks %}Ask the model again{% else %}Ask the model{% endif %}</button>{% endif %}
+    {% if new_earlier %}<button class="secondary" hx-post="/discover-new-start-over" hx-target="#new-status" hx-swap="outerHTML"
+        hx-confirm="Start over? Your {{ new_earlier }} earlier picks can come back.">Start over</button>{% endif %}
     <span hx-get="/discover-models?panel=new" hx-trigger="load" hx-swap="outerHTML"><span class="muted small">Model: {{ model }}</span></span>
   </div>
   {% endif %}

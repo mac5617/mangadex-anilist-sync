@@ -1,7 +1,7 @@
 """New releases (a MangaDex scan, scored and picked in the background) and the Ask chat.
 
-A scan: makes sure your list has descriptions (one AniList request if not), reads the latest
-MangaDex series and your follows, compares descriptions with the embedding model when one is
+A scan: makes sure your list has descriptions (one AniList request if not), reads the last week of
+new English chapters on MangaDex, their series and your follows, compares descriptions with the embedding model when one is
 installed, then asks the chat model to pick. Pages only read what was stored.
 
 Between scans, an hourly check reads only MangaDex's newest pages (stopping at the first page with nothing
@@ -30,7 +30,7 @@ from mdal.fetch.anilist_list import fetch_list, plain_text
 from mdal.fetch.anilist_recs import fetch_neighbours
 from mdal.fetch.mal_recs import anilist_by_mal, mal_recommendations
 from mdal.clients.myanimelist import MalError
-from mdal.fetch.mangadex_new import fetch_latest, fetch_new_releases
+from mdal.fetch.mangadex_new import fetch_latest, fetch_new_releases, is_recent
 from mdal.fetch.mangaupdates import lookup_mu
 from mdal.clients.mangaupdates import MangaUpdatesError
 from mdal.matching.matches import matched
@@ -40,6 +40,7 @@ from mdal.recommend.fresh import NewRec, Shelf
 from mdal.recommend.feedback import detect_verdict, stronger
 from mdal.recommend.profile import Profile, entry_weight
 from mdal.recommend.ratings import rate
+from mdal.recommend.rotation import came_back, is_new_history, new_remember, new_shortlist, stored_new_picks
 from mdal.recommend.score import ranked, score_recs
 from mdal.stats import COUNTRY_LABELS, entry_rows
 
@@ -126,7 +127,10 @@ class NewReleases:
         skip = md | self.repo.hidden_new() | {k[3:] for k in rated if k.startswith("md:")}
         al = al | {int(k[3:]) for k in rated if k.startswith("al:")}
         rows = []
+        now = datetime.now(UTC)
         for r in self.repo.new_releases():
+            if not is_recent(r["en_chapter_at"], now):       # no new English chapter this week
+                continue
             if r["md_id"] in skip or r["al_id"] in al or r["mal_id"] in mal:
                 continue
             if any(normalize(t) in titles for t in (r["title"], *json.loads(r["alt_titles"] or "[]"))):
@@ -134,7 +138,21 @@ class NewReleases:
             if not include_adult and r["content_rating"] in fresh.ADULT_RATINGS:
                 continue
             rows.append(dict(r))
-        return profile, fresh.score_new(profile, rows)
+        return profile, fresh.score_new(profile, rows, this_year=now.year)
+
+    def earlier_picks(self) -> list[dict[str, Any]]:
+        """What the model has picked here, oldest first, each with its English chapter at the time."""
+        stored = self.repo.get_setting("new_past")
+        if stored is not None:
+            return stored if is_new_history(stored) else []
+        chapters = {r["md_id"]: r["en_chapter"] for r in self.repo.new_releases()}     # picks from before the history
+        return [{"id": p["md_id"], "chapter": chapters.get(p["md_id"])}
+                for p in stored_new_picks(self.repo.get_setting("new_llm"))]
+
+    def start_over(self) -> None:
+        if self.busy:
+            raise ScanBusy("A scan is already running.")
+        self.repo.set_setting("new_past", [])
 
     # ---- the scan ------------------------------------------------------------------
     def start_scan(self, scheduled: bool = False) -> None:
@@ -232,7 +250,7 @@ class NewReleases:
 
     def _picks(self, recs: list[NewRec]) -> list[str]:
         """The model's picks, then the best-scored series (the hourly check's finds land here)."""
-        llm = [p["md_id"] for p in (self.repo.get_setting("new_llm") or {}).get("picks") or []]
+        llm = [p["md_id"] for p in stored_new_picks(self.repo.get_setting("new_llm"))]
         return list(dict.fromkeys(llm + [r.md_id for r in fresh.ranked_new(recs, fresh.PICKS)]))
 
     def _update_digest(self) -> None:
@@ -318,7 +336,7 @@ class NewReleases:
 
     async def _english_releases(self) -> str | None:
         """Look up the model's picks on MangaUpdates (English chapters, licensing) so their cards can show it."""
-        picks = [p["md_id"] for p in (self.repo.get_setting("new_llm") or {}).get("picks") or []]
+        picks = [p["md_id"] for p in stored_new_picks(self.repo.get_setting("new_llm"))]
         if not picks:
             return None
         rows = {r["md_id"]: r for r in self.repo.new_releases() if r["md_id"] in picks}
@@ -403,15 +421,18 @@ class NewReleases:
 
     # ---- the model -----------------------------------------------------------------
     async def _ask_model(self) -> str | None:
-        """Store the model's picks. Returns a note when it could not be asked (the ranking still works)."""
+        """Store the model's picks. Returns a note when it could not be asked (the ranking still works) or when
+        earlier picks came back."""
         model = self.repo.get_setting("ollama_model")
-        previous = self.repo.get_setting("new_llm") or {}
+        stored = self.repo.get_setting("new_llm")
+        previous = stored if isinstance(stored, dict) else {}
         try:
             available = {m["name"]: m for m in await self.ollama().models()}
             if model not in available:
                 raise OllamaUnavailable(f"model {model!r} is not installed in Ollama")
             profile, recs = self.recs()
-            top = fresh.ranked_new(recs, fresh.CANDIDATES)
+            earlier = self.earlier_picks()
+            top = new_shortlist(recs, earlier, fresh.CANDIDATES)
             if not top:
                 raise OllamaError("no new series to choose from")
             self._status(detail=f"asking {model} to read {len(top)} descriptions")
@@ -423,8 +444,13 @@ class NewReleases:
         except OllamaError as exc:
             self.repo.set_setting("new_llm", {**previous, "error": str(exc), "error_at": now_iso()})
             return f"model not used: {exc}"
-        self.repo.set_setting("new_llm", {"model": model, "picks": picks, "created_at": now_iso(), "error": None})
-        return None
+        chosen = [p["md_id"] for p in picks]
+        chapters = {r.md_id: r.en_chapter for r in top}
+        self.repo.set_settings({
+            "new_llm": {"model": model, "picks": picks, "created_at": now_iso(), "error": None},
+            "new_past": new_remember(earlier, [(m, chapters[m]) for m in chosen]),
+        })
+        return "some earlier picks are back" if came_back(top, earlier, chosen) else None
 
     # ---- Ask -----------------------------------------------------------------------
     def pool(self, include_adult: bool = False) -> tuple[Profile, list[chat.Item]]:
@@ -437,7 +463,7 @@ class NewReleases:
         mu = self.repo.cached_all("mu")      # English chapters and licensing, where MangaUpdates was asked
         md_items = [chat.Item(
             key=f"md:{r.md_id}", title=r.title, url=r.url, cover=r.cover, meta=r.meta() + fresh.english_meta(mu.get(f"md:{r.md_id}")), tags=r.tags,
-            description=r.description, taste=max(0.0, r.scores["overall"]), adult=r.adult, source="MangaDex",
+            description=r.description, taste=max(0.0, r.scores["match"]), adult=r.adult, source="MangaDex",
             similar_to=r.similar_to) for r in new]
         new_al = {r.al_id for r in new if r.al_id}
         descriptions = self.repo.descriptions(r.media_id for r in al_recs)

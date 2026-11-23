@@ -15,8 +15,10 @@ from mdal.recommend import chat, fresh
 from mdal.recommend.profile import build_profile
 from mdal.web.app import create_app
 from tests.factories import al_media_row, md_manga_row
+from datetime import UTC, datetime, timedelta
 
 OLLAMA = "http://127.0.0.1:11434"
+RELEASED = (datetime.now(UTC) - timedelta(hours=2)).isoformat(timespec="seconds")
 WORDS = ["horror", "curse", "romance", "school", "isekai", "cooking"]
 
 
@@ -171,6 +173,11 @@ def seed_list(repo):
     repo.replace_md_snapshot([md_manga_row(uuid(3), "Owned Already")], {})
 
 
+def en_chapter(md_id, number, at, chapter_id=None):
+    return {"id": chapter_id or f"ch-{md_id}", "type": "chapter", "attributes": {"chapter": number, "readableAt": at},
+            "relationships": [{"id": md_id, "type": "manga"}]}
+
+
 @pytest.fixture
 def mock():
     with respx.mock(assert_all_mocked=True, assert_all_called=False) as router:
@@ -184,8 +191,12 @@ def world(services, mock):
     mock.post(TOKEN_URL).respond(200, json={"access_token": "md-access-1111", "refresh_token": "md-refresh-1111"})
 
     def manga(request):
-        params = request.url.params
-        data = UPDATED if params.get("order[latestUploadedChapter]") else ADDED
+        ids = set(request.url.params.get_list("ids[]"))
+        data = [m for m in UPDATED + ADDED if m["id"] in ids]
+        return httpx.Response(200, json={"result": "ok", "data": data, "total": len(data)})
+
+    def chapters(request):
+        data = [en_chapter(m["id"], "5", RELEASED) for m in UPDATED + ADDED]
         return httpx.Response(200, json={"result": "ok", "data": data, "total": len(data)})
 
     services.mangaupdates_queue.set_interval(0)
@@ -194,6 +205,7 @@ def world(services, mock):
             {"record": {"series_id": 4242, "title": "Cursed Flesh", "year": "2026"}, "hit_title": "Cursed Flesh"}]}),
         "mu_series": mock.get(url__regex=rf"{MU_URL}/series/\d+").respond(200, json=MU_SERIES),
         "manga": mock.get(f"{API_URL}/manga").mock(side_effect=manga),
+        "chapter": mock.get(f"{API_URL}/chapter").mock(side_effect=chapters),
         "follows": mock.get(f"{API_URL}/user/follows/manga").respond(
             200, json={"result": "ok", "data": [{"id": uuid(4)}], "total": 1}),
     }
@@ -233,10 +245,10 @@ async def test_scan_excludes_what_you_have_and_ranks_by_description(services, wo
     await scan(services)
     status = services.releases.status()
     assert status["state"] == "done", status
-    assert status["requests"] == 3                                   # 2 pages of /manga, 1 of follows
+    assert status["requests"] == 3                                   # English chapters, their series, follows
 
-    sent = world["manga"].calls[0].request.url.params
-    assert sent.get("availableTranslatedLanguage[]") == "en" and sent.get("hasAvailableChapters") == "true"
+    sent = world["chapter"].calls[0].request.url.params
+    assert sent.get("translatedLanguage[]") == "en"
     assert set(sent.get_list("contentRating[]")) == {"safe", "suggestive", "erotica", "pornographic"}
 
     _, recs = services.releases.recs()
@@ -263,38 +275,36 @@ async def test_scan_excludes_what_you_have_and_ranks_by_description(services, wo
     assert sum(len(json.loads(c.request.content)["input"]) for c in model["embed"].calls) == embedded
 
 
-def _latest(n, title, chapter, **kw):
-    m = md_manga(n, title, **kw)
-    m["attributes"]["latestUploadedChapter"] = chapter
-    return m
-
-
 async def test_the_hourly_check_reads_only_until_nothing_changed(services, mock):
     from mdal.fetch.mangadex_new import fetch_latest
 
     services.mangadex_queue.set_interval(0)
     mock.post(TOKEN_URL).respond(200, json={"access_token": "md-access-1111", "refresh_token": "md-refresh-1111"})
-    pages = {0: [_latest(i, f"Series {i}", f"ch{i}") for i in range(100)],
-             100: [_latest(i, f"Series {i}", f"ch{i}") for i in range(100, 200)]}
+    pages = {0: [en_chapter(uuid(i), "1", RELEASED) for i in range(100)],
+             100: [en_chapter(uuid(i), "1", RELEASED) for i in range(100, 200)]}
+
+    def chapters(request):
+        return httpx.Response(200, json={"result": "ok", "data": pages.get(int(request.url.params["offset"]), []), "total": 1000})
 
     def manga(request):
-        p = request.url.params
-        data = pages.get(int(p["offset"]), []) if p.get("order[latestUploadedChapter]") else []
-        return httpx.Response(200, json={"result": "ok", "data": data, "total": 1000})
+        data = [md_manga(int(i[-12:]), f"Series {int(i[-12:])}") for i in request.url.params.get_list("ids[]")]
+        return httpx.Response(200, json={"result": "ok", "data": data, "total": len(data)})
 
-    route = mock.get(f"{API_URL}/manga").mock(side_effect=manga)
+    mock.get(f"{API_URL}/chapter").mock(side_effect=chapters)
+    mock.get(f"{API_URL}/manga").mock(side_effect=manga)
     added, requests = await fetch_latest(services.mangadex, services.repo, "en")
-    assert len(added) == 200 and requests == 4         # 2 changed pages, a 3rd (empty) one; 1 page of newest series
+    assert len(added) == 200 and requests == 5         # 2 changed pages, a 3rd (empty) one; 2 pages of series
     services.repo.set_similarity({uuid(5): (0.9, ["Loved 1"])})
 
-    pages[0] = [_latest(500, "Brand New", "chA")] + [_latest(i, f"Series {i}", f"ch{i}") for i in range(99)]
-    pages[0][6] = _latest(5, "Series 5", "ch5-next")   # a known series with a new chapter
-    route.calls.reset()
+    newer = (datetime.now(UTC) - timedelta(minutes=5)).isoformat(timespec="seconds")
+    pages[0] = [en_chapter(uuid(500), "1", newer)] + [en_chapter(uuid(i), "1", RELEASED) for i in range(99)]
+    pages[0][6] = en_chapter(uuid(5), "2", newer, "ch5-next")   # a known series with a new chapter
     added, requests = await fetch_latest(services.mangadex, services.repo, "en")
     assert added == [uuid(500)]
-    assert requests == 3                               # page 1 changed, page 2 didn't: stop; newest series: 1
+    assert requests == 3                               # page 1 changed, page 2 didn't: stop; their series: 1
     row = {r["md_id"]: r for r in services.repo.new_releases()}[uuid(5)]
-    assert row["latest_chapter_id"] == "ch5-next" and row["similarity"] == 0.9   # its description match is kept
+    assert row["latest_chapter_id"] == "ch5-next" and row["en_chapter"] == "2"
+    assert row["similarity"] == 0.9                    # its description match is kept
 
 
 async def test_the_hourly_check_puts_new_finds_on_home(services, world, mock):

@@ -1,8 +1,8 @@
-"""New releases on MangaDex: the most recently updated series, the newest series, and your follows.
+"""New releases on MangaDex: series with a new English chapter in the last week, and your follows.
 
-Read-only and small: about 6 pages of /manga plus one page of follows per 100 series followed,
-all through the paced MangaDex client. The hourly check (`fetch_latest`) reads only the newest pages,
-and stops at the first page with nothing new: usually one or two requests.
+Read-only and small: about a dozen pages of chapters, then their series 100 at a time, plus one page of follows per
+100 series followed, all through the paced MangaDex client. The hourly check (`fetch_latest`) reads only the newest
+pages, and stops at the first page with nothing new: usually one or two requests.
 """
 
 from __future__ import annotations
@@ -10,15 +10,18 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from mdal.clients.mangadex import ALL_CONTENT_RATINGS, MangaDexClient
+from mdal.clients.mangadex import ALL_CONTENT_RATINGS, IDS_PER_REQUEST, MangaDexClient
 from mdal.fetch.mangadex_library import _primary_title, _strings
 from mdal.db.repo import Repo, now_iso
+from mdal.recommend.fresh import chapter_number
 
 PAGE = 100
-UPDATED_PAGES = 5        # the 500 series with the most recent chapters
-ADDED_PAGES = 1          # plus the 100 newest series
+WINDOW = timedelta(days=7)   # how far back a new English chapter counts
+CHAPTER_PAGES = 20       # at most 2,000 chapters a scan; a week is usually about 1,200
 FOLLOW_PAGES_MAX = 50    # 5,000 follows
 DESCRIPTION_MAX = 2000
 CREDIT_LINES = ("links:", "official", "raw:", "raws:", "alt.", "alt:", "english:", "translation:", "source:")
@@ -49,7 +52,7 @@ def _int(value: Any) -> int | None:
         return None
 
 
-def new_row(manga: dict[str, Any], source: str, language: str, fetched_at: str) -> dict[str, Any]:
+def new_row(manga: dict[str, Any], source: str, language: str, fetched_at: str, release: EnglishRelease) -> dict[str, Any]:
     attrs = manga.get("attributes") or {}
     title_map = attrs.get("title") or {}
     primary = _primary_title(title_map)
@@ -77,38 +80,111 @@ def new_row(manga: dict[str, Any], source: str, language: str, fetched_at: str) 
         "content_rating": attrs.get("contentRating"),
         "al_id": _int(links.get("al")), "mal_id": _int(links.get("mal")), "mu_id": links.get("mu") or None,
         "cover_file": cover, "last_chapter": attrs.get("lastChapter") or None,
-        "latest_chapter_id": attrs.get("latestUploadedChapter"),
+        "latest_chapter_id": release.chapter_id, "en_chapter": release.chapter, "en_chapter_at": release.at,
         "source": source, "similarity": None, "similar_to": None, "fetched_at": fetched_at,
     }
 
 
-SOURCES = (("updated", "latestUploadedChapter", UPDATED_PAGES), ("added", "createdAt", ADDED_PAGES))
+@dataclass(frozen=True)
+class EnglishRelease:
+    """A series' recent English chapters: the newest upload's id and date, and the highest chapter number."""
+    chapter_id: str
+    chapter: str | None
+    at: str
 
 
-def _base(language: str) -> dict[str, Any]:
-    return {"limit": PAGE, "includes[]": ["author", "artist", "cover_art"], "contentRating[]": ALL_CONTENT_RATINGS,
-            "hasAvailableChapters": "true", "availableTranslatedLanguage[]": [language]}
+def _when(value: Any) -> datetime | None:
+    try:
+        moment = datetime.fromisoformat(str(value))
+    except ValueError:
+        return None
+    return moment if moment.tzinfo else moment.replace(tzinfo=UTC)
+
+
+def is_recent(value: Any, now: datetime) -> bool:
+    """Whether an English chapter date is inside the week New releases covers."""
+    moment = _when(value)
+    return moment is not None and moment >= now - WINDOW
+
+
+def _rank(release: EnglishRelease) -> float:
+    number = chapter_number(release.chapter)
+    return -1.0 if number is None else number
+
+
+def best_release(a: EnglishRelease | None, b: EnglishRelease) -> EnglishRelease:
+    """Keep the highest chapter, so a re-upload of an old one doesn't move a series backwards."""
+    if a is None:
+        return b
+    newest = b if (_when(b.at) or datetime.min.replace(tzinfo=UTC)) >= (_when(a.at) or datetime.min.replace(tzinfo=UTC)) else a
+    return EnglishRelease(newest.chapter_id, (b if _rank(b) > _rank(a) else a).chapter, newest.at)
+
+
+async def _english_feed(
+    client: MangaDexClient, language: str, since: datetime, known: dict[str, datetime] | None = None,
+) -> tuple[dict[str, EnglishRelease], int]:
+    """Newest chapters first, until the week ends. With `known` (series -> its latest date), also stops at the first
+    page with nothing newer. Returns (series -> release, requests)."""
+    found: dict[str, EnglishRelease] = {}
+    requests = 0
+    for page in range(CHAPTER_PAGES):
+        body = await client.get("/chapter", {
+            "limit": PAGE, "offset": page * PAGE, "translatedLanguage[]": [language], "order[readableAt]": "desc",
+            "contentRating[]": ALL_CONTENT_RATINGS, "includeFuturePublishAt": 0, "includeEmptyPages": 0})
+        requests += 1
+        data = body.get("data") or []
+        ended, changed = False, False
+        for chapter in data:
+            attrs = chapter.get("attributes") or {}
+            moment = _when(attrs.get("readableAt"))
+            if moment is None:
+                continue
+            if moment < since:
+                ended = True
+                continue
+            md_id = next((r.get("id") for r in chapter.get("relationships") or [] if r.get("type") == "manga"), None)
+            if not md_id or (known is not None and md_id in known and moment <= known[md_id]):
+                continue
+            changed = True
+            found[md_id] = best_release(found.get(md_id), EnglishRelease(chapter["id"], attrs.get("chapter"), attrs["readableAt"]))
+        if ended or not data or (known is not None and not changed) or (page + 1) * PAGE >= (body.get("total") or 0):
+            break
+    return found, requests
+
+
+async def _series_rows(
+    client: MangaDexClient, releases: dict[str, EnglishRelease], language: str, since: datetime, fetched_at: str,
+) -> tuple[list[dict[str, Any]], int]:
+    """The details of these series. One marked "added" first appeared on MangaDex this week."""
+    ids = list(releases)
+    rows: list[dict[str, Any]] = []
+    requests = 0
+    for start in range(0, len(ids), IDS_PER_REQUEST):
+        body = await client.get("/manga", {
+            "ids[]": ids[start : start + IDS_PER_REQUEST], "limit": IDS_PER_REQUEST,
+            "includes[]": ["author", "artist", "cover_art"], "contentRating[]": ALL_CONTENT_RATINGS})
+        requests += 1
+        for manga in body.get("data") or []:
+            if manga.get("id") in releases:
+                created = _when((manga.get("attributes") or {}).get("createdAt"))
+                source = "added" if created and created >= since else "updated"
+                rows.append(new_row(manga, source, language, fetched_at, releases[manga["id"]]))
+    return rows, requests
 
 
 async def fetch_latest(client: MangaDexClient, repo: Repo, language: str) -> tuple[list[str], int]:
-    """The hourly check: newest pages first, stopping at the first page where nothing changed (no series you
-    haven't stored, none with a newer chapter). New series are added, known ones get their latest chapter.
-    Returns (ids of the series added, MangaDex requests)."""
+    """The hourly check: newest English chapters first, stopping at the first page with nothing new. New series are
+    added, known ones get their latest chapter. Returns (ids of the series added, MangaDex requests)."""
     fetched_at = now_iso()
-    known = {r["md_id"]: r["latest_chapter_id"] for r in repo.new_releases()}
-    requests = 0
-    rows: dict[str, dict[str, Any]] = {}
-    for source, order, pages in SOURCES:
-        for page in range(pages):
-            body = await client.get("/manga", {**_base(language), f"order[{order}]": "desc", "offset": page * PAGE})
-            requests += 1
-            changed = [new_row(m, source, language, fetched_at) for m in body.get("data") or [] if m.get("id")]
-            changed = [r for r in changed if r["md_id"] not in rows and (
-                r["md_id"] not in known or r["latest_chapter_id"] != known[r["md_id"]])]
-            rows.update((r["md_id"], r) for r in changed)
-            if not changed or (page + 1) * PAGE >= (body.get("total") or 0):
-                break
-    return repo.merge_new_releases(list(rows.values())), requests
+    since = datetime.now(UTC) - WINDOW
+    stored = {r["md_id"]: r for r in repo.new_releases() if _when(r["en_chapter_at"])}
+    known = {md_id: _when(r["en_chapter_at"]) for md_id, r in stored.items()}
+    found, requests = await _english_feed(client, language, since, known)
+    for md_id, release in found.items():
+        if r := stored.get(md_id):
+            found[md_id] = best_release(EnglishRelease(r["latest_chapter_id"] or "", r["en_chapter"], r["en_chapter_at"]), release)
+    rows, more = await _series_rows(client, found, language, since, fetched_at)
+    return repo.merge_new_releases(rows), requests + more
 
 
 async def fetch_new_releases(
@@ -119,19 +195,12 @@ async def fetch_new_releases(
 ) -> tuple[int, int]:
     """Replace the stored new releases and follows. Returns (series stored, MangaDex requests)."""
     fetched_at = now_iso()
-    requests = 0
-    base = _base(language)
-    rows: dict[str, dict[str, Any]] = {}
-    for source, order, pages in SOURCES:
-        for page in range(pages):
-            progress(f"reading MangaDex ({'latest chapters' if source == 'updated' else 'newest series'}, page {page + 1})")
-            body = await client.get("/manga", {**base, f"order[{order}]": "desc", "offset": page * PAGE})
-            requests += 1
-            for manga in body.get("data") or []:
-                if manga.get("id") and manga["id"] not in rows:
-                    rows[manga["id"]] = new_row(manga, source, language, fetched_at)
-            if (page + 1) * PAGE >= (body.get("total") or 0):
-                break
+    since = datetime.now(UTC) - WINDOW
+    progress("reading this week's English chapters on MangaDex")
+    found, requests = await _english_feed(client, language, since)
+    progress(f"reading {len(found)} series on MangaDex")
+    rows, more = await _series_rows(client, found, language, since, fetched_at)
+    requests += more
 
     follows: list[str] = []
     for page in range(FOLLOW_PAGES_MAX):
@@ -142,5 +211,5 @@ async def fetch_new_releases(
         if (page + 1) * PAGE >= (body.get("total") or 0):
             break
 
-    repo.replace_new_releases(list(rows.values()), follows)
+    repo.replace_new_releases(rows, follows)
     return len(rows), requests

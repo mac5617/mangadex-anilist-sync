@@ -149,7 +149,7 @@ async def test_series_page_and_its_lookup(scanned, mock):
         assert c.get(f"/series/md/{uuid(99)}").status_code == 404
         assert c.get("/series/xx/1").status_code == 404
         cards = c.get("/discover/new").text
-        assert f'href="/series/md/{uuid(1)}"' in cards and "EN ch. 31" in cards        # cards open the page
+        assert f'href="/series/md/{uuid(1)}"' in cards and "EN ch. 5 · today" in cards and "licensed in English" in cards  # cards open the page
 
 
 async def test_list_entries_have_pages_that_say_so(scanned):

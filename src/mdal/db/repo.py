@@ -54,6 +54,7 @@ SETTING_DEFAULTS: dict[str, Any] = {
     "new_llm": None,         # {model, picks: [{md_id, reason}], created_at, error}
     "new_scan_hours": 24,    # scan MangaDex in the background this often; 0 = only when asked
     "new_seen": [],          # MangaDex ids of picks already shown on New releases (for the Home digest)
+    "new_past": None,        # the model's New releases picks, oldest first: [{id, chapter}] (None: none recorded yet)
     "new_digest": None,      # {at, md_ids}: picks from the latest scan not yet seen on New releases
     "mangaupdates_rps": 1,
     # List: series skipped while ranking, the last background save of scores, and when Reading counts as stalled.
@@ -399,8 +400,10 @@ class Repo:
         with self.conn:
             for row in rows:
                 if row["md_id"] in known:
-                    self.conn.execute("UPDATE md_new SET last_chapter=?, latest_chapter_id=?, fetched_at=? WHERE md_id=?",
-                                      (row["last_chapter"], row["latest_chapter_id"], row["fetched_at"], row["md_id"]))
+                    self.conn.execute("UPDATE md_new SET last_chapter=?, latest_chapter_id=?, en_chapter=?, en_chapter_at=?, "
+                                      "fetched_at=? WHERE md_id=?",
+                                      (row["last_chapter"], row["latest_chapter_id"], row["en_chapter"], row["en_chapter_at"],
+                                       row["fetched_at"], row["md_id"]))
                 else:
                     _upsert(self.conn, "md_new", row, ["md_id"])
         return [row["md_id"] for row in rows if row["md_id"] not in known]

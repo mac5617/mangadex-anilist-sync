@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import quote, urlencode
 
@@ -17,13 +18,13 @@ from fastapi.responses import HTMLResponse, Response
 from mdal import titles
 from mdal.clients.ollama import OllamaError
 from mdal.recommend.chat import Item
-from mdal.recommend.fresh import NewRec, english_meta, ranked_new
+from mdal.recommend.fresh import NewRec, english_line, english_meta
 from mdal.recommend.llm import is_reason
 from mdal.recommend.graph import build_graph
 from mdal.recommend.ratings import rate
 from mdal.recommend.series import series_url
 from mdal.recommend.releases import ScanBusy
-from mdal.recommend.rotation import also_worth, shortlist, stored_picks
+from mdal.recommend.rotation import also_new, also_worth, new_shortlist, shortlist, stored_new_picks, stored_picks
 from mdal.recommend.score import Rec, ranked
 from mdal.recommend.service import RecsBusy
 from mdal.stats import COUNTRY_LABELS, FORMAT_LABELS, Bar, chart
@@ -73,11 +74,13 @@ def card(r: Rec, kind: str, reason: str | None = None) -> dict[str, Any]:
 
 
 def new_card(r: NewRec, reason: str | None = None, mu: dict[str, Any] | None = None) -> dict[str, Any]:
+    release = english_line(r, datetime.now(UTC))
+    licensing = english_meta({**mu, "latest_chapter": None}) if mu else []     # the release line has the chapter
     return {
         "id": r.md_id, "dom_id": f"new-{r.md_id}", "title": r.title, "page": series_url(f"md:{r.md_id}"), "cover": r.cover,
         "links": [("MangaDex", r.url)] + ([("AniList", f"https://anilist.co/manga/{r.al_id}")] if r.al_id else []),
         "hide_url": f"/discover-new-hide/{r.md_id}",
-        "meta": " · ".join(r.meta() + english_meta(mu)), "genres": r.tags[:5], "reasons": [reason] if reason else r.reasons[:3],
+        "meta": " · ".join(r.meta() + ([release] if release else []) + licensing), "genres": r.tags[:5], "reasons": [reason] if reason else r.reasons[:3],
         "llm": bool(reason), "adult": r.adult, "description": r.description,
     }
 
@@ -151,12 +154,15 @@ def new_releases(request: Request) -> HTMLResponse:
     svc = get_services(request)
     profile, recs = svc.releases.recs(_adult(request))
     by_id = {r.md_id: r for r in recs}
-    llm = svc.repo.get_setting("new_llm") or {}
+    stored = svc.repo.get_setting("new_llm")
+    llm = stored if isinstance(stored, dict) else {}
     mu = svc.repo.cached_all("mu")
-    picks = [new_card(by_id[p["md_id"]], p["reason"], mu.get(f"md:{p['md_id']}")) for p in llm.get("picks") or []
+    picks = [new_card(by_id[p["md_id"]], p.get("reason"), mu.get(f"md:{p['md_id']}")) for p in stored_new_picks(llm)
              if p["md_id"] in by_id]
     shown = {c["id"] for c in picks}
-    more = [new_card(r, mu=mu.get(f"md:{r.md_id}")) for r in ranked_new(recs, LIST_SIZE + len(shown)) if r.md_id not in shown]
+    earlier = svc.releases.earlier_picks()
+    rest = also_new(recs, earlier, shown) if picks else new_shortlist(recs, earlier, LIST_SIZE)
+    more = [new_card(r, mu=mu.get(f"md:{r.md_id}")) for r in rest[:LIST_SIZE]]
     if not picks:
         picks, more = more[:12], more[12:]
     svc.releases.mark_seen([c["id"] for c in picks])   # Home's "new since you last looked" starts again from here
@@ -339,6 +345,7 @@ def new_status_context(request: Request) -> dict[str, Any]:
             "llm_auto": svc.repo.get_setting("llm_auto"),
             "embed_model": svc.repo.get_setting("embed_model"),
             "has_new": svc.repo.has_new_releases(),
+            "new_earlier": len(svc.releases.earlier_picks()),
             "mangadex": bool(svc.settings.mangadex_username)}
 
 
@@ -388,6 +395,15 @@ def new_hide(request: Request, md_id: str) -> Response:
     repo.hide_new(md_id)
     note_not_interested(repo, f"md:{md_id}")
     return HTMLResponse("")
+
+
+@router.post("/discover-new-start-over", response_class=HTMLResponse)
+def new_start_over(request: Request) -> Response:
+    try:
+        get_services(request).releases.start_over()
+    except ScanBusy as exc:
+        return _panel(request, "new", str(exc), 409)
+    return Response(status_code=204, headers={"HX-Refresh": "true"})
 
 
 @router.post("/discover-new-unhide-all", response_class=HTMLResponse)

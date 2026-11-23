@@ -15,6 +15,7 @@ import math
 import re
 from array import array
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any
 
 from mdal.matching.normalize import normalize
@@ -161,6 +162,8 @@ class NewRec:
     raw: dict[str, float] = field(default_factory=dict)
     scores: dict[str, float] = field(default_factory=dict)
     reasons: list[str] = field(default_factory=list)
+    en_chapter: str | None = None         # the highest English chapter in the last week
+    en_chapter_at: str | None = None      # when the newest English chapter went up
 
     @property
     def url(self) -> str:
@@ -174,8 +177,35 @@ class NewRec:
         return [m for m in (str(self.year) if self.year else None, LANGUAGES.get(self.language or "", self.language),
                             STATUS.get(self.pub_status or "", self.pub_status),
                             (self.demographic or "").capitalize() or None,
-                            f"latest ch. {self.last_chapter}" if self.last_chapter else None,
+                            f"final ch. {self.last_chapter}" if self.last_chapter else None,
                             "just added to MangaDex" if self.source == "added" else None) if m]
+
+
+def chapter_number(value: Any) -> float | None:
+    """A chapter as a number, for comparing; None for a oneshot or a label like "Extra"."""
+    try:
+        number = float(str(value))
+    except ValueError:
+        return None
+    return number if math.isfinite(number) else None
+
+
+def english_line(r: NewRec, now: datetime) -> str | None:
+    """What was released: "EN ch. 91 · 2 days ago"."""
+    try:
+        days = (now - datetime.fromisoformat(r.en_chapter_at or "")).days
+    except (TypeError, ValueError):
+        return None
+    when = "today" if days <= 0 else "1 day ago" if days == 1 else f"{days} days ago"
+    return f"{f'EN ch. {r.en_chapter}' if r.en_chapter else 'New EN chapter'} · {when}"
+
+
+def year_weight(year: int | None, this_year: int) -> float:
+    """Newer series count for more: full within a year or so, then 90%, then 75%. No year sits in the middle."""
+    if year is None:
+        return 0.9
+    age = this_year - year
+    return 1.0 if age <= 1 else 0.9 if age <= 3 else 0.75
 
 
 def english_meta(mu: dict[str, Any] | None) -> list[str]:
@@ -201,10 +231,11 @@ def make_new_rec(row: dict[str, Any]) -> NewRec:
         al_id=row.get("al_id"), cover_file=row.get("cover_file"), last_chapter=row.get("last_chapter"),
         source=row.get("source") or "updated", similarity=row.get("similarity"),
         similar_to=json.loads(row.get("similar_to") or "[]"),
+        en_chapter=row.get("en_chapter"), en_chapter_at=row.get("en_chapter_at"),
     )
 
 
-def score_new(profile: Profile, rows: list[dict[str, Any]]) -> list[NewRec]:
+def score_new(profile: Profile, rows: list[dict[str, Any]], this_year: int | None = None) -> list[NewRec]:
     recs = [make_new_rec(r) for r in rows]
     terms = taste_terms(profile)
     people = {person_key(f.label): f for f in profile.staff.values()}
@@ -239,6 +270,10 @@ def score_new(profile: Profile, rows: list[dict[str, Any]]) -> list[NewRec]:
         else:
             r.scores["description"] = (r.similarity - low) / (high - low) if high > low else 1.0
         r.scores["overall"] = sum(w * r.scores[k] for k, w in WEIGHTS.items())
+    for r in recs:
+        r.scores["match"] = r.scores["overall"]       # the plain fit, which Ask uses
+        if this_year is not None and r.scores["overall"] > 0:
+            r.scores["overall"] *= year_weight(r.year, this_year)
     return recs
 
 

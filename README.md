@@ -269,9 +269,9 @@ hold RAM or VRAM while you use the computer. Shiori itself runs at below-normal 
 
 ### New releases and Ask
 
-**Discover → New releases → Scan MangaDex** reads the 500 series with the latest English chapters and the 100
-newest series, plus your MangaDex follows: about 25 paced MangaDex requests (6 pages of series, one page per
-100 follows), under a minute. The first scan also re-reads your AniList list once to get descriptions. Anything
+**Discover → New releases → Scan MangaDex** reads the last 7 days of new English chapters and those series, plus
+your MangaDex follows: about 40 paced MangaDex requests (about 12 pages of chapters, their series 100 at a time, one
+page per 100 follows), under a minute. The first scan also re-reads your AniList list once to get descriptions. Anything
 in your MangaDex library, followed, on your AniList or MyAnimeList list (by its AniList or MAL link, or by title),
 or marked **Not interested** is left out. Each remaining series is scored by:
 
@@ -281,7 +281,12 @@ or marked **Not interested** is left out. Each remaining series is scored by:
 - **Tags**: MangaDex genres and themes matched by name to your AniList genres and tags.
 - **Creators**: an author or artist of series you liked.
 
+Newer series count for more: a series keeps its full score for about two years, then 90%, then 75% from its fourth
+year on.
+
 **Ask the model** then has your chat model read the descriptions of the best 40 and pick 12, with a reason for each.
+A picked series stays out of later picks until it gets a higher English chapter. Once the good matches run out the
+oldest picks return, and **Start over** clears the history.
 
 **Ask** is a conversation about what to read next ("a dark fantasy with a clever lead, finished", "more like
 that but funnier"). For each message Shiori shortlists the 30 series that best fit both the question and your

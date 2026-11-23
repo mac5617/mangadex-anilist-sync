@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}New releases{% endblock %}
 {% block content %}
-{% with heading = "New releases", lede = "Series with fresh chapters on MangaDex that you haven't read or followed, matched to your list by description, tags and creators. Your local model reads the best of them and picks." %}{% include "_discover_head.html" %}{% endwith %}
+{% with heading = "New releases", lede = "Series with a new English chapter on MangaDex this week that you haven't read or followed, matched to your list by description, tags and creators. Your local model reads the best of them and picks." %}{% include "_discover_head.html" %}{% endwith %}
 
 {% if has_new and not entries %}
 <p class="notice warn">Your AniList list isn't loaded yet, so nothing can be matched to your taste. Run a sync or refresh <a href="/discover">For you</a> first.</p>
