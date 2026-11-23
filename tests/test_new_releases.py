@@ -245,7 +245,7 @@ async def test_scan_excludes_what_you_have_and_ranks_by_description(services, wo
     await scan(services)
     status = services.releases.status()
     assert status["state"] == "done", status
-    assert status["requests"] == 3                                   # English chapters, their series, follows
+    assert status["requests"] == 7                  # English chapters, their series, follows, 4 re-upload checks
 
     sent = world["chapter"].calls[0].request.url.params
     assert sent.get("translatedLanguage[]") == "en"

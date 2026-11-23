@@ -107,6 +107,21 @@ def is_recent(value: Any, now: datetime) -> bool:
     return moment is not None and moment >= now - WINDOW
 
 
+def is_reupload(entry: Any, chapter: str | None, now: datetime) -> bool:
+    """Whether this chapter was checked and first went up in English before the week New releases covers."""
+    return (isinstance(entry, dict) and entry.get("chapter") == chapter and entry.get("first_at") is not None
+            and not is_recent(entry["first_at"], now))
+
+
+async def first_english_upload(client: MangaDexClient, md_id: str, chapter: str, language: str) -> str | None:
+    """When this chapter first went up in this language (one request); None when MangaDex lists no upload."""
+    body = await client.get("/chapter", {
+        "manga": md_id, "translatedLanguage[]": [language], "chapter[]": [chapter], "order[readableAt]": "asc", "limit": 1,
+        "contentRating[]": ALL_CONTENT_RATINGS, "includeFuturePublishAt": 0, "includeEmptyPages": 0})
+    data = body.get("data") or []
+    return (data[0].get("attributes") or {}).get("readableAt") if data else None
+
+
 def _rank(release: EnglishRelease) -> float:
     number = chapter_number(release.chapter)
     return -1.0 if number is None else number

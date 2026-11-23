@@ -54,6 +54,7 @@ SETTING_DEFAULTS: dict[str, Any] = {
     "new_llm": None,         # {model, picks: [{md_id, reason}], created_at, error}
     "new_scan_hours": 24,    # scan MangaDex in the background this often; 0 = only when asked
     "new_seen": [],          # MangaDex ids of picks already shown on New releases (for the Home digest)
+    "new_first_uploads": {}, # series -> {chapter, first_at}: when its newest English chapter first went up
     "new_past": None,        # the model's New releases picks, oldest first: [{id, chapter}] (None: none recorded yet)
     "new_digest": None,      # {at, md_ids}: picks from the latest scan not yet seen on New releases
     "mangaupdates_rps": 1,

@@ -28,7 +28,7 @@ TABLES = {   # table -> primary key (restore replaces rows with the same key)
 }
 SECRET_SETTINGS = {"mangadex_session", "mal_session", "mangadex_cooldown_until", "mangadex_cooldown_reason"}
 IDENTITY_SETTINGS = {"anilist_user_id", "anilist_user_name", "mal_user_name"}  # comes from who is signed in
-STATE_SETTINGS = {"rec_status", "new_status", "rank_save"}       # what a job was doing: meaningless elsewhere
+STATE_SETTINGS = {"rec_status", "new_status", "rank_save", "new_first_uploads"}  # job state and what MangaDex gives back
 
 LEFT_OUT = SECRET_SETTINGS | IDENTITY_SETTINGS | STATE_SETTINGS
 

@@ -30,7 +30,7 @@ from mdal.fetch.anilist_list import fetch_list, plain_text
 from mdal.fetch.anilist_recs import fetch_neighbours
 from mdal.fetch.mal_recs import anilist_by_mal, mal_recommendations
 from mdal.clients.myanimelist import MalError
-from mdal.fetch.mangadex_new import fetch_latest, fetch_new_releases, is_recent
+from mdal.fetch.mangadex_new import fetch_latest, fetch_new_releases, first_english_upload, is_recent, is_reupload
 from mdal.fetch.mangaupdates import lookup_mu
 from mdal.clients.mangaupdates import MangaUpdatesError
 from mdal.matching.matches import matched
@@ -58,6 +58,7 @@ WAKE_GRACE = 180.0      # seconds to wait after the computer wakes, so the netwo
 CHECK_EVERY = timedelta(hours=1)        # the newest releases, between scans
 RETRY_AFTER = timedelta(hours=1)        # a failed scan is tried again this soon, not a whole interval later
 SEEN_KEEP = 2000
+CHECK_BEST = 80         # series checked for re-uploaded chapters: the model's 40, the page's 30, and some spare
 FOLLOW_UP = 0.35        # weight of the previous question when picking the shortlist
 ANCHOR = 0.7            # weight of a named series' description against the question's own wording
 NEIGHBOUR_BOOST = 0.6   # lift for series AniList readers recommend for a named series (relevance is 0..1)
@@ -128,8 +129,11 @@ class NewReleases:
         al = al | {int(k[3:]) for k in rated if k.startswith("al:")}
         rows = []
         now = datetime.now(UTC)
+        first = self._first_uploads()
         for r in self.repo.new_releases():
             if not is_recent(r["en_chapter_at"], now):       # no new English chapter this week
+                continue
+            if is_reupload(first.get(r["md_id"]), r["en_chapter"], now):
                 continue
             if r["md_id"] in skip or r["al_id"] in al or r["mal_id"] in mal:
                 continue
@@ -139,6 +143,42 @@ class NewReleases:
                 continue
             rows.append(dict(r))
         return profile, fresh.score_new(profile, rows, this_year=now.year)
+
+    def _first_uploads(self) -> dict[str, Any]:
+        stored = self.repo.get_setting("new_first_uploads")
+        return stored if isinstance(stored, dict) else {}
+
+    async def _drop_reuploads(self, say=None) -> tuple[str | None, int]:
+        """Check the best series' newest English chapter was really first uploaded this week; recs() leaves out those
+        that weren't. Answers are remembered per chapter. Returns (a note if it was cut short, MangaDex requests)."""
+        s = self.services
+        if not s.settings.mangadex_username:
+            return None, 0
+        if not self._mangadex_clear():
+            return "re-upload check skipped: MangaDex is busy", 0
+        say = say or (lambda msg: self._status(detail=msg))
+        stored = dict(self._first_uploads())
+        language = self.repo.get_setting("new_language")
+        now = datetime.now(UTC)
+        good, reads, note = 0, 0, None
+        try:
+            for r in fresh.ranked_new(self.recs()[1]):
+                if good >= CHECK_BEST:
+                    break
+                entry = stored.get(r.md_id)
+                if r.en_chapter and not (isinstance(entry, dict) and entry.get("chapter") == r.en_chapter):
+                    say(f"checking for re-uploaded chapters ({good + 1} of {CHECK_BEST})")
+                    entry = {"chapter": r.en_chapter,
+                             "first_at": await first_english_upload(s.mangadex, r.md_id, r.en_chapter, language)}
+                    stored[r.md_id] = entry
+                    reads += 1
+                if not is_reupload(entry, r.en_chapter, now):
+                    good += 1
+        except MangaDexError as exc:
+            note = f"re-upload check stopped: {exc}"
+        current = {r["md_id"] for r in self.repo.new_releases()}
+        self.repo.set_setting("new_first_uploads", {k: v for k, v in stored.items() if k in current})
+        return note, reads
 
     def earlier_picks(self) -> list[dict[str, Any]]:
         """What the model has picked here, oldest first, each with its English chapter at the time."""
@@ -186,9 +226,11 @@ class NewReleases:
 
     def _mangadex_free(self) -> bool:
         """Nothing else is using MangaDex, and no cooldown is on."""
+        return not self.busy and bool(self.services.settings.mangadex_username) and self._mangadex_clear()
+
+    def _mangadex_clear(self) -> bool:
+        """No sync is using MangaDex and no cooldown is on (a scan already running may go on)."""
         s = self.services
-        if self.busy or not s.settings.mangadex_username:
-            return False
         if s.orchestrator.busy():
             return False                               # a sync is using MangaDex
         cooldown = s.mangadex_guard.cooldown()
@@ -235,6 +277,8 @@ class NewReleases:
         started = now_iso()
         try:
             added, requests = await fetch_latest(s.mangadex, repo, repo.get_setting("new_language"))
+            _, checked = await self._drop_reuploads(say=lambda _msg: None)
+            requests += checked
             if added:
                 if self.model_auto:
                     await self._compare_descriptions(say=lambda _msg: None)
@@ -304,6 +348,10 @@ class NewReleases:
             notes = []
             if self.model_auto and (note := await self._compare_descriptions()):
                 notes.append(note)
+            note, checked = await self._drop_reuploads()
+            requests += checked
+            if note:
+                notes.append(note)
             _, recs = self.recs()
             self._status(detail=f"{len(recs)} new to you" + ("; asking the model" if self.model_auto else ""),
                          requests=requests, candidates=len(recs))
@@ -325,7 +373,7 @@ class NewReleases:
     async def _llm_only(self) -> None:
         """Ask the model: description matching first (only new or changed descriptions are embedded), then picks."""
         try:
-            notes = [await self._compare_descriptions()]
+            notes = [await self._compare_descriptions(), (await self._drop_reuploads())[0]]
             notes += [await self._ask_model(), await self._english_releases()]
             notes = [n for n in notes if n]
             self._update_digest()

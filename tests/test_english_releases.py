@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 
 from mdal.backup import restore
 from mdal.clients.mangadex import API_URL, TOKEN_URL
-from mdal.fetch.mangadex_new import fetch_new_releases
+from mdal.fetch.mangadex_new import fetch_new_releases, is_reupload
 from mdal.recommend import fresh
 from mdal.recommend.llm import PICKS
 from mdal.recommend.profile import build_profile
@@ -154,11 +154,15 @@ def mock():
         yield router
 
 
-def feed(services, mock, chapters, series):
+def feed(services, mock, chapters, series, first=None):
     services.mangadex_queue.set_interval(0)
     mock.post(TOKEN_URL).respond(200, json={"access_token": "md-access-1111", "refresh_token": "md-refresh-1111"})
 
     def chapter_page(request):
+        if md_id := request.url.params.get("manga"):
+            at = (first or {}).get(md_id)
+            data = [{"id": "first", "attributes": {"readableAt": at}}] if at else []
+            return httpx.Response(200, json={"data": data, "total": len(data)})
         offset = int(request.url.params["offset"])
         return httpx.Response(200, json={"data": chapters[offset:offset + 100], "total": len(chapters)})
 
@@ -210,6 +214,85 @@ async def test_series_without_a_recent_english_chapter_are_not_offered(services,
                                    "SELECT ?, 'Went Quiet', alt_titles, tags, authors, source, fetched_at, '3', ? FROM md_new WHERE md_id=?",
                                    (uuid(8), ago(days=9), uuid(1)))
     assert [r.md_id for r in services.releases.recs()[1]] == [uuid(1)]
+
+
+# ---- re-uploads ---------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("entry, chapter, expected", [
+    ({"chapter": "3", "first_at": ago(days=200)}, "3", True),
+    ({"chapter": "3", "first_at": ago(days=2)}, "3", False),
+    ({"chapter": "3", "first_at": ago(days=200)}, "4", False),    # a higher chapter hasn't been checked yet
+    ({"chapter": "3", "first_at": None}, "3", False),
+    (None, "3", False), ("junk", "3", False),
+])
+def test_what_counts_as_a_reupload(entry, chapter, expected):
+    assert is_reupload(entry, chapter, NOW) is expected
+
+
+async def scanned(services, mock, first):
+    routes = feed(services, mock, [chapter(1, "3", ago(days=1)), chapter(2, "8", ago(days=1))], [manga(1), manga(2)], first)
+    await fetch_new_releases(services.mangadex, services.repo, "en")
+    return routes
+
+
+def checks(route):
+    return [c.request.url.params for c in route.calls if c.request.url.params.get("manga")]
+
+
+async def test_a_series_whose_chapter_is_old_is_dropped(services, mock):
+    routes = await scanned(services, mock, {uuid(1): ago(days=200), uuid(2): ago(days=1)})
+    note, reads = await services.releases._drop_reuploads()
+    assert note is None and reads == 2
+    assert [r.md_id for r in services.releases.recs()[1]] == [uuid(2)]
+    sent = checks(routes["chapter"])[0]
+    assert sent.get("translatedLanguage[]") == "en" and sent.get("order[readableAt]") == "asc" and sent.get("limit") == "1"
+    assert sent.get("chapter[]") in {"3", "8"}
+
+
+async def test_a_checked_chapter_is_not_asked_about_again(services, mock):
+    routes = await scanned(services, mock, {uuid(1): ago(days=200), uuid(2): ago(days=1)})
+    await services.releases._drop_reuploads()
+    before = len(checks(routes["chapter"]))
+    assert (await services.releases._drop_reuploads()) == (None, 0)
+    assert len(checks(routes["chapter"])) == before
+
+
+async def test_a_higher_chapter_brings_a_reuploaded_series_back(services, mock):
+    await scanned(services, mock, {uuid(1): ago(days=200), uuid(2): ago(days=1)})
+    await services.releases._drop_reuploads()
+    with services.repo.conn:
+        services.repo.conn.execute("UPDATE md_new SET en_chapter='4' WHERE md_id=?", (uuid(1),))
+    assert uuid(1) in {r.md_id for r in services.releases.recs()[1]}
+
+
+async def test_only_the_best_series_are_checked(services, mock, monkeypatch):
+    monkeypatch.setattr("mdal.recommend.releases.CHECK_BEST", 1)
+    routes = await scanned(services, mock, {uuid(1): ago(days=1), uuid(2): ago(days=1)})
+    assert (await services.releases._drop_reuploads())[1] == 1
+    assert len(checks(routes["chapter"])) == 1
+
+
+async def test_a_failed_check_keeps_what_it_learned(services, mock):
+    routes = await scanned(services, mock, {uuid(1): ago(days=200), uuid(2): ago(days=200)})
+    calls = {"n": 0}
+    original = routes["chapter"].side_effect
+
+    def fail_second(request):
+        calls["n"] += 1
+        return httpx.Response(500, json={"errors": [{"detail": "boom"}]}) if calls["n"] == 2 else original(request)
+
+    routes["chapter"].side_effect = fail_second
+    note, reads = await services.releases._drop_reuploads()
+    assert "re-upload check stopped" in note and reads == 1
+    assert len(services.releases.recs()[1]) == 1
+
+
+async def test_the_memory_keeps_only_current_series(services, mock):
+    services.repo.set_setting("new_first_uploads", {uuid(9): {"chapter": "1", "first_at": ago(days=1)}})
+    await scanned(services, mock, {uuid(1): ago(days=1), uuid(2): ago(days=1)})
+    await services.releases._drop_reuploads()
+    assert set(services.repo.get_setting("new_first_uploads")) == {uuid(1), uuid(2)}
 
 
 # ---- asking and the page ------------------------------------------------------------------------

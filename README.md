@@ -281,6 +281,9 @@ or marked **Not interested** is left out. Each remaining series is scored by:
 - **Tags**: MangaDex genres and themes matched by name to your AniList genres and tags.
 - **Creators**: an author or artist of series you liked.
 
+The best 80 are checked for re-uploads: a series whose newest English chapter first went up before this week is
+left out until it gets a higher chapter. That's one MangaDex request per series, and answers are remembered.
+
 Newer series count for more: a series keeps its full score for about two years, then 90%, then 75% from its fourth
 year on.
 
