@@ -60,6 +60,14 @@ class MalRequestError(MalError):
         super().__init__(message)
 
 
+def not_accepted_yet(exc: Exception) -> str | None:
+    """Why an add failed, when MyAnimeList's answer is the one it gives for an entry it won't list yet. The API doesn't
+    report approval, so this can only say "may"."""
+    if isinstance(exc, MalRequestError) and exc.status == 400 and "invalid content" in str(exc).lower():
+        return "MyAnimeList hasn't accepted this entry yet (it may be pending approval)"
+    return None
+
+
 class MalSessionStore(Protocol):
     def load_session(self) -> dict | None: ...
     def save_session(self, session: dict | None) -> None: ...

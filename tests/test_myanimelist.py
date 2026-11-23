@@ -416,3 +416,28 @@ async def test_sync_covers_both_sites_one_after_the_other(services, monkeypatch)
     for _ in range(20):
         await asyncio.sleep(0)
     assert order[-1] == "failed anilist" and orch.queued == []      # MyAnimeList wasn't started
+
+
+async def test_an_add_myanimelist_will_not_list_yet_says_so_and_comes_back(fast, world):
+    mal = world[2]
+    mal.fail_ids[44] = 400
+    mal.fail_message = "Invalid content"
+    run_id = await mal_run(fast)
+    await approve_all(fast, run_id)
+    item = {i["md_id"]: i for i in fast.repo.items(run_id)}["d"]
+    assert item["site_entry_id"] is None and item["write_state"] == "failed"
+    assert item["verify_note"] == ("MyAnimeList hasn't accepted this entry yet (it may be pending approval); "
+                                   "Shiori will try again next Sync.")
+    del mal.fail_ids[44]                                     # approved since
+    again = await mal_run(fast)
+    assert {i["md_id"]: i for i in fast.repo.items(again)}["d"]["action"] == "add"
+
+
+@pytest.mark.parametrize("status, message, waiting", [
+    (400, "HTTP 400: Invalid content", True),
+    (400, "HTTP 400: bad value", False),
+    (404, "HTTP 404: Invalid content", False),
+])
+def test_only_that_answer_counts_as_not_accepted_yet(status, message, waiting):
+    from mdal.clients.myanimelist import MalRequestError, not_accepted_yet
+    assert bool(not_accepted_yet(MalRequestError(status, message))) is waiting

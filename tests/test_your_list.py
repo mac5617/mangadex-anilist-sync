@@ -498,3 +498,18 @@ async def test_contract_notes_are_saved_only_where_listed(world, any_site):
     assert (await any_site.set_notes(s["al:1"], "Kaneki")).saved == [s["al:1"]]
     other = await any_site.set_notes(s["md:nope"], "Kaneki")
     assert not other.saved
+
+
+async def test_a_list_add_myanimelist_will_not_list_yet_says_so(world, mal):
+    from mdal.clients.myanimelist import MalRequestError
+
+    site, _ = mal(set())
+    s = make(world, MemorySite("AniList", {}), site)[0].series(["md:c"])["md:c"]
+    world.replace_mal_entries([])
+
+    async def not_yet(*_args, **_kwargs):
+        raise MalRequestError(400, "HTTP 400: Invalid content")
+
+    site.client.add_to_list = not_yet
+    added = await site.add(s, "CURRENT", 1)
+    assert added.failed[s] == "MyAnimeList hasn't accepted this entry yet (it may be pending approval); try again later."

@@ -421,6 +421,7 @@ class FakeMal:
     patches: list[tuple[int, dict]] = field(default_factory=list)
     routes: dict[str, respx.Route] = field(default_factory=dict)
     fail_ids: dict[int, int] = field(default_factory=dict)     # mal_id -> HTTP status to answer a PATCH with
+    fail_message: str = "bad value"
 
     def add(self, mal_id: int, title: str, chapters: int = 0, status: str = "currently_publishing") -> None:
         self.catalogue[mal_id] = {"title": title, "num_chapters": chapters, "status": status}
@@ -447,7 +448,7 @@ class FakeMal:
         form = dict(httpx.QueryParams(request.content.decode()))
         self.patches.append((mal_id, form))
         if mal_id in self.fail_ids:
-            return httpx.Response(self.fail_ids[mal_id], json={"error": "invalid_content", "message": "bad value"})
+            return httpx.Response(self.fail_ids[mal_id], json={"error": "invalid_content", "message": self.fail_message})
         entry = self.entries.setdefault(mal_id, {"status": "plan_to_read", "num_chapters_read": 0, "is_rereading": False,
                                                  "num_volumes_read": 0, "score": 0, "updated_at": None})
         if "status" in form:

@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from mdal.clients.myanimelist import MalClient, MalError
+from mdal.clients.myanimelist import MalClient, MalError, not_accepted_yet
 from mdal.db.repo import Repo, now_iso
 from mdal.scores import to_mal
 
@@ -145,7 +145,8 @@ class MalSite:
             saved = await self.client.add_to_list(mal_id, chapters=progress, status=word)
         except MalError as exc:
             self.repo.log_edit(series.media_id, mal_id, "status", None, word, "failed", str(exc), site="mal")
-            result.failed[series] = f"MyAnimeList refused the add: {exc}"
+            waiting = not_accepted_yet(exc)
+            result.failed[series] = f"{waiting}; try again later." if waiting else f"MyAnimeList refused the add: {exc}"
             return result
         stored = next((code for code, w in MAL_STATUS.items() if w == saved.get("status")), status)
         chapters = saved.get("num_chapters_read", progress)

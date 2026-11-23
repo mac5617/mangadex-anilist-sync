@@ -14,7 +14,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from mdal.clients.myanimelist import MalClient, MalRequestError
+from mdal.clients.myanimelist import MalClient, MalRequestError, not_accepted_yet
 from mdal.db.repo import Repo, now_iso
 from mdal.fetch.mal_list import fetch_mal_list
 from mdal.sync.changes import NOTHING_LEFT, is_status_only, nothing_to_send, sends_completion, sends_score
@@ -67,7 +67,9 @@ class MalWriter:
             try:
                 await self.client.update_list_status(item["mal_id"], chapters=chapters, status=status, score=score)
             except MalRequestError as exc:
-                self.repo.update_items(run_id, [(item["md_id"], {"write_state": "failed", "verify_note": f"write failed: {exc}"})])
+                waiting = not_accepted_yet(exc) if is_mal_add(item) else None
+                note = f"{waiting}; Shiori will try again next Sync." if waiting else f"write failed: {exc}"
+                self.repo.update_items(run_id, [(item["md_id"], {"write_state": "failed", "verify_note": note})])
                 continue
             fields: dict[str, Any] = {"write_state": "done", "written_at": now_iso()}
             if is_mal_add(item):
