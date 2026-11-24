@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Form, HTTPException, Request
@@ -22,6 +23,15 @@ router = APIRouter()
 SCORE_WORDS = {1: "Appalling", 2: "Horrible", 3: "Very bad", 4: "Bad", 5: "Average", 6: "Fine", 7: "Good", 8: "Very good",
                9: "Great", 10: "Masterpiece"}
 MD_ID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+
+
+def past_date(text: str) -> str | None:
+    """`text` when it is a timestamp with a time zone that isn't in the future (an Undo's original Saved date)."""
+    try:
+        when = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    return text if when.tzinfo is not None and when <= datetime.now(UTC) else None
 
 
 def series_key(kind: str, ident: str) -> str:
@@ -54,11 +64,12 @@ async def series_lookup(request: Request, kind: str, ident: str, force: str = Fo
 
 
 @router.post("/series/{kind}/{ident}/rate", response_class=HTMLResponse)
-def series_rate(request: Request, kind: str, ident: str, verdict: str = Form(""), source: str = Form("")) -> Response:
+def series_rate(request: Request, kind: str, ident: str, verdict: str = Form(""), source: str = Form(""),
+                saved_at: str = Form("")) -> Response:
     """Save or clear your verdict. Answers with the verdict panel (series page) or a row (Ratings page).
 
     Changing a rating from its Ratings row keeps where it came from (Ask, Not interested, a series page); `source`
-    lets the row's Undo put a removed rating back the way it was."""
+    and `saved_at` let the row's Undo put a removed rating back the way it was, Saved date included."""
     key = series_key(kind, ident)
     svc = get_services(request)
     in_row = request.headers.get("HX-Target", "").startswith("rating-")
@@ -67,7 +78,8 @@ def series_rate(request: Request, kind: str, ident: str, verdict: str = Form("")
         svc.repo.clear_feedback(key)
     else:
         kept = source if source in ("ask", "hide") else before["source"] if before and in_row else "page"
-        if verdict not in VERDICTS or not rate(svc.repo, key, verdict, kept):
+        dated = past_date(saved_at) if in_row else None
+        if verdict not in VERDICTS or not rate(svc.repo, key, verdict, kept, created_at=dated):
             raise HTTPException(400, "That rating can't be saved for this series.")
     if in_row:
         row = svc.repo.feedback().get(key)

@@ -68,3 +68,30 @@ def test_the_lede_says_what_each_rating_does(services):
     with client_for(services) as c:
         html = c.get("/discover/ratings").text
     assert "Read it" in html and "Not interested" in html
+
+
+
+def test_undo_puts_the_rating_back_with_its_original_date(services):
+    """Undo posts back what the Remove answer's button carries, so the row returns as it was, Saved date and all."""
+    import html as html_lib
+    import json
+    import re
+
+    seed(services, source="ask", verdict="liked")
+    services.repo.conn.execute("UPDATE rec_feedback SET created_at='2026-10-06T11:47:00+00:00' WHERE key=?", (KEY,))
+    services.repo.conn.commit()
+    with client_for(services) as c:
+        removed = c.post(f"/series/md/{MD}/rate", data={"verdict": "clear"}, headers=ROW).text
+        undo = json.loads(html_lib.unescape(re.search(r"hx-vals='([^']*)'[^>]*>Undo<", removed).group(1)))
+        c.post(f"/series/md/{MD}/rate", data=undo, headers=ROW)
+    row = services.repo.feedback()[KEY]
+    assert (row["verdict"], row["source"], row["created_at"]) == ("liked", "ask", "2026-10-06T11:47:00+00:00")
+
+
+def test_a_saved_date_is_only_taken_from_a_ratings_row_undo(services):
+    seed(services, source="ask")
+    with client_for(services) as c:
+        c.post(f"/series/md/{MD}/rate", data={"verdict": "liked", "saved_at": "2001-01-01T00:00:00+00:00"})
+        assert not services.repo.feedback()[KEY]["created_at"].startswith("2001")       # series page: now
+        c.post(f"/series/md/{MD}/rate", data={"verdict": "liked", "saved_at": "not a date"}, headers=ROW)
+        assert not services.repo.feedback()[KEY]["created_at"].startswith("not")

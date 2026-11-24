@@ -522,10 +522,12 @@ class Repo:
 
     # ---- your verdicts ---------------------------------------------------------
     def set_feedback(self, key: str, verdict: str, title: str, source: str, *, genres: list[str] = (),
-                     tags: list[str] = (), staff: list[dict[str, Any]] = (), description: str | None = None) -> None:
+                     tags: list[str] = (), staff: list[dict[str, Any]] = (), description: str | None = None,
+                     created_at: str | None = None) -> None:
+        """`created_at` keeps an earlier date (a removed rating put back); otherwise it is now."""
         with self.conn:
             _upsert(self.conn, "rec_feedback", {
-                "key": key, "verdict": verdict, "title": title, "source": source, "created_at": now_iso(),
+                "key": key, "verdict": verdict, "title": title, "source": source, "created_at": created_at or now_iso(),
                 "genres": json.dumps(list(genres), ensure_ascii=False), "tags": json.dumps(list(tags), ensure_ascii=False),
                 "staff": json.dumps(list(staff), ensure_ascii=False), "description": description}, ["key"])
 

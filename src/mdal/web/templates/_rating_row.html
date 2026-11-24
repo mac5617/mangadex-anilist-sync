@@ -17,7 +17,7 @@
 {% else %}
   <td colspan="5" class="muted">Removed.
     {% if was %}<button type="button" class="link-button small" hx-post="/series/{{ kind }}/{{ ident }}/rate"
-      hx-vals='{{ {"verdict": was.verdict, "source": was.source} | tojson | forceescape }}'
+      hx-vals='{{ {"verdict": was.verdict, "source": was.source, "saved_at": was.created_at} | tojson | forceescape }}'
       hx-target="#rating-{{ kind }}-{{ ident }}" hx-swap="outerHTML">Undo</button>{% endif %}</td>
 {% endif %}
 </tr>

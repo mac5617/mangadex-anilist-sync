@@ -38,13 +38,15 @@ def snapshot(repo: Repo, key: str) -> dict[str, Any] | None:
             "description": plain_text(m["description"]) or None}
 
 
-def rate(repo: Repo, key: str, verdict: str, source: str, title: str | None = None) -> bool:
-    """Save a verdict. False when the series isn't known here (nothing saved)."""
+def rate(repo: Repo, key: str, verdict: str, source: str, title: str | None = None,
+         created_at: str | None = None) -> bool:
+    """Save a verdict (dated now, or `created_at` when one is put back). False when the series isn't known here
+    (nothing saved)."""
     if verdict not in VERDICTS:
         raise ValueError(f"unknown verdict {verdict!r}")
     snap = snapshot(repo, key)
     if snap is None:
         return False
     repo.set_feedback(key, verdict, title or snap["title"], source, genres=snap["genres"], tags=snap["tags"],
-                      staff=snap["staff"], description=snap["description"])
+                      staff=snap["staff"], description=snap["description"], created_at=created_at)
     return True
