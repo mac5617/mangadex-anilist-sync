@@ -11,12 +11,16 @@
 <div class="discover-split">
   <section class="panel stack">
     <h2>Your {{ title | lower }}</h2>
-    <p class="muted small">How strongly each one shows in what you read and like (0–100). Each opens the series on your list.</p>
+    <p class="muted small">How strongly each one shows in what you read and like (0–100). Choose one to see only the recommendations that have it.</p>
     {{ charts.hbars(c, title[:-1], "Affinity", "Nothing yet: your list has no " ~ (title | lower) ~ " to compare. Refresh reads them from AniList.") }}
   </section>
   <section class="block">
-    <div class="block-head"><h2>Recommended</h2><span class="muted">{{ cards | length }} series</span></div>
-    {% if cards %}
+    {% set within = {"genre": "in", "tag": "tagged", "staff": "by"}[kind] %}
+    <div class="block-head"><h2>Recommended{% if only %} {{ within }} {{ only_label }}{% endif %}</h2>
+      <span class="muted">{{ cards | length }} series{% if only %} · <a href="{{ all_url }}">All {{ title | lower }}</a>{% endif %}</span></div>
+    {% if only and not cards %}
+      <div class="panel empty">No recommended series {{ within }} {{ only_label }}. <a href="{{ all_url }}">Show all recommendations</a></div>
+    {% elif cards %}
       <div class="recs">{% for c in cards %}{% with rank = loop.index %}{% include "_rec_card.html" %}{% endwith %}{% endfor %}</div>
     {% else %}
       <div class="panel empty">{% if kind == "staff" and has_candidates %}No candidates share a creator with your favourites yet. Refresh reads the creators of your top series from AniList.{% else %}No candidates yet. Refresh reads them from AniList.{% endif %}</div>

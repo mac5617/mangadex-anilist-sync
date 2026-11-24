@@ -28,15 +28,14 @@ from mdal.recommend.rotation import also_new, also_worth, new_shortlist, shortli
 from mdal.recommend.score import Rec, ranked
 from mdal.recommend.service import RecsBusy
 from mdal.stats import COUNTRY_LABELS, FORMAT_LABELS, Bar, chart
-from mdal.web.routes.stats import entries_url
 from mdal.web.app import get_services, graph_json, render, templates
 
 router = APIRouter()
 
 KIND_PAGES = {
-    "genres": ("genre", "Genres", "genres", "genre"),
-    "tags": ("tag", "Tags", "tags", "tag"),
-    "creators": ("staff", "Creators", "staff", "staff"),
+    "genres": ("genre", "Genres", "genres"),
+    "tags": ("tag", "Tags", "tags"),
+    "creators": ("staff", "Creators", "staff"),
 }
 LIST_SIZE = 30
 MAP_SIZE = 24
@@ -211,19 +210,38 @@ def chat_message(m: Any, by_key: dict[str, Item]) -> dict[str, Any]:
 def by_kind(request: Request, page: str) -> HTMLResponse:
     if page not in KIND_PAGES:
         raise HTTPException(404, "no such page")
-    kind, title, attr, filter_key = KIND_PAGES[page]
+    kind, title, attr = KIND_PAGES[page]
     svc = get_services(request)
     profile, recs = svc.recommender.recs(_adult(request))
     features = profile.top(attr, 12)
     bars = [Bar(f.label, round(f.affinity * 100), f"{f.count} on your list" + (f", avg score {f.mean_score:.0f}" if f.mean_score else ""),
                 key=f.key) for f in features]
     c = chart(bars)
+    only = request.query_params.get("only") or None
+    adult = _adult(request)
+    all_url = f"/discover/{page}" + ("?adult=1" if adult else "")
     for b in c["bars"]:
-        b["href"] = entries_url({filter_key: b["key"]})
+        # A bar narrows Recommended to that genre, tag or creator; the one already chosen clears it.
+        b["current"] = b["key"] == only
+        b["href"] = all_url if b["current"] else \
+            f"/discover/{page}?only={quote(b['key'], safe='')}" + ("&adult=1" if adult else "")
+    pool = ranked(recs, kind)
+    if only:
+        pool = [r for r in pool if only in has(r, kind)]
+    feature = getattr(profile, attr).get(only) if only else None
     return _page(request, "discover_kind.html", {
-        "kind": kind, "title": title, "page": page, "c": c,
-        "cards": [card(r, kind) for r in ranked(recs, kind, LIST_SIZE)],
+        "kind": kind, "title": title, "page": page, "c": c, "cards": [card(r, kind) for r in pool[:LIST_SIZE]],
+        "only": only, "only_label": feature.label if feature else only, "all_url": all_url,
     })
+
+
+def has(r: Rec, kind: str) -> set[str]:
+    """The genre names, tag names or creator ids a candidate has, keyed as the taste profile keys them."""
+    if kind == "genre":
+        return set(r.genres)
+    if kind == "tag":
+        return {t["name"] for t in r.tags}
+    return {str(p["id"]) for p in r.staff}
 
 
 # ---- actions ------------------------------------------------------------------------

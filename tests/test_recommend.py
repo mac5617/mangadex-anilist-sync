@@ -310,6 +310,17 @@ async def test_pages_with_data(services, world, mock):
         assert "Adult One" not in html and "Adult One" in c.get("/discover?adult=1").text
         assert "Mangaka 7 (Story &amp; Art), who made" in c.get("/discover/creators").text
         assert "Gore" in c.get("/discover/tags").text
+
+        # The bars beside Recommended narrow it to the series that have that genre, tag or creator.
+        genres = c.get("/discover/genres").text
+        assert 'href="/discover/genres?only=Horror"' in genres and "/stats/entries" not in genres
+        horror = c.get("/discover/genres?only=Horror").text
+        assert "Uzumaki" in horror and "Recommended in Horror" in horror and 'href="/discover/genres"' in horror
+        assert 'aria-current="true"' in horror
+        assert "No recommended series in Fantasy" in c.get("/discover/genres?only=Fantasy").text
+        assert "Uzumaki" in c.get("/discover/creators?only=7").text
+        assert "Uzumaki" not in c.get("/discover/creators?only=99").text
+        assert "only=Horror&amp;adult=1" in c.get("/discover/genres?adult=1").text
         page = c.get("/discover/map").text
         data = re.search(r'<script id="rec-map" type="application/json">(.*?)</script>', page, re.S).group(1)
         assert "</script>" not in data and json.loads(data)["nodes"]

@@ -276,6 +276,8 @@ details.section > summary::-webkit-details-marker { display: none; }
 .hbars { display: flex; flex-direction: column; gap: .45rem; }
 .hbar { display: grid; grid-template-columns: minmax(6rem, 11rem) 1fr 3.5rem; gap: .6rem; align-items: center; border-radius: 3px; color: inherit; }
 a.hbar:hover { text-decoration: none; }
+.hbar[aria-current] .hbar-label { color: var(--accent); font-weight: 600; }
+.hbars:has([aria-current]) .hbar:not([aria-current]) .hbar-fill { opacity: .4; }
 a.hbar:hover .hbar-label { color: var(--accent); }
 .hbar-label { font-size: .9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hbar-label .muted { font-size: .78rem; }
