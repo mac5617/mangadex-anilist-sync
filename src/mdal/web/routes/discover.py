@@ -25,7 +25,7 @@ from mdal.recommend.ratings import rate
 from mdal.recommend.series import series_url
 from mdal.recommend.releases import ScanBusy
 from mdal.recommend.rotation import also_new, also_worth, new_shortlist, shortlist, stored_new_picks, stored_picks
-from mdal.recommend.score import Rec, ranked
+from mdal.recommend.score import Rec, ranked, reason_for
 from mdal.recommend.service import RecsBusy
 from mdal.stats import COUNTRY_LABELS, FORMAT_LABELS, Bar, chart
 from mdal.web.app import get_services, graph_json, render, templates
@@ -213,11 +213,16 @@ def by_kind(request: Request, page: str) -> HTMLResponse:
     kind, title, attr = KIND_PAGES[page]
     svc = get_services(request)
     profile, recs = svc.recommender.recs(_adult(request))
+    known = getattr(profile, attr)
+    only = request.query_params.get("only") or None
+    if only not in known:
+        only = None                               # a stale or edited link: nothing on your list to narrow by
     features = profile.top(attr, 12)
+    if only and known[only] not in features:
+        features.append(known[only])              # the chosen one keeps its bar even outside your top 12
     bars = [Bar(f.label, round(f.affinity * 100), f"{f.count} on your list" + (f", avg score {f.mean_score:.0f}" if f.mean_score else ""),
                 key=f.key) for f in features]
     c = chart(bars)
-    only = request.query_params.get("only") or None
     adult = _adult(request)
     all_url = f"/discover/{page}" + ("?adult=1" if adult else "")
     for b in c["bars"]:
@@ -225,13 +230,19 @@ def by_kind(request: Request, page: str) -> HTMLResponse:
         b["current"] = b["key"] == only
         b["href"] = all_url if b["current"] else \
             f"/discover/{page}?only={quote(b['key'], safe='')}" + ("&adult=1" if adult else "")
-    pool = ranked(recs, kind)
-    if only:
-        pool = [r for r in pool if only in has(r, kind)]
-    feature = getattr(profile, attr).get(only) if only else None
+    everything = ranked(recs, kind)
+    pool = [r for r in everything if only in has(r, kind)] if only else everything
+    cards = []
+    for r in pool[:LIST_SIZE]:
+        c_ = card(r, kind)
+        if only and (lead := reason_for(r, kind, only, profile)):
+            # Say first why it is in the narrowed list, then its other reasons.
+            c_["reasons"] = [lead, *(x for x in c_["reasons"] if x != lead)][:3]
+        cards.append(c_)
     return _page(request, "discover_kind.html", {
-        "kind": kind, "title": title, "page": page, "c": c, "cards": [card(r, kind) for r in pool[:LIST_SIZE]],
-        "only": only, "only_label": feature.label if feature else only, "all_url": all_url,
+        "kind": kind, "title": title, "page": page, "c": c, "cards": cards, "total": len(pool),
+        "any_recs": bool(everything), "only": only, "only_label": known[only].label if only else None,
+        "all_url": all_url,
     })
 
 

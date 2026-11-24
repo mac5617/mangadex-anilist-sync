@@ -74,6 +74,17 @@ def _stats(f: Any) -> str:
     return f"{f.count} on your list" + (f", avg score {mean:.0f}" if mean else "")
 
 
+def reason_for(r: Rec, kind: str, key: str, profile: Profile) -> str | None:
+    """The reason line for one genre, tag or creator (by profile key) the candidate has, as the cards word it."""
+    f = getattr(profile, {"genre": "genres", "tag": "tags", "staff": "staff"}[kind]).get(key)
+    if f is None:
+        return None
+    if kind != "staff":
+        return f"{f.label}: {_stats(f)}"
+    p = next((p for p in r.staff if str(p["id"]) == key), None)
+    return f"{p['name']} ({p.get('role') or 'creator'}), who made {', '.join(f.top_titles(2))}" if p else None
+
+
 def score_recs(profile: Profile, rows: list[dict[str, Any]], weights: dict[int, float]) -> list[Rec]:
     """Score every candidate. `weights` maps your list's media ids to their entry weight."""
     recs = [make_rec(r) for r in rows]
@@ -84,7 +95,7 @@ def score_recs(profile: Profile, rows: list[dict[str, Any]], weights: dict[int, 
         worst = min([a for a, _ in found] + [0.0])
         r.raw["genre"] = sum(top) / 3 + 0.5 * worst
         r.matched["genre"] = [g for a, g in found if a > 0][:4]
-        r.reasons["genre"] = [f"{g}: {_stats(profile.genres[g])}" for g in r.matched["genre"][:3]]
+        r.reasons["genre"] = [reason_for(r, "genre", g, profile) for g in r.matched["genre"][:3]]
 
         # tag
         contributions = sorted((((t.get("rank") or 50) / 100 * profile.tags[t["name"]].affinity, t["name"])
@@ -93,7 +104,7 @@ def score_recs(profile: Profile, rows: list[dict[str, Any]], weights: dict[int, 
         negative = sum(c for c, _ in contributions if c < 0)
         r.raw["tag"] = sum(c for c, _ in positive) / TOP_TAGS + 0.5 * negative
         r.matched["tag"] = [name for _, name in positive]
-        r.reasons["tag"] = [f"{name}: {_stats(profile.tags[name])}" for name in r.matched["tag"][:3]]
+        r.reasons["tag"] = [reason_for(r, "tag", name, profile) for name in r.matched["tag"][:3]]
 
         # staff
         people = sorted(((profile.staff[str(p["id"])].affinity, p) for p in r.staff if str(p["id"]) in profile.staff),
@@ -101,9 +112,7 @@ def score_recs(profile: Profile, rows: list[dict[str, Any]], weights: dict[int, 
         liked = [(a, p) for a, p in people if a > 0]
         r.raw["staff"] = (liked[0][0] + 0.25 * sum(a for a, _ in liked[1:])) if liked else 0.0
         r.matched["staff"] = [str(p["id"]) for _, p in liked]
-        r.reasons["staff"] = [
-            f"{p['name']} ({p.get('role') or 'creator'}), who made {', '.join(profile.staff[str(p['id'])].top_titles(2))}"
-            for _, p in liked[:2]]
+        r.reasons["staff"] = [reason_for(r, "staff", str(p["id"]), profile) for _, p in liked[:2]]
 
         # community
         community = [s for s in r.sources if s.get("kind") == "community"]

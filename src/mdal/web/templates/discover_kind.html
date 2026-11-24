@@ -17,8 +17,8 @@
   <section class="block">
     {% set within = {"genre": "in", "tag": "tagged", "staff": "by"}[kind] %}
     <div class="block-head"><h2>Recommended{% if only %} {{ within }} {{ only_label }}{% endif %}</h2>
-      <span class="muted">{{ cards | length }} series{% if only %} · <a href="{{ all_url }}">All {{ title | lower }}</a>{% endif %}</span></div>
-    {% if only and not cards %}
+      <span class="muted">{% if total > cards | length %}{{ cards | length }} of {{ total }}{% else %}{{ cards | length }}{% endif %} series{% if only %} · <a href="{{ all_url }}">All {{ title | lower }}</a>{% endif %}</span></div>
+    {% if only and not cards and any_recs %}
       <div class="panel empty">No recommended series {{ within }} {{ only_label }}. <a href="{{ all_url }}">Show all recommendations</a></div>
     {% elif cards %}
       <div class="recs">{% for c in cards %}{% with rank = loop.index %}{% include "_rec_card.html" %}{% endwith %}{% endfor %}</div>

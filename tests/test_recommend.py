@@ -14,6 +14,7 @@ from mdal.recommend.llm import SYSTEM, build_prompt, clean_answer
 from mdal.recommend.profile import build_profile, entry_weight
 from mdal.recommend.score import ranked, score_recs
 from mdal.web.app import create_app
+from mdal.web.routes import discover as discover_routes
 from tests.factories import FakeAniList, al_media
 
 OLLAMA = "http://127.0.0.1:11434"
@@ -294,12 +295,13 @@ def test_empty_pages_render_without_requests(client, mock):
         assert response.status_code == 200, path
     html = client.get("/discover").text
     assert 'href="/discover"' in html and "Connect AniList" in html
+    assert "No candidates yet" in client.get("/discover/genres?only=Horror").text
     assert "Ollama isn't running" in client.get("/discover-models").text
     assert client.post("/discover-refresh").status_code == 409
     assert len([c for c in mock.calls if "anilist" in str(c.request.url)]) == 0
 
 
-async def test_pages_with_data(services, world, mock):
+async def test_pages_with_data(services, world, mock, monkeypatch):
     ollama_answer(mock, [{"n": 1, "reason": "Same gore as Loved 1."}, {"n": 2, "reason": "More gore."},
                          {"n": 3, "reason": "Also horror."}])
     await refresh(services)
@@ -317,10 +319,19 @@ async def test_pages_with_data(services, world, mock):
         horror = c.get("/discover/genres?only=Horror").text
         assert "Uzumaki" in horror and "Recommended in Horror" in horror and 'href="/discover/genres"' in horror
         assert 'aria-current="true"' in horror
-        assert "No recommended series in Fantasy" in c.get("/discover/genres?only=Fantasy").text
+        # Each card says first why it is in the narrowed list.
+        assert re.search(r"<ul[^>]*>\s*<li>Horror: 3 on your list", horror), horror
+        # A genre outside your top bars (Fantasy: you mostly read it unscored) still gets a marked bar.
+        fantasy = c.get("/discover/genres?only=Fantasy").text
+        assert "No recommended series in Fantasy" in fantasy
+        assert re.search(r'aria-current="true">\s*<span class="hbar-label">Fantasy', fantasy)
         assert "Uzumaki" in c.get("/discover/creators?only=7").text
-        assert "Uzumaki" not in c.get("/discover/creators?only=99").text
+        # An id that isn't on your list (a stale or edited link) narrows nothing.
+        stale = c.get("/discover/creators?only=99").text
+        assert "Uzumaki" in stale and "Recommended by" not in stale
         assert "only=Horror&amp;adult=1" in c.get("/discover/genres?adult=1").text
+        monkeypatch.setattr(discover_routes, "LIST_SIZE", 1)
+        assert re.search(r"1 of [23] series", c.get("/discover/genres?only=Horror").text)
         page = c.get("/discover/map").text
         data = re.search(r'<script id="rec-map" type="application/json">(.*?)</script>', page, re.S).group(1)
         assert "</script>" not in data and json.loads(data)["nodes"]

@@ -1,7 +1,8 @@
 {# Chart macros. Marks: one series colour per chart (--bar, set by a hue-N class on the panel; --viz-2 for a
    second series), <=32px thick, 4px rounded
    data-end, 2px gaps, hairline grid, value labels in text ink. Every mark has a tooltip (hover + keyboard
-   focus); marks with a drill-down link to the entries list. Every chart has a table view.
+   focus); marks with a link go where the chart's route points them
+   (the entries list on Stats; a filter of Recommended on Discover). Every chart has a table view.
    Import with: {% import "_charts.html" as charts %} #}
 
 {% macro mark(tag_href, cls, tip, current=False) -%}
