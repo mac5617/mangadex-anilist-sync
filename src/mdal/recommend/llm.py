@@ -180,11 +180,49 @@ LABEL = re.compile(r"^(?:reason|why)\s*[:\-–—]\s*", re.IGNORECASE)
 QUOTES = "\"'“”‘’"
 
 
+# Hype the local model keeps writing although every prompt asks it not to. Adjectives in front of a word go
+# ("a unique blend" reads "a blend"); a few words get a plain one instead.
+HYPE_ADJECTIVES = ("unique", "uniquely", "compelling", "gripping", "captivating", "riveting", "stunning",
+                   "breathtaking", "masterful", "unforgettable", "high-octane", "must-read", "incredible",
+                   "incredibly", "amazing", "brilliantly")
+HYPE_BEFORE_WORD = re.compile(r"\b(?:(a|an)\s+)?(?:(?:" + "|".join(map(re.escape, HYPE_ADJECTIVES)) +
+                              r"),?\s+)+(?=\w)", re.IGNORECASE)
+# "delivers" as hype ("delivers the same comedy"), not as a plot verb ("the courier delivers letters").
+DELIVERS = re.compile(r"\bdeliver(s|ing)?\b(?!\s+(?:letters?|mail|packages?|parcels?|messages?|pizzas?|food|goods|"
+                      r"news|babies)\b)", re.IGNORECASE)
+PLAIN_FOR = {"": "have", "s": "has", "ing": "offering"}
+SWAPS = [(re.compile(r"\bperfect (fit|match)\b", re.IGNORECASE), r"good \1"),
+         (re.compile(r"\bmasterpiece(s?)\b", re.IGNORECASE), r"classic\1")]
+
+
+def dehype(text: str) -> str:
+    """`text` without the model's hype words, as plain as the rest of the page."""
+    def drop(m: re.Match[str]) -> str:
+        article = m.group(1)
+        if not article:
+            return ""
+        nxt = m.string[m.end():m.end() + 1]
+        fixed = "an" if nxt.casefold() in "aeiou" else "a"
+        return (fixed.capitalize() if article[0].isupper() else fixed) + " "
+
+    def same_case(word: str, like: str) -> str:
+        return word.capitalize() if like[:1].isupper() else word
+
+    starts_upper = text[:1].isupper()
+    text = HYPE_BEFORE_WORD.sub(drop, text)
+    text = DELIVERS.sub(lambda m: same_case(PLAIN_FOR[(m.group(1) or "").casefold()], m.group(0)), text)
+    for pattern, plain_word in SWAPS:
+        text = pattern.sub(plain_word, text)
+    text = " ".join(text.split())
+    # Only the very start: after "!" or "?" may still be inside a title ("BLAME! has ...").
+    return text[:1].upper() + text[1:] if starts_upper else text
+
+
 def tidy_reason(reason: str, title: str, titles: list[str]) -> str:
     """The model's reason, cleaned of its usual slips: quotes around it, the pick's own title or "Reason:" in
     front, and candidate numbers (a reference becomes that candidate's title; a bare "(#2)" goes)."""
     text = " ".join(str(reason).split()).strip(QUOTES + " ")
-    text = LABEL.sub("", text)
+    text = dehype(LABEL.sub("", text))
     for sep in (":", " -", " –", " —"):
         if text.casefold().startswith((title + sep).casefold()):
             text = text[len(title + sep):].lstrip(" ,")
@@ -223,7 +261,7 @@ def _number(value: Any) -> int | None:
 def tidy_summary(text: Any) -> str:
     text = " ".join(str(text or "").split()).strip(QUOTES + " ")
     text = re.sub(r"^summary\s*:\s*", "", text, flags=re.IGNORECASE).strip(QUOTES + " ")
-    return text[:1200]
+    return dehype(text)[:1200]
 
 
 CREATOR_CLAIM = re.compile(r"\b(?:same|shared)\s+(?:creator|author|artist|mangaka|writer)s?\b|"

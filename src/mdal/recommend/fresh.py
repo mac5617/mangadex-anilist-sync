@@ -19,7 +19,7 @@ from datetime import datetime
 from typing import Any
 
 from mdal.matching.normalize import normalize
-from mdal.recommend.llm import DATA_NOT_INSTRUCTIONS, _entry, _feature_line, is_reason
+from mdal.recommend.llm import DATA_NOT_INSTRUCTIONS, _entry, _feature_line, dehype, is_reason
 from mdal.recommend.profile import Feature, Profile
 
 TOP_TAGS = 5
@@ -386,6 +386,7 @@ def clean_reason(text: str, candidates: list[NewRec]) -> str:
     text = LEAD.sub("", plain(text)).strip()
     if len(text) > 1 and text[0] in QUOTES and text[-1] in QUOTES:
         text = text[1:-1].strip()
+    text = dehype(text)
     shown = candidates[:CANDIDATES]
     text = POINTER.sub(lambda m: shown[int(m.group(1)) - 1].title if 1 <= int(m.group(1)) <= len(shown) else m.group(0),
                        text)

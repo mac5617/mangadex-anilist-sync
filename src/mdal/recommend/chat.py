@@ -13,7 +13,7 @@ from typing import Any
 
 from mdal.matching.normalize import normalize
 from mdal.recommend.fresh import plain, taste_lines
-from mdal.recommend.llm import is_reason
+from mdal.recommend.llm import dehype, is_reason
 
 SHORTLIST = 30
 ANILIST_RESERVE = 8           # AniList candidates always on the shortlist
@@ -416,7 +416,8 @@ def clean_reply(answer: dict[str, Any], candidates: list[Item],
             title = candidates[n - 1].title
             reason = plain(str(p.get("reason") or ""))
             written.append(reason)
-            reason = without_own_title(number_titles(reason, candidates), title) if is_reason(reason, title) else ""
+            reason = (without_own_title(number_titles(dehype(reason), candidates), title)
+                      if is_reason(reason, title) else "")
             picks.append({"key": candidates[n - 1].key, "reason": reason[:400]})
     # The cards show each pick, so lines copying the listing format ("3. Title | 2012, ...") are dropped.
     lines = [line for line in str(answer.get("reply") or "").splitlines() if not LISTING_LINE.match(line)]
@@ -436,5 +437,5 @@ def clean_reply(answer: dict[str, Any], candidates: list[Item],
         sentences = [s for s in SENTENCE.split(line) if s.strip() and not BARE_NUMBERS.search(s)][:room]
         room -= len(sentences)
         if sentences:
-            lines.append(" ".join(sentences))
+            lines.append(dehype(" ".join(sentences)))
     return "\n".join(lines).strip(), picks[:12]
