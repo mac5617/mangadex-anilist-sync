@@ -23,14 +23,15 @@
       <div class="chat-empty">
         <h2>What do you feel like reading?</h2>
         {% if pool %}
-        <p class="muted">Suggestions only come from series you haven't read: {{ new_count | num }} new on MangaDex and
-          {{ (pool - new_count) | num }} AniList recommendations, matched to your list.</p>
+        <p class="muted">Answers come only from series not on your list:
+          {% if new_count %}{{ new_count | num }} with a new chapter on MangaDex this week and {% endif %}{{ (pool - new_count) | num }}
+          AniList recommendations. Ask for a mood, a genre, a length or a status, or name a series you liked.</p>
         <div class="prompt-chips">
           {% for prompt in prompts %}<button type="button" class="prompt-chip" data-ask>{{ prompt }}</button>{% endfor %}
         </div>
         {% else %}
-        <p class="muted">There's nothing to suggest yet. <a href="/discover/new">Scan new releases</a> or refresh
-          <a href="/discover">For you</a> first, because answers only come from those series.</p>
+        <p class="muted">There's nothing to suggest yet. Answers come only from
+          <a href="/discover/new">New releases</a> and <a href="/discover">For you</a>: scan or refresh one of them first.</p>
         {% endif %}
       </div>
       {% endif %}
@@ -42,7 +43,7 @@
     <div class="composer-box">
       <label for="chat-input" class="visually-hidden">Your question</label>
       <textarea id="chat-input" name="message" rows="1" maxlength="1000" required autofocus
-        placeholder="Ask for a mood, a genre, or “like X but…”"></textarea>
+        placeholder="A mood, a genre, a length, or “like X but…”"></textarea>
       <button id="chat-send" disabled>Send</button>
     </div>
     <p class="composer-hint muted small">Enter to send · Shift+Enter for a new line · ↑ to edit your last question</p>

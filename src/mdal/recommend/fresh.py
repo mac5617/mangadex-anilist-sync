@@ -284,16 +284,27 @@ def ranked_new(recs: list[NewRec], n: int | None = None) -> list[NewRec]:
 
 # ---- the model's picks ------------------------------------------------------------------------
 
+REASON_WORDS = 30
+REASON_CHARS = 300            # a reason longer than this is cut at a sentence, else a word
+
 SYSTEM = (
-    "You are a well-read manga recommender. You only recommend series from the numbered list of new releases "
-    "you are given, by number. Judge each one mainly by its description. Reasons are specific: name series from "
-    "the reader's list that the pick resembles and say what it shares with them. No spoilers. Plain English, no hype. "
+    "You recommend manga to one reader. You may only choose from the numbered list of new releases you are given, "
+    "and you refer to each choice by its number. Judge each series mainly by its description; tags and creators "
+    "come second. Each reason is one plain sentence about the pick that compares it with a series the reader has "
+    "already read, named exactly as it is written in their list, and says what the two share: the premise, setting, "
+    "tone or kind of lead. Don't repeat the pick's own title in its reason. Never name a series that is not in the "
+    "prompt. Never mention list numbers in a reason. Don't spoil anything "
+    "beyond what the description says. No hype or filler: avoid words like unique, must-read, masterpiece, "
+    "gripping, delivers or satisfying. "
     + DATA_NOT_INSTRUCTIONS
 )
 SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {"picks": {"type": "array", "items": {
-        "type": "object", "properties": {"n": {"type": "integer"}, "reason": {"type": "string"}},
+        "type": "object", "properties": {
+            "n": {"type": "integer", "description": "the series' number in the list"},
+            "reason": {"type": "string", "description": f"one plain sentence, at most {REASON_WORDS} words, naming a "
+                                                       "series from the reader's list and what the pick shares with it"}},
         "required": ["n", "reason"]}}},
     "required": ["picks"],
 }
@@ -305,7 +316,7 @@ def candidate_line(n: int, r: NewRec) -> str:
         parts.append("by " + ", ".join(r.authors[:2]))
     if r.similar_to:
         parts.append("closest on their list: " + ", ".join(r.similar_to[:2]))
-    description = " ".join((r.description or "no description").split())
+    description = " ".join((r.description or "(no description)").split())
     if len(description) > DESCRIPTION_IN_PROMPT:
         description = description[:DESCRIPTION_IN_PROMPT].rsplit(" ", 1)[0] + "…"
     return " | ".join(parts) + f"\n   {description}"
@@ -326,30 +337,81 @@ def taste_lines(profile: Profile, favourites: int = 25) -> list[str]:
 
 
 def build_prompt(profile: Profile, candidates: list[NewRec]) -> str:
+    shown = candidates[:CANDIDATES]
+    want = min(PICKS, len(shown))
     return "\n".join([
         *taste_lines(profile),
         "",
-        "New releases on MangaDex (none are on their list). Format: number. title | year, origin, status | tags | "
-        "creators | closest series on their list | description",
-        *[candidate_line(i, r) for i, r in enumerate(candidates[:CANDIDATES], 1)],
+        f"New releases on MangaDex this week ({len(shown)}; none are on their list). Each entry: number. title | year, "
+        "origin, status | tags | creators | the series on their list with the closest description, then the "
+        "description on its own line.",
+        *[candidate_line(i, r) for i, r in enumerate(shown, 1)],
         "",
-        f"Choose the {PICKS} this reader is most likely to love, best first, by number. Skip any whose description "
-        "suggests something they dropped, and avoid near-duplicates (several entries of one franchise). For each, one "
-        "sentence of at most 30 words on why.",
+        "Your task:",
+        f"- Choose the {want} this reader is most likely to love, best first, by number.",
+        "- Leave out any whose description resembles a series they dropped or rated low, and any with "
+        "(no description) unless its tags and creators clearly fit.",
+        "- Take at most one entry of any franchise, and spread the picks across their tastes.",
+        f"- For each, write one sentence of at most {REASON_WORDS} words about the pick, without repeating its title. "
+        "Compare it with a series the reader already read: the entry's \"closest on their list\" when it fits, else "
+        "one from \"Series they liked most\", with that title copied exactly. Say what the two really share. Use any "
+        "one series from their list for at most two picks.",
+        '  Shape of a reason: "A cursed seaside town slowly turns on its people, with the creeping dread of <series '
+        'from their list>."',
     ])
+
+
+NUMBER = re.compile(r"^\s*#?\s*(\d{1,3})\b")
+LEAD = re.compile(r"^\s*(?:#?\d{1,2}[.):-]\s+|reason\s*:\s*)+", re.IGNORECASE)
+POINTER = re.compile(r"(?:#|\b(?:candidate|entry|number)\s*#?)(\d{1,2})\b", re.IGNORECASE)  # not "No. 8": a title
+QUOTES = "\"'“”‘’"
+SENTENCE_END = re.compile(r"(?<=[.!?…])\s")
+
+
+def pick_number(value: Any) -> int | None:
+    """A list number, also when the model writes it as text ("#3", "3.")."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value) if value.is_integer() else None     # 3.0 is candidate 3; 3.7 is no candidate
+    found = NUMBER.match(value) if isinstance(value, str) else None
+    return int(found.group(1)) if found else None
+
+
+def clean_reason(text: str, candidates: list[NewRec]) -> str:
+    """The model's reason as the page shows it: plain text, no leading "3." or "Reason:", no wrapping quotes, list
+    numbers it points to ("darker than #2") replaced by titles, and no longer than REASON_CHARS."""
+    text = LEAD.sub("", plain(text)).strip()
+    if len(text) > 1 and text[0] in QUOTES and text[-1] in QUOTES:
+        text = text[1:-1].strip()
+    shown = candidates[:CANDIDATES]
+    text = POINTER.sub(lambda m: shown[int(m.group(1)) - 1].title if 1 <= int(m.group(1)) <= len(shown) else m.group(0),
+                       text)
+    text = " ".join(text.split())
+    if len(text) <= REASON_CHARS:
+        return text
+    ends = [m.start() for m in SENTENCE_END.finditer(text[: REASON_CHARS + 1])]
+    if ends:
+        return text[: ends[-1]]
+    return text[: REASON_CHARS - 1].rsplit(" ", 1)[0].rstrip(",;:—-") + "…"
 
 
 def clean_picks(answer: dict[str, Any], candidates: list[NewRec]) -> list[dict[str, Any]]:
     """[{md_id, reason}] for valid, unique numbers with a reason."""
+    shown = candidates[:CANDIDATES]
+    items = answer.get("picks") if isinstance(answer, dict) else answer
     picks: list[dict[str, Any]] = []
     seen: set[int] = set()
-    for p in answer.get("picks") or []:
-        try:
-            n = int(p.get("n"))
-        except (TypeError, ValueError, AttributeError):
+    for p in items if isinstance(items, list) else []:
+        if not isinstance(p, dict):
             continue
-        reason = plain(str(p.get("reason") or ""))
-        if 1 <= n <= min(len(candidates), CANDIDATES) and n not in seen and is_reason(reason, candidates[n - 1].title):
+        n = pick_number(p.get("n"))
+        if n is None or not 1 <= n <= len(shown) or n in seen:
+            continue
+        reason = clean_reason(str(p.get("reason") or ""), shown)
+        if is_reason(reason, shown[n - 1].title):
             seen.add(n)
-            picks.append({"md_id": candidates[n - 1].md_id, "reason": reason[:400]})
+            picks.append({"md_id": shown[n - 1].md_id, "reason": reason})
     return picks[:PICKS]

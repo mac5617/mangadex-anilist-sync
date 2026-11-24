@@ -233,7 +233,7 @@ async def refresh(services):
 
 
 async def test_refresh_stores_candidates_and_model_picks(services, world, mock):
-    chat = ollama_answer(mock, [{"n": 1, "reason": "Same mangaka as Loved 1."}, {"n": 4242, "reason": "invented"},
+    chat = ollama_answer(mock, [{"n": 1, "reason": "Same gore as Loved 1."}, {"n": 4242, "reason": "invented"},
                                 {"n": 2, "reason": "More body horror."}, {"n": 3, "reason": "Also horror."}])
     await refresh(services)
     status = services.recommender.status()
@@ -262,7 +262,7 @@ async def test_refresh_leaves_the_model_alone_unless_switched_on(services, world
     assert services.recommender.recs()[1]
 
     # Ask the model is the explicit way in.
-    ollama_answer(mock, [{"n": 1, "reason": "Same mangaka as Loved 1."}, {"n": 2, "reason": "More body horror."},
+    ollama_answer(mock, [{"n": 1, "reason": "Same gore as Loved 1."}, {"n": 2, "reason": "More body horror."},
                          {"n": 3, "reason": "Also horror."}])
     services.recommender.start_llm()
     await services.recommender.task
@@ -300,12 +300,12 @@ def test_empty_pages_render_without_requests(client, mock):
 
 
 async def test_pages_with_data(services, world, mock):
-    ollama_answer(mock, [{"n": 1, "reason": "Same mangaka as Loved 1."}, {"n": 2, "reason": "More gore."},
+    ollama_answer(mock, [{"n": 1, "reason": "Same gore as Loved 1."}, {"n": 2, "reason": "More gore."},
                          {"n": 3, "reason": "Also horror."}])
     await refresh(services)
     with TestClient(create_app(services), follow_redirects=False) as c:
         html = c.get("/discover").text
-        assert "Loves horror." in html and "Same mangaka as Loved 1." in html and "chosen by gpt-oss:20b" in html
+        assert "Loves horror." in html and "Same gore as Loved 1." in html and "chosen by gpt-oss:20b" in html
         assert "<script>bad()</script>" not in html
         assert "Adult One" not in html and "Adult One" in c.get("/discover?adult=1").text
         assert "Mangaka 7 (Story &amp; Art), who made" in c.get("/discover/creators").text

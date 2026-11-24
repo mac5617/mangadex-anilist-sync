@@ -12,14 +12,14 @@
   <section class="panel stack">
     <h2>Your {{ title | lower }}</h2>
     <p class="muted small">How strongly each one shows in what you read and like (0–100). Each opens the series on your list.</p>
-    {{ charts.hbars(c, title[:-1], "Affinity", "Refresh to build your profile.") }}
+    {{ charts.hbars(c, title[:-1], "Affinity", "Nothing yet: your list has no " ~ (title | lower) ~ " to compare. Refresh reads them from AniList.") }}
   </section>
   <section class="block">
     <div class="block-head"><h2>Recommended</h2><span class="muted">{{ cards | length }} series</span></div>
     {% if cards %}
       <div class="recs">{% for c in cards %}{% with rank = loop.index %}{% include "_rec_card.html" %}{% endwith %}{% endfor %}</div>
     {% else %}
-      <div class="panel empty">{% if kind == "staff" %}No candidates share a creator with your favourites yet. Creators come from AniList; Refresh fetches them for your top series.{% else %}No recommendations yet.{% endif %}</div>
+      <div class="panel empty">{% if kind == "staff" and has_candidates %}No candidates share a creator with your favourites yet. Refresh reads the creators of your top series from AniList.{% else %}No candidates yet. Refresh reads them from AniList.{% endif %}</div>
     {% endif %}
   </section>
 </div>

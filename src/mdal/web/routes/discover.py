@@ -181,19 +181,21 @@ def ask_page(request: Request) -> HTMLResponse:
     return _page(request, "discover_ask.html", {
         "messages": [chat_message(m, by_key) for m in svc.repo.chat_messages()],
         "pool": len(items), "new_count": sum(1 for i in items if i.key.startswith("md:")),
-        "prompts": example_prompts(profile), **new_status_context(request),
+        "prompts": example_prompts(profile, new_releases=any(i.key.startswith("md:") for i in items)),
+        **new_status_context(request),
     })
 
 
-def example_prompts(profile: Any) -> list[str]:
-    """Starting questions, made from your own list where it can."""
-    prompts = ["What's the best new release for me right now?"]
+def example_prompts(profile: Any, new_releases: bool = True) -> list[str]:
+    """Starting questions, made from your own list where it can. Each asks for something the model can check in
+    the details it is given (new this week, finished, chapter count), so the answers can be held to it."""
+    prompts = ["Which of this week's new releases suit me best?"] if new_releases else []
     favourite = next((f["title"] for f in profile.favourites if f.get("title") and len(f["title"]) <= 40), None)
     if favourite:
         prompts.append(f"Something like {favourite} that's finished")
     if genres := profile.top("genres", 1):
         prompts.append(f"A short {genres[0].label.lower()} series I can finish in a weekend")
-    prompts.append("Surprise me with something outside my usual genres")
+    prompts.append("Something outside my usual genres that I'd still like")
     return prompts
 
 

@@ -1,15 +1,15 @@
 <div id="new-status" class="panel stack"{% if new_running %} hx-get="/discover-new-status?watch=1" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
   {% if status_error %}<p class="notice err" role="alert">{{ status_error }}</p>{% endif %}
   {% if new_running %}
-    <p class="row"><span class="badge state-fetching">scanning</span> {{ ns.detail }}</p>
+    <p class="row"><span class="badge state-fetching">{% if ns.task == "ask" %}asking {{ model | model_label }}{% else %}scanning{% endif %}</span> {{ ns.detail }}</p>
   {% elif ns.state == "failed" %}
-    <p class="notice err">Scan failed: {{ ns.error }}</p>
+    <p class="notice err">{% if ns.task == "ask" %}Ask the model failed{% else %}Scan failed{% endif %}: {{ ns.error }}</p>
   {% elif ns.finished_at %}
-    <p class="row"><span class="muted small">Scanned {{ ns.finished_at | when }}</span>{% if ns.detail %}<span class="muted small">· {{ ns.detail }}</span>{% endif %}</p>
+    <p class="row"><span class="muted small">Scanned {{ (ns.scanned_at or ns.finished_at) | when }}</span>{% if ns.detail %}<span class="muted small">· {{ ns.detail }}</span>{% endif %}</p>
   {% else %}
-    <p class="muted">Not scanned yet. A scan reads the last 7 days of English chapters on MangaDex and your follows (about 40 requests, under a minute){% if llm_auto %}, compares their descriptions with your list, then asks your local model to pick{% else %} and ranks them by your tags and creators. <strong>Ask the model</strong> then compares descriptions and has your local model pick{% endif %}.</p>
+    <p class="muted">Not scanned yet. A scan reads the last 7 days of English chapters on MangaDex and your follows (about 40 requests, under a minute){% if llm_auto %}, compares their descriptions with your list, then asks your local model to pick{% else %} and ranks them by your tags and creators. <strong>Ask the model</strong> then compares descriptions and has your local model pick 12 and say why{% endif %}.</p>
   {% endif %}
-  {% if new_llm.error and not new_running %}<p class="notice warn">Model: {{ new_llm.error }}</p>{% endif %}
+  {% if new_llm.error and not new_running %}<p class="notice warn">Ask the model failed{% if new_llm.error_at %} {{ new_llm.error_at | when }}{% endif %}: {{ new_llm.error }}{% if new_llm.picks %}. The picks below are from {{ new_llm.created_at | when }}.{% endif %}</p>{% endif %}
   {% if not new_running %}
   <div class="row">
     {% if mangadex %}<button hx-post="/discover-new-scan" hx-target="#new-status" hx-swap="outerHTML">Scan MangaDex</button>

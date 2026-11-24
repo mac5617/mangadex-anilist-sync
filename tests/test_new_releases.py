@@ -604,3 +604,16 @@ async def test_a_series_named_earlier_stays_read(services, world, mock):
         c.post("/discover/ask", data={"message": "A horror manga"})
         listing = json.loads(route.calls[-1].request.content)["messages"][-1]["content"].split("---")[0]
         assert ". Cursed Flesh |" not in listing
+
+
+async def test_what_the_question_asks_of_the_details_narrows_the_pool(services, world, mock, monkeypatch):
+    asked = []
+    real = chat.filter_by_details
+    monkeypatch.setattr(chat, "filter_by_details", lambda items, details: asked.append(details) or real(items, details))
+    ollama(mock, {"picks": [{"n": 1, "reason": "Curses."}]})
+    await scan(services)
+    mock.post(f"{OLLAMA}/api/chat").respond(200, json={"message": {"content": json.dumps(
+        {"reply": "Here you go.", "picks": []})}})
+    with TestClient(create_app(services), follow_redirects=False) as c:
+        c.post("/discover/ask", data={"message": "A short one that's finished"})
+    assert asked == [chat.Details(status="finished", length="short")]

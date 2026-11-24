@@ -20,7 +20,7 @@ from mdal.fetch.anilist_recs import fetch_candidates
 from mdal.fetch.mal_recs import favourites_on_mal
 from mdal.clients.myanimelist import MalError
 from mdal.matching.matches import matched
-from mdal.recommend.llm import CANDIDATES, SCHEMA, SYSTEM, build_prompt, clean_answer
+from mdal.recommend.llm import CANDIDATES, PICKS, SCHEMA, SYSTEM, build_prompt, clean_answer
 from mdal.recommend.feedback import pseudo_entry
 from mdal.recommend.profile import Profile, build_profile, entry_weight
 from mdal.recommend.rotation import past_picks, remember, shortlist
@@ -111,14 +111,15 @@ class Recommender:
     def start_refresh(self) -> None:
         if self.busy:
             raise RecsBusy("Recommendations are already being refreshed.")
-        self.repo.set_setting("rec_status", {"state": "running", "detail": "starting", "started_at": now_iso()})
+        self.repo.set_setting("rec_status", {"state": "running", "task": "refresh", "detail": "starting",
+                                             "started_at": now_iso()})
         self.task = asyncio.create_task(self._refresh())
 
     def start_llm(self) -> None:
         if self.busy:
             raise RecsBusy("Recommendations are already being refreshed.")
-        self.repo.set_setting("rec_status", {**self.status(), "state": "running", "detail": "asking the model",
-                                             "started_at": now_iso(), "error": None})
+        self.repo.set_setting("rec_status", {**self.status(), "state": "running", "task": "ask",
+                                             "detail": "asking the model", "started_at": now_iso(), "error": None})
         self.task = asyncio.create_task(self._llm_only())
 
     async def _refresh(self) -> None:
@@ -173,7 +174,7 @@ class Recommender:
     async def _llm_only(self) -> None:
         try:
             note = await self._ask_model()
-            self._status(state="done", detail=note or "picks updated", finished_at=now_iso())
+            self._status(state="done", detail=note, finished_at=now_iso())
         except Exception as exc:
             log.exception("asking the model failed")
             self._status(state="failed", error=f"{exc.__class__.__name__}: {exc}", finished_at=now_iso())
@@ -185,9 +186,9 @@ class Recommender:
         except OllamaError:
             return []
 
-    async def _ask_model(self) -> str | None:
-        """Store the model's picks. Returns a note when it could not be asked (the rest still works) or when
-        earlier picks came back."""
+    async def _ask_model(self) -> str:
+        """Store the model's picks. Returns what happened, for the status line: how many it picked, whether
+        earlier picks came back, or why it could not be asked (the rest still works)."""
         model = self.repo.get_setting("ollama_model")
         stored = self.repo.get_setting("rec_llm")
         previous = stored if isinstance(stored, dict) else {}
@@ -200,10 +201,11 @@ class Recommender:
             top = shortlist(recs, earlier, CANDIDATES)
             if not top:
                 raise OllamaError("no candidates to choose from yet")
-            self._status(detail=f"asking {model} to pick from {len(top)} candidates")
-            answer = await self.ollama().chat_json(model, SYSTEM, build_prompt(profile, top), SCHEMA,
+            self._status(detail=f"asking the model to pick {min(PICKS, len(top))} of {len(top)} candidates")
+            descriptions = self.repo.descriptions(r.media_id for r in top[:CANDIDATES])
+            answer = await self.ollama().chat_json(model, SYSTEM, build_prompt(profile, top, descriptions), SCHEMA,
                                                    available[model].get("capabilities"))
-            summary, picks = clean_answer(answer, top)
+            summary, picks = clean_answer(answer, top, profile)
             if len(picks) < 3:
                 raise OllamaError(f"the model returned only {len(picks)} usable picks")
         except OllamaError as exc:
@@ -214,4 +216,5 @@ class Recommender:
             "rec_llm": {"model": model, "summary": summary, "picks": picks, "created_at": now_iso(), "error": None},
             "rec_past": remember(earlier, chosen),
         })
-        return "some earlier picks are back" if set(chosen) & set(earlier) else None
+        note = f"the model picked {len(picks)} of {len(top)} candidates"
+        return note + ("; some earlier picks are back" if set(chosen) & set(earlier) else "")

@@ -13,7 +13,7 @@
   {% with net_id = "rec-map", net_json = graph_json, net_label = "Recommendations and what links them to your list", legend = legend %}
     {% include "_network.html" %}
   {% endwith %}
-  <p class="muted small">Scroll or use + and − to zoom, drag the background to pan, double-click to fit. Click a legend item to hide that kind.</p>
+  <p class="muted small">Zoom with the scroll wheel or + and −, drag the background to pan, double-click to fit. Legend items show or hide their kind.</p>
 
   <details class="panel graph-table">
     <summary>As a table</summary>
@@ -29,6 +29,6 @@
     </table></div>
   </details>
 {% else %}
-  <div class="panel empty">Refresh to build the map.</div>
+  <div class="panel empty">No candidates yet. Refresh reads them from AniList.</div>
 {% endif %}
 {% endblock %}

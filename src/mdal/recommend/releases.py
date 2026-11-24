@@ -331,7 +331,8 @@ class NewReleases:
     def start_llm(self) -> None:
         if self.busy:
             raise ScanBusy("A scan is already running.")
-        self.repo.set_setting("new_status", {**self.status(), "state": "running", "detail": "asking the model",
+        # "task" tells the panel this is Ask the model, not a scan (a scan starts a fresh status without it).
+        self.repo.set_setting("new_status", {**self.status(), "state": "running", "task": "ask", "detail": "starting",
                                              "started_at": now_iso(), "error": None})
         self.task = asyncio.create_task(self._llm_only())
 
@@ -376,6 +377,10 @@ class NewReleases:
             notes = [await self._compare_descriptions(), (await self._drop_reuploads())[0]]
             notes += [await self._ask_model(), await self._english_releases()]
             notes = [n for n in notes if n]
+            llm = self.repo.get_setting("new_llm") or {}
+            if llm.get("picks") and not llm.get("error"):
+                notes.insert(0, f"{len(llm['picks'])} picks from the best {llm.get('candidates') or fresh.CANDIDATES} "
+                                "new releases")
             self._update_digest()
             self._status(state="done", detail="; ".join(notes) or "picks updated", finished_at=now_iso())
         except Exception as exc:
@@ -482,20 +487,23 @@ class NewReleases:
             earlier = self.earlier_picks()
             top = new_shortlist(recs, earlier, fresh.CANDIDATES)
             if not top:
-                raise OllamaError("no new series to choose from")
-            self._status(detail=f"asking {model} to read {len(top)} descriptions")
+                raise OllamaError("nothing to choose from: everything with a new chapter this week is read, followed "
+                                  "or hidden")
+            self._status(detail=f"the model is reading {len(top)} descriptions and picking "
+                                f"{min(fresh.PICKS, len(top))}")
             answer = await self.ollama().chat_json(model, fresh.SYSTEM, fresh.build_prompt(profile, top), fresh.SCHEMA,
                                                    available[model].get("capabilities"))
             picks = fresh.clean_picks(answer, top)
-            if len(picks) < 3:
-                raise OllamaError(f"the model returned only {len(picks)} usable picks")
+            if len(picks) < min(3, len(top)):
+                kept = "; the earlier picks are kept" if stored_new_picks(previous) else ""
+                raise OllamaError(f"the model returned only {len(picks)} usable picks{kept}")
         except OllamaError as exc:
             self.repo.set_setting("new_llm", {**previous, "error": str(exc), "error_at": now_iso()})
             return f"model not used: {exc}"
         chosen = [p["md_id"] for p in picks]
         chapters = {r.md_id: r.en_chapter for r in top}
         self.repo.set_settings({
-            "new_llm": {"model": model, "picks": picks, "created_at": now_iso(), "error": None},
+            "new_llm": {"model": model, "picks": picks, "candidates": len(top), "created_at": now_iso(), "error": None},
             "new_past": new_remember(earlier, [(m, chapters[m]) for m in chosen]),
         })
         return "some earlier picks are back" if came_back(top, earlier, chosen) else None
@@ -666,7 +674,10 @@ class NewReleases:
         # A genre or tag the question names is a filter, not a hint: "an isekai" only offers isekai.
         want, avoid = chat.asked_tags(question, items)
         items = chat.filter_by_tags(items, want, avoid) or items
-        focused = bool(named or want or avoid)
+        # So is a status, length or "this week's" ("a short finished one" only offers short, finished series).
+        details = chat.asked_details(question)
+        items = chat.filter_by_details(items, details)
+        focused = bool(named or want or avoid or details != chat.Details())
 
         relevance = scaled(await self._relevance(question, items, [text for _, _, text in named]))
         if named:

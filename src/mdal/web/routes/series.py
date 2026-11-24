@@ -54,18 +54,25 @@ async def series_lookup(request: Request, kind: str, ident: str, force: str = Fo
 
 
 @router.post("/series/{kind}/{ident}/rate", response_class=HTMLResponse)
-def series_rate(request: Request, kind: str, ident: str, verdict: str = Form("")) -> Response:
-    """Save or clear your verdict. Answers with the verdict panel (series page) or a row (Ratings page)."""
+def series_rate(request: Request, kind: str, ident: str, verdict: str = Form(""), source: str = Form("")) -> Response:
+    """Save or clear your verdict. Answers with the verdict panel (series page) or a row (Ratings page).
+
+    Changing a rating from its Ratings row keeps where it came from (Ask, Not interested, a series page); `source`
+    lets the row's Undo put a removed rating back the way it was."""
     key = series_key(kind, ident)
     svc = get_services(request)
+    in_row = request.headers.get("HX-Target", "").startswith("rating-")
+    before = svc.repo.feedback().get(key)
     if verdict == "clear":
         svc.repo.clear_feedback(key)
-    elif verdict not in VERDICTS or not rate(svc.repo, key, verdict, "page"):
-        raise HTTPException(400, "That rating can't be saved for this series.")
-    if request.headers.get("HX-Target", "").startswith("rating-"):
+    else:
+        kept = source if source in ("ask", "hide") else before["source"] if before and in_row else "page"
+        if verdict not in VERDICTS or not rate(svc.repo, key, verdict, kept):
+            raise HTTPException(400, "That rating can't be saved for this series.")
+    if in_row:
         row = svc.repo.feedback().get(key)
-        return templates.TemplateResponse(request, "_rating_row.html", {"r": row, "key": key, "verdicts": VERDICTS,
-                                                                        "href": series_url(key), "cover": _cover(svc, key)})
+        return templates.TemplateResponse(request, "_rating_row.html", {
+            "r": row, "was": before, "key": key, "verdicts": VERDICTS, "href": series_url(key), "cover": _cover(svc, key)})
     return verdict_panel(request, key)
 
 
